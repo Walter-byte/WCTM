@@ -1,21 +1,9 @@
 import 'reflect-metadata';
 
-import { Controller, Get, Logger, Module } from '@nestjs/common';
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 
-@Controller('health')
-class HealthController {
-  @Get()
-  getHealth(): { status: string } {
-    return { status: 'ok' };
-  }
-}
-
-// Phase 1 keeps the application module local; feature modules will replace it.
-@Module({
-  controllers: [HealthController],
-})
-class AppModule {}
+import { AppModule } from './app.module';
 
 async function bootstrap(): Promise<void> {
   const application = await NestFactory.create(AppModule);
