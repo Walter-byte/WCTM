@@ -1,0 +1,15 @@
+{
+	# Caddy automatically provisions TLS for public domains.
+	# For localhost development, Caddy uses its local certificate authority.
+}
+
+{$CADDY_DOMAIN} {
+	handle /api/* {
+		reverse_proxy backend:{$BACKEND_PORT:3000}
+	}
+
+	# Placeholder for the future administration interface.
+	handle {
+		respond "WC-Telegram-SaaS is running" 200
+	}
+}

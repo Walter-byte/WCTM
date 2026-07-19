@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TenantPlan {
+  FREE
+  PRO
+  AGENCY
+
+  @@map("tenant_plan")
+}
+
+enum StoreStatus {
+  PENDING
+  ACTIVE
+  DISCONNECTED
+  DISABLED
+
+  @@map("store_status")
+}
+
+model Tenant {
+  id            String         @id @map("id") @db.VarChar(64)
+  name          String         @map("name") @db.VarChar(255)
+  plan          TenantPlan     @default(FREE) @map("plan")
+  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt     DateTime?      @map("deleted_at") @db.Timestamptz(3)
+  memberships   Membership[]
+  stores        Store[]
+  webhookEvents WebhookEvent[]
+  auditLogs     AuditLog[]
+
+  @@map("tenants")
+}
+
+model User {
+  id          String       @id @map("id") @db.VarChar(64)
+  email       String       @unique @map("email") @db.VarChar(320)
+  displayName String?      @map("display_name") @db.VarChar(255)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  memberships Membership[]
+  auditLogs   AuditLog[]
+
+  @@map("users")
+}
+
+model Membership {
+  id        String    @id @map("id") @db.VarChar(64)
+  tenantId  String    @map("tenant_id") @db.VarChar(64)
+  userId    String    @map("user_id") @db.VarChar(64)
+  role      String    @map("role") @db.VarChar(50)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([tenantId])
+  @@index([userId])
+  @@map("memberships")
+}
+
+model Store {
+  id                      String         @id @map("id") @db.VarChar(64)
+  tenantId                String         @map("tenant_id") @db.VarChar(64)
+  name                    String         @map("name") @db.VarChar(255)
+  baseUrl                 String         @map("base_url") @db.Text
+  status                  StoreStatus    @default(PENDING) @map("status")
+  consumerKeyEncrypted    String         @map("consumer_key_encrypted") @db.Text
+  consumerSecretEncrypted String         @map("consumer_secret_encrypted") @db.Text
+  webhookSecretEncrypted  String         @map("webhook_secret_encrypted") @db.Text
+  createdAt               DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt               DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt               DateTime?      @map("deleted_at") @db.Timestamptz(3)
+  tenant                  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  webhookEvents           WebhookEvent[]
+
+  @@unique([tenantId, baseUrl])
+  @@index([tenantId])
+  @@map("stores")
+}
+
+model WebhookEvent {
+  id        String   @id @map("id") @db.VarChar(64)
+  tenantId  String   @map("tenant_id") @db.VarChar(64)
+  storeId   String   @map("store_id") @db.VarChar(64)
+  dedupeKey String   @map("dedupe_key") @db.VarChar(255)
+  topic     String   @map("topic") @db.VarChar(191)
+  payload   Json     @map("payload") @db.JsonB
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([storeId, dedupeKey])
+  @@index([tenantId])
+  @@index([storeId])
+  @@map("webhook_events")
+}
+
+model AuditLog {
+  id         String   @id @map("id") @db.VarChar(64)
+  tenantId   String   @map("tenant_id") @db.VarChar(64)
+  userId     String?  @map("user_id") @db.VarChar(64)
+  action     String   @map("action") @db.VarChar(100)
+  entityType String   @map("entity_type") @db.VarChar(100)
+  entityId   String?  @map("entity_id") @db.VarChar(64)
+  metadata   Json?    @map("metadata") @db.JsonB
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@map("audit_logs")
+}

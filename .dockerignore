@@ -1,0 +1,14 @@
+.git
+.env
+.DS_Store
+.idea
+.vscode
+node_modules
+**/node_modules
+dist
+**/dist
+build
+coverage
+*.log
+wordpress-plugin
+docs
