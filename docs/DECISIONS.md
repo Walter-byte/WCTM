@@ -181,4 +181,25 @@ Accepted.
 
 ---
 
+## D-012
+
+Date
+
+2026-07-19
+
+Decision
+
+The NestJS PrismaService uses Prisma's official PostgreSQL driver adapter.
+
+Reason
+
+Prisma 7 requires a driver adapter when constructing PrismaClient with the
+client engine.
+
+Status
+
+Accepted.
+
+---
+
 Future decisions continue below.
