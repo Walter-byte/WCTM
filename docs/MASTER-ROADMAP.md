@@ -76,7 +76,7 @@ Deliverables
 - Tenant management
 - Store management
 - Logging
-- Configuration system — Task 2.1 in progress
+- Configuration system — Task 2.1 complete
 
 Exit Criteria
 
