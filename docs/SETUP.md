@@ -85,6 +85,7 @@ npm run build
 npm run typecheck
 npm run lint
 npm run format:check
+npm run test --workspace backend
 ```
 
 Use `npm run format` to apply Prettier formatting.

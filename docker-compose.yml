@@ -44,7 +44,7 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: ${REDIS_URL}
       JWT_SECRET: ${JWT_SECRET}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY}
       WOOCOMMERCE_WEBHOOK_SECRET: ${WOOCOMMERCE_WEBHOOK_SECRET}
     expose:
       - '${PORT}'
@@ -97,8 +97,7 @@ services:
       - wc-telegram-net
 
 networks:
-  wc-telegram-net:
-    name: wc-telegram-net
+  wc-telegram-net: {}
 
 volumes:
   postgres_data:

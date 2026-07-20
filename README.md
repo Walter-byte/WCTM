@@ -67,6 +67,7 @@ npm run prisma:generate --workspace backend
 npm run typecheck
 npm run lint
 npm run format:check
+npm run test --workspace backend
 ```
 
 The Prisma schema and versioned migrations live under `backend/prisma/`.

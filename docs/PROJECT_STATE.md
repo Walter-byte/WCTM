@@ -6,13 +6,13 @@ Version: 1.0
 
 Current Phase
 
-Phase 1 in progress
+Phase 1 closed. Phase 2 is next and requires approval before work begins.
 
 ---
 
 Current Task
 
-Task 1.3 — NestJS Prisma integration.
+None. Awaiting Phase 2 task approval.
 
 ---
 
@@ -36,8 +36,13 @@ Prisma ORM configured with PostgreSQL.
 
 Initial six-model multi-tenant schema and migration created.
 
+The `init_schema` migration was applied and verified in sync during clean-clone
+verification.
+
 Global PrismaModule and lifecycle-managed PrismaService are available for
 injection in future backend modules without re-importing PrismaModule.
+
+A backend smoke test verifies that the Nest application boots.
 
 ---
 
@@ -56,6 +61,11 @@ grammY scaffold created.
 Infrastructure
 
 Docker Compose and Caddy scaffolds created.
+
+Compose networking is project-scoped to avoid cross-project collisions.
+
+Basic GitHub Actions CI runs Prisma validation/generation, build, type-check,
+lint, formatting, and the backend smoke test.
 
 ---
 
@@ -83,19 +93,20 @@ WooCommerce Webhooks
 
 Current Branch
 
-main
+task/1.4-phase1-closure
 
 ---
 
 Known Issues
 
-None
+AuditLog structural immutability is not yet enforced; the schema includes an
+updatable timestamp. A future approved decision must define enforcement.
 
 ---
 
 Technical Debt
 
-None
+AuditLog immutability enforcement is deferred to a future approved task.
 
 ---
 
@@ -107,13 +118,13 @@ None
 
 Next Milestone
 
-Awaiting the next Phase 1 task assignment.
+Phase 2 — Backend Core, pending explicit approval.
 
 ---
 
 Last Completed
 
-Phase 1, Task 1.3 — NestJS Prisma integration.
+Phase 1, Task 1.4 — Clean-environment verification and Phase 1 closure.
 
 ---
 
@@ -125,4 +136,4 @@ Excellent
 
 Last Updated
 
-2026-07-19
+2026-07-20

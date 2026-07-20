@@ -10,8 +10,8 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "lint": "eslint \"{backend,telegram-bot}/src/**/*.ts\"",
-    "format": "prettier --write \".eslintrc.js\" \"*.json\" \"*.md\" \"*.yml\" \"backend/**/*.{json,ts}\" \"telegram-bot/**/*.{json,ts}\" \"docs/SETUP.md\"",
-    "format:check": "prettier --check \".eslintrc.js\" \"*.json\" \"*.md\" \"*.yml\" \"backend/**/*.{json,ts}\" \"telegram-bot/**/*.{json,ts}\" \"docs/SETUP.md\"",
+    "format": "prettier --write \".eslintrc.js\" \"*.json\" \"*.md\" \"*.yml\" \".github/workflows/*.yml\" \"backend/**/*.{json,ts}\" \"backend/test/**/*.cjs\" \"telegram-bot/**/*.{json,ts}\" \"docs/SETUP.md\"",
+    "format:check": "prettier --check \".eslintrc.js\" \"*.json\" \"*.md\" \"*.yml\" \".github/workflows/*.yml\" \"backend/**/*.{json,ts}\" \"backend/test/**/*.cjs\" \"telegram-bot/**/*.{json,ts}\" \"docs/SETUP.md\"",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "engines": {

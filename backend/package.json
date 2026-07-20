@@ -16,6 +16,7 @@
     "prisma:validate": "prisma validate",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
+    "test": "npm run build && node --test test/app.smoke.test.cjs",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
