@@ -16,15 +16,17 @@
     "prisma:validate": "prisma validate",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
-    "test": "npm run build && node --test test/app.smoke.test.cjs",
+    "test": "npm run build && node --test test/*.test.cjs",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
+    "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^11.0.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
+    "joi": "^18.2.3",
     "pg": "^8.22.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"

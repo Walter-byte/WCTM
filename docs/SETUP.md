@@ -24,6 +24,17 @@ The values in `.env.example` are local placeholders. Before any shared or
 production deployment, replace all passwords, tokens, encryption keys, and
 webhook secrets with cryptographically secure values.
 
+The backend loads root `.env` values through its global
+`ApplicationConfigModule`. Application code consumes typed settings from
+`ApplicationConfigService`; it must not read `process.env` directly. Development
+provides defaults only for non-secret settings such as `PORT`, `LOG_LEVEL`, and
+`REDIS_URL`. Test mode supplies isolated placeholders. Production requires every
+canonical application value and rejects the documented development placeholders.
+
+`APP_ENCRYPTION_KEY` must be standard base64 encoding of exactly 32 bytes.
+Configuration validation reports all invalid variable names together without
+including their values.
+
 The Telegram bot scaffold does not call the Telegram API, so the placeholder
 token is sufficient for local startup.
 

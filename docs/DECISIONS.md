@@ -202,4 +202,36 @@ Accepted.
 
 ---
 
+## D-013
+
+Date
+
+2026-07-20
+
+Decision
+
+Backend environment configuration is centralized in a global NestJS
+ApplicationConfigModule. It uses `@nestjs/config` for framework integration and
+Joi for validation, with application consumers restricted to the typed
+ApplicationConfigService.
+
+Reason
+
+`@nestjs/config` matches the NestJS 11 architecture already in use. Joi provides
+declarative conversion, environment-specific rules, and aggregated validation
+without introducing a custom validation framework. A custom error formatter
+ensures secret values never appear in validation output.
+
+Boundary
+
+Raw environment access is limited to the configuration validation boundary and
+the standalone Prisma CLI configuration. Application bootstrap and services use
+typed configuration accessors.
+
+Status
+
+Accepted.
+
+---
+
 Future decisions continue below.
