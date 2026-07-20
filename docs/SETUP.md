@@ -114,11 +114,13 @@ database URL when running Prisma outside the Compose network.
 
 ## WordPress Plugin
 
-WordPress core is intentionally excluded from this repository. To inspect the
-plugin in a local WordPress environment:
+WordPress core is intentionally excluded from this repository. The connector
+scaffold is stored under `wp-content/plugins/`. To inspect it in a local
+WordPress environment:
 
-1. Copy `wordpress-plugin/` to
-   `wp-content/plugins/wc-telegram-connector/`.
+1. Copy the connector files from this repository's `wp-content/plugins/` into
+   the WordPress installation's `wp-content/plugins/wc-telegram-connector/`
+   directory.
 2. Install and activate WooCommerce.
 3. Activate **WC Telegram Connector** from the Plugins screen.
 

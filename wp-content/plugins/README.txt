@@ -16,8 +16,9 @@ only. Store registration and webhook management arrive in a later phase.
 
 == Installation ==
 
-1. Copy the `wordpress-plugin` directory to
-   `/wp-content/plugins/wc-telegram-connector`.
+1. Copy the connector files from this repository's `wp-content/plugins`
+   directory to `/wp-content/plugins/wc-telegram-connector` in the WordPress
+   installation.
 2. Ensure WooCommerce is installed and active.
 3. Activate WC Telegram Connector from the WordPress Plugins screen.
 

@@ -37,7 +37,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001– D-011)
+## 3. Architectural Decisions (D-001–D-012)
 
 | ID | Decision | Status |
 |---|---|---|
@@ -52,8 +52,10 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-009 | WordPress plugin stays lightweight | Accepted |
 | D-010 | Simplicity-first; no overengineering, no premature optimization | Accepted |
 | D-011 | Prisma ORM + Prisma Migrate; `schema.prisma` is single source of truth; all models have `created_at`/`updated_at`; soft-delete on Tenant, Store, Membership | Accepted |
+| D-012 | PrismaService uses Prisma's official PostgreSQL driver adapter | Accepted |
 
-Next decision number: **D-012**
+Next decision number: **D-013**, if Task 1.4 produces a genuine architectural or
+product decision.
 
 ---
 
@@ -73,8 +75,7 @@ Next decision number: **D-012**
 #### Task 1.1 — Repository & Docker Scaffold
 - Monorepo structure initialized
 - `docker-compose.yml` created with `backend` and `postgres` services
-- `Dockerfile` for backend with retry flags on `npm ci`:
-  `--fetch-retries 5 --fetch-retry-mintimeout 10000 --fetch-retry-maxtimeout 60000`
+- Multi-stage `Dockerfile` created for the backend
 - Container `WORKDIR` set to `/app/backend`
 - Environment template (`.env.example`) created
 - Base `package.json` for the backend workspace
@@ -91,7 +92,9 @@ Next decision number: **D-012**
   encrypted credential fields (`consumer_key_encrypted`, `consumer_secret_encrypted`,
   `webhook_secret_encrypted`), soft-delete
 - `WebhookEvent` — inbound events with `dedupe_key` for idempotency
-- `AuditLog` — immutable audit records
+- `AuditLog` — audit records; structural immutability is not yet enforced because
+  the model includes an updatable timestamp. This is a known limitation and a
+  candidate decision for A, not a Task 1.4 schema change.
 
 **Enums (2 total):**
 - `TenantPlan`: future billing tiers (no billing logic yet)
@@ -113,11 +116,17 @@ Next decision number: **D-012**
 "prisma": {
   "schema": "prisma/schema.prisma"
 }
+```
 
 **Important:** `DATABASE_URL` points to `postgres:5432` (Docker Compose service name),
 only resolvable inside the Docker network. Run migrations via:
-bash
-docker compose exec backend npx prisma migrate deploy
+
+```bash
+docker compose exec backend npx --no-install prisma migrate deploy
+```
+
+Task 1.4 must verify that the production backend image contains the Prisma CLI.
+If this command fails because the CLI is absent, A must approve the remediation.
 
 #### Task 1.3 — NestJS Prisma Module Integration
 
@@ -145,34 +154,10 @@ docker compose exec backend npx prisma migrate deploy
 
 ## 5. Current Repository Structure
 
-
-.
-├── backend/
-│   ├── prisma/
-│   │   ├── schema.prisma
-│   │   └── migrations/
-│   │       └──YYYYMMDDHHMMSS_init_schema/
-│   │           └── migration.sql
-│   ├── src/
-│   │   ├── prisma/
-│   │   │   ├── prisma.module.ts
-│   │   │   └── prisma.service.ts
-│   │   ├── app.module.ts
-│   │   └── main.ts
-│   ├── Dockerfile
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── .env.example
-├── docker-compose.yml
-├── DECISIONS.md
-├── MASTER-ROADMAP.md
-├── PROJECT_STATE.md
-├── PROJECT-TELEGRAM-WC-SAAS.md
-├── AI_OPERATING_MANUAL.md
-└── HANDOFF.md       ← this file
-
-> Note: The full monorepo structure (`apps/`, `packages/`, `infrastructure/`, etc.)
-> is the planned target. Current implementation uses `backend/` as the single app.
+Core documents are under `docs/`. The current scaffold uses `backend/` for the
+NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` for
+the lightweight connector. The larger `apps/`, `packages/`, and
+`infrastructure/` layout remains a planned target rather than current structure.
 
 ---
 
@@ -180,11 +165,12 @@ docker compose exec backend npx prisma migrate deploy
 
 - The `init_schema` Prisma migration has been **generated but not yet applied**
   to the database. The PostgreSQL port is not exposed externally.
-  To apply: `docker compose exec backend npx prisma migrate deploy`
+  To apply during Task 1.4 verification:
+  `docker compose exec backend npx --no-install prisma migrate deploy`
 
 ---
 
-## 7. Next Tasks (Phase 1remaining / Phase 2 start)
+## 7. Next Tasks (Phase 1 remaining / Phase 2 start)
 
 The immediate next task is likely one of:
 - Complete Phase 1 exit criterion: verify the project builds on a clean machine
@@ -255,4 +241,3 @@ WooCommerce Store→ WordPress connector plugin (lightweight)
 ---
 
 *End of handoff document.*
-

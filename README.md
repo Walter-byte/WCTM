@@ -32,7 +32,7 @@ The monorepo contains:
 
 - `backend/` — NestJS API and future BullMQ workers.
 - `telegram-bot/` — grammY bot process.
-- `wordpress-plugin/` — lightweight WooCommerce connector plugin.
+- `wp-content/plugins/` — lightweight WooCommerce connector plugin scaffold.
 - `docs/` — architecture and developer documentation.
 - `scripts/` — local infrastructure initialization scripts.
 
