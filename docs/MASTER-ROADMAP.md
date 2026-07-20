@@ -65,7 +65,7 @@ Exit Criteria
 ## Phase 2 — Backend Core
 
 Status:
-⬜ Pending
+🟨 In Progress
 
 Deliverables
 
@@ -76,7 +76,7 @@ Deliverables
 - Tenant management
 - Store management
 - Logging
-- Configuration system
+- Configuration system — Task 2.1 in progress
 
 Exit Criteria
 

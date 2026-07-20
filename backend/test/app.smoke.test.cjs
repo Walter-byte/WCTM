@@ -3,6 +3,8 @@ const { test } = require('node:test');
 
 test('Nest application boots', async () => {
   const originalDatabaseUrl = process.env.DATABASE_URL;
+  const originalNodeEnvironment = process.env.NODE_ENV;
+  process.env.NODE_ENV = 'test';
   process.env.DATABASE_URL =
     originalDatabaseUrl ??
     'postgresql://test:test@localhost:5432/wc_telegram_test';
@@ -35,6 +37,12 @@ test('Nest application boots', async () => {
       delete process.env.DATABASE_URL;
     } else {
       process.env.DATABASE_URL = originalDatabaseUrl;
+    }
+
+    if (originalNodeEnvironment === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = originalNodeEnvironment;
     }
   }
 });

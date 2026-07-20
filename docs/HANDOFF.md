@@ -43,7 +43,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-012)
+## 3. Architectural Decisions (D-001–D-013)
 
 | ID    | Decision                                                                                                                                                    | Status   |
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -59,9 +59,10 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-010 | Simplicity-first; no overengineering, no premature optimization                                                                                             | Accepted |
 | D-011 | Prisma ORM + Prisma Migrate; `schema.prisma` is single source of truth; all models have `created_at`/`updated_at`; soft-delete on Tenant, Store, Membership | Accepted |
 | D-012 | PrismaService uses Prisma's official PostgreSQL driver adapter                                                                                              | Accepted |
+| D-013 | Global typed configuration uses `@nestjs/config` with Joi validation                                                                                        | Accepted |
 
-Next decision number: **D-013**, if Task 1.4 produces a genuine architectural or
-product decision.
+Next decision number: **D-014**, if a future task produces a genuine
+architectural or product decision.
 
 ---
 
@@ -181,6 +182,23 @@ that the migration commands complete inside the Docker network.
 - Added one offline NestJS boot smoke test and a basic Node 20 CI workflow
 - Generated repository trees are intentionally excluded via `.gitignore`
 
+### Phase 2 — Backend Core (in progress)
+
+#### Task 2.1 — Configuration Foundation
+
+- `backend/src/config/application-config.module.ts` provides global validated
+  configuration
+- Application consumers inject `ApplicationConfigService` and use typed
+  namespaces instead of reading `process.env`
+- Namespaces cover application settings, PostgreSQL, Redis, JWT, application
+  encryption, Telegram, and WooCommerce webhook settings
+- Joi validation aggregates all failures before throwing a secret-safe startup
+  error
+- Test mode supplies isolated placeholders; production requires all application
+  values and rejects documented development placeholders
+- Configuration and secret namespaces mask sensitive values during JSON/string
+  serialization and Node inspection
+
 ---
 
 ## 5. Current Repository Structure
@@ -199,13 +217,13 @@ complete.
 
 ---
 
-## 7. Next Task
+## 7. Current Task
 
-Phase 1 is complete. Phase 2 — Backend Core is next, beginning with an approved
-task selected by A from authentication, multi-tenancy, user/tenant/store
-management, logging, or configuration.
+Phase 2, Task 2.1 — Configuration Foundation is in progress on
+`task/2.1-config-foundation`. Complete review before assigning another Phase 2
+task.
 
-**Do not begin Phase 2 without explicit approval from A.**
+**Do not begin another Phase 2 task without explicit approval from A.**
 
 ---
 

@@ -6,13 +6,13 @@ Version: 1.0
 
 Current Phase
 
-Phase 1 closed. Phase 2 is next and requires approval before work begins.
+Phase 2 — Backend Core in progress.
 
 ---
 
 Current Task
 
-None. Awaiting Phase 2 task approval.
+Task 2.1 — Configuration Foundation.
 
 ---
 
@@ -43,6 +43,11 @@ Global PrismaModule and lifecycle-managed PrismaService are available for
 injection in future backend modules without re-importing PrismaModule.
 
 A backend smoke test verifies that the Nest application boots.
+
+A global ApplicationConfigModule validates the environment before startup and
+exposes typed application, PostgreSQL, Redis, JWT, encryption, Telegram, and
+WooCommerce settings through ApplicationConfigService. Validation aggregates
+failures, enforces development/test/production boundaries, and redacts secrets.
 
 ---
 
@@ -93,7 +98,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-main
+task/2.1-config-foundation
 
 ---
 
@@ -118,7 +123,7 @@ None
 
 Next Milestone
 
-Phase 2 — Backend Core, pending explicit approval.
+Complete and review Task 2.1 before assigning the next Phase 2 task.
 
 ---
 

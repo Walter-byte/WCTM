@@ -1,8 +1,8 @@
 # Phase Breakdown
 
 This document expands the approved phases in `docs/MASTER-ROADMAP.md` into
-implementation tasks. Phase 2 and later remain planned and require explicit
-approval before work begins.
+implementation tasks. Phase 2 work proceeds one approved task at a time; later
+phases remain planned.
 
 ## Phase 0 — Foundation ✅ Complete
 
@@ -38,13 +38,23 @@ approval before work begins.
 Exit criterion met on 2026-07-20: the project builds successfully on a clean
 machine.
 
-## Phase 2 — Backend Core ⬜ Planned
+## Phase 2 — Backend Core 🟨 In Progress
+
+### Task 2.1 — Configuration foundation 🟨 In Progress
+
+- Global NestJS configuration module with typed accessors
+- Aggregated fail-fast environment validation
+- Explicit development, test, and production boundaries
+- Secret-safe serialization and error reporting
+- Focused configuration tests and synchronized environment documentation
+
+### Planned follow-up tasks
 
 - Authentication
 - Multi-tenancy
 - Database schema evolution
 - User, tenant, and store management
-- Logging and configuration
+- Logging
 
 ## Phase 3 — WooCommerce Integration ⬜ Planned
 
