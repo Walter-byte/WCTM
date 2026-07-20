@@ -40,7 +40,7 @@ machine.
 
 ## Phase 2 — Backend Core 🟨 In Progress
 
-### Task 2.1 — Configuration foundation 🟨 In Progress
+### Task 2.1 — Configuration foundation ✅ Complete
 
 - Global NestJS configuration module with typed accessors
 - Aggregated fail-fast environment validation

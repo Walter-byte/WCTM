@@ -12,7 +12,7 @@ Phase 2 — Backend Core in progress.
 
 Current Task
 
-Task 2.1 — Configuration Foundation.
+None assigned. Task 2.2 has not started.
 
 ---
 
@@ -98,7 +98,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-task/2.1-config-foundation
+main
 
 ---
 
@@ -123,13 +123,13 @@ None
 
 Next Milestone
 
-Complete and review Task 2.1 before assigning the next Phase 2 task.
+Await the next approved Phase 2 implementation task. Task 2.2 has not started.
 
 ---
 
 Last Completed
 
-Phase 1, Task 1.4 — Clean-environment verification and Phase 1 closure.
+Phase 2, Task 2.1 — Configuration Foundation, merged into main.
 
 ---
 
@@ -141,4 +141,4 @@ Excellent
 
 Last Updated
 
-2026-07-20
+2026-07-21
