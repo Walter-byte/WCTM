@@ -12,6 +12,7 @@
     "lint": "eslint \"{backend,telegram-bot}/src/**/*.ts\"",
     "format": "prettier --write \".eslintrc.js\" \"*.json\" \"*.md\" \"*.yml\" \".github/workflows/*.yml\" \"backend/**/*.{json,ts}\" \"backend/test/**/*.cjs\" \"telegram-bot/**/*.{json,ts}\" \"docs/SETUP.md\"",
     "format:check": "prettier --check \".eslintrc.js\" \"*.json\" \"*.md\" \"*.yml\" \".github/workflows/*.yml\" \"backend/**/*.{json,ts}\" \"backend/test/**/*.cjs\" \"telegram-bot/**/*.{json,ts}\" \"docs/SETUP.md\"",
+    "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "engines": {
