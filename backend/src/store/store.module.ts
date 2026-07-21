@@ -1,12 +1,13 @@
 import { Module } from '@nestjs/common';
 
+import { AuditModule } from '../common/audit/audit.module';
 import { EncryptionModule } from '../common/encryption/encryption.module';
 import { TenantContextModule } from '../tenant/tenant-context.module';
 import { StoreController } from './store.controller';
 import { StoreService } from './store.service';
 
 @Module({
-  imports: [TenantContextModule, EncryptionModule],
+  imports: [TenantContextModule, EncryptionModule, AuditModule],
   controllers: [StoreController],
   providers: [StoreService],
 })

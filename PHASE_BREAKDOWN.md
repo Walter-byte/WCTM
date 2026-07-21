@@ -100,7 +100,25 @@ Acceptance checklist:
 - [x] Return safe success/failure results from connection tests
 - [x] Pass 11 focused encryption, CRUD, isolation, and authorization tests
 
-No current milestone is assigned. M5 has not started.
+### M5 — Production Operations Foundation 🟨 Awaiting Review
+
+- Append-only, tenant-context-derived audit events for membership and store
+  lifecycle operations
+- Allowlisted audit metadata that excludes credentials and sensitive payloads
+- One BullMQ operations queue, reference producer, and in-process worker
+- Tenant/store job payload validation with three bounded exponential attempts
+- Terminal failure logging and graceful queue/worker shutdown
+- Public PostgreSQL/Redis readiness endpoint; existing liveness endpoint retained
+- Local and production operational runbooks
+
+Acceptance checklist:
+
+- [x] Tenant-scoped mutations create secret-safe AuditLog records
+- [x] Reference jobs enqueue, execute, retry, and fail terminally within bounds
+- [x] Missing or invalid tenant identity is rejected
+- [x] Readiness reflects PostgreSQL and Redis availability
+- [x] Queue and worker connections close through Nest shutdown hooks
+- [x] No schema migration is required
 
 ### Planned follow-up tasks
 

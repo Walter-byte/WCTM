@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 import { NotFoundException } from '@nestjs/common';
 import { StoreStatus } from '@prisma/client';
 
+import type { AuditService } from '../common/audit/audit.service';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { RequestContextService } from '../common/request-context/request-context.service';
 import type { ApplicationConfigService } from '../config/application-config.service';
@@ -70,6 +71,7 @@ function storedStore(overrides: Partial<StoredStore> = {}): StoredStore {
 }
 
 function setup(initialStores: StoredStore[] = []): {
+  auditRecord: ReturnType<typeof jest.fn>;
   stores: StoredStore[];
   encryption: EncryptionService;
   runAsTenant: <T>(tenantId: string, callback: () => Promise<T>) => Promise<T>;
@@ -143,9 +145,14 @@ function setup(initialStores: StoredStore[] = []): {
   const encryption = new EncryptionService({
     encryption: { key: Buffer.alloc(32, 9).toString('base64') },
   } as ApplicationConfigService);
-  const service = new StoreService(tenantPrisma, encryption);
+  const auditRecord = jest.fn().mockResolvedValue(undefined as never);
+  const audit = {
+    record: auditRecord,
+  } as unknown as AuditService;
+  const service = new StoreService(tenantPrisma, encryption, audit);
 
   return {
+    auditRecord,
     stores,
     encryption,
     service,
@@ -181,6 +188,12 @@ describe('StoreService', () => {
     expect(fixture.stores[0]?.consumerKeyEncrypted).not.toBe('ck_plain');
     expect(fixture.stores[0]?.consumerSecretEncrypted).not.toBe('cs_plain');
     expect(JSON.stringify(created)).not.toMatch(/consumer|credential|plain/i);
+    expect(fixture.auditRecord).toHaveBeenCalledWith({
+      action: 'store.created',
+      entity: 'Store',
+      entityId: created.id,
+      metadata: { status: StoreStatus.ACTIVE },
+    });
   });
 
   it('lists only active stores in the authenticated tenant', async () => {
@@ -265,6 +278,12 @@ describe('StoreService', () => {
         fixture.service.testConnection('sto_a')
       )
     ).resolves.toEqual({ success: true, storeName: 'Test Shop' });
+    expect(fixture.auditRecord).toHaveBeenCalledWith({
+      action: 'store.connection_tested',
+      entity: 'Store',
+      entityId: 'sto_a',
+      metadata: { success: true },
+    });
     testConnection.mockRestore();
   });
 

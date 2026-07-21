@@ -81,6 +81,22 @@ WC-Telegram-SaaS is running
 {"status":"ok"}
 ```
 
+The backend also exposes a public dependency-readiness probe:
+
+```bash
+curl --fail http://localhost/api/health/readiness
+```
+
+When PostgreSQL and Redis are both available, it returns:
+
+```json
+{ "status": "ready", "dependencies": { "postgres": "up", "redis": "up" } }
+```
+
+The endpoint returns HTTP 503 when either dependency is unavailable. Use
+`/api/health` for process liveness and `/api/health/readiness` before routing
+traffic.
+
 Redis returns `PONG`, and PostgreSQL reports that it accepts connections.
 
 The default `CADDY_DOMAIN=http://localhost` keeps local development on plain
@@ -102,6 +118,36 @@ npm test
 ```
 
 Use `npm run format` to apply Prettier formatting.
+
+## Queue and Worker Operations
+
+Outside `NODE_ENV=test`, the NestJS backend starts one BullMQ `operations`
+queue worker in-process. No separate worker command or container is required for
+M5. The reference producer is an internal injectable foundation; M5 intentionally
+adds no public enqueue endpoint or business job.
+
+Reference jobs carry a server-derived tenant ID and an optional Store ID. They
+use three total attempts with exponential backoff starting at one second.
+Exhausted jobs remain in BullMQ's failed set and produce a structured backend
+error log without raw payload or exception contents.
+
+Useful local checks:
+
+```bash
+docker compose logs -f backend redis
+curl --fail http://localhost/api/health
+curl --fail http://localhost/api/health/readiness
+docker compose stop backend
+```
+
+`docker compose stop backend` sends SIGTERM. Nest waits for active worker work,
+then closes worker and queue connections. Use this graceful path instead of
+force-killing the process.
+
+For production, provide a protected `REDIS_URL`, require readiness success
+before accepting traffic, monitor terminal job-failure log events, and allow the
+backend process enough shutdown time to finish active work. M5 does not add a
+replay endpoint, scheduler, dead-letter service, or business queue.
 
 ## Database Migrations
 

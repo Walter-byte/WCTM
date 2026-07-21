@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { StoreStatus } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
+import { AuditService } from '../common/audit/audit.service';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import {
   type TenantScopedStore,
@@ -19,11 +20,12 @@ import type { UpdateStoreDto } from './dto/update-store.dto';
 export class StoreService {
   constructor(
     private readonly tenantPrisma: TenantScopedPrismaService,
-    private readonly encryption: EncryptionService
+    private readonly encryption: EncryptionService,
+    private readonly audit: AuditService
   ) {}
 
-  create(input: CreateStoreDto): Promise<TenantScopedStore> {
-    return this.tenantPrisma.createStore({
+  async create(input: CreateStoreDto): Promise<TenantScopedStore> {
+    const store = await this.tenantPrisma.createStore({
       id: `sto_${randomUUID()}`,
       name: input.name,
       baseUrl: input.storeUrl,
@@ -32,6 +34,15 @@ export class StoreService {
       consumerSecretEncrypted: this.encryption.encrypt(input.consumerSecret),
       webhookSecretEncrypted: '',
     });
+
+    await this.audit.record({
+      action: 'store.created',
+      entity: 'Store',
+      entityId: store.id,
+      metadata: { status: store.status },
+    });
+
+    return store;
   }
 
   findAll(): Promise<TenantScopedStore[]> {
@@ -74,7 +85,22 @@ export class StoreService {
       throw new NotFoundException('Store was not found');
     }
 
-    return this.findOne(storeId);
+    const store = await this.findOne(storeId);
+
+    await this.audit.record({
+      action: 'store.updated',
+      entity: 'Store',
+      entityId: storeId,
+      metadata: {
+        changedFields: Object.keys(input).filter(
+          (field) => field === 'name' || field === 'storeUrl'
+        ),
+        credentialsChanged:
+          input.consumerKey !== undefined || input.consumerSecret !== undefined,
+      },
+    });
+
+    return store;
   }
 
   async softDelete(storeId: string): Promise<void> {
@@ -86,6 +112,12 @@ export class StoreService {
     if (!deleted) {
       throw new NotFoundException('Store was not found');
     }
+
+    await this.audit.record({
+      action: 'store.deleted',
+      entity: 'Store',
+      entityId: storeId,
+    });
   }
 
   async testConnection(storeId: string): Promise<WooCommerceConnectionResult> {
@@ -101,6 +133,15 @@ export class StoreService {
       consumerSecret: this.encryption.decrypt(store.consumerSecretEncrypted),
     });
 
-    return client.testConnection();
+    const result = await client.testConnection();
+
+    await this.audit.record({
+      action: 'store.connection_tested',
+      entity: 'Store',
+      entityId: storeId,
+      metadata: { success: result.success },
+    });
+
+    return result;
   }
 }

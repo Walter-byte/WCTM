@@ -1,6 +1,7 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import { MembershipRole } from '@prisma/client';
 
+import type { AuditService } from '../common/audit/audit.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { TenantContextService } from '../tenant/tenant-context.service';
 import type { TenantScopedPrismaService } from '../tenant/tenant-scoped-prisma.service';
@@ -27,6 +28,12 @@ function transactionPrisma(
   } as unknown as PrismaService;
 }
 
+function auditService(): AuditService {
+  return {
+    record: jest.fn().mockResolvedValue(undefined as never),
+  } as unknown as AuditService;
+}
+
 describe('MembershipsService', () => {
   it('prevents demoting the last remaining OWNER', async () => {
     const updateMany = jest.fn();
@@ -43,7 +50,8 @@ describe('MembershipsService', () => {
     const service = new MembershipsService(
       transactionPrisma(transaction),
       context(MembershipRole.OWNER),
-      {} as TenantScopedPrismaService
+      {} as TenantScopedPrismaService,
+      auditService()
     );
 
     await expect(
@@ -69,7 +77,8 @@ describe('MembershipsService', () => {
     const service = new MembershipsService(
       transactionPrisma(transaction),
       context(MembershipRole.OWNER),
-      {} as TenantScopedPrismaService
+      {} as TenantScopedPrismaService,
+      auditService()
     );
 
     await expect(service.removeMembership('mem_owner')).rejects.toThrow(
@@ -104,10 +113,12 @@ describe('MembershipsService', () => {
         findUnique: jest.fn().mockResolvedValue({ id: 'usr_new' } as never),
       },
     } as unknown as PrismaService;
+    const audit = auditService();
     const service = new MembershipsService(
       prisma,
       context(MembershipRole.ADMIN),
-      tenantPrisma
+      tenantPrisma,
+      audit
     );
 
     await expect(
@@ -116,6 +127,15 @@ describe('MembershipsService', () => {
         role: MembershipRole.MEMBER,
       })
     ).resolves.toBe(membership);
+    expect(audit.record).toHaveBeenCalledWith({
+      action: 'membership.created',
+      entity: 'Membership',
+      entityId: expect.stringMatching(/^mem_/),
+      metadata: {
+        role: MembershipRole.MEMBER,
+        reactivated: false,
+      },
+    });
     await expect(
       service.addMembership({
         userId: 'usr_new',
@@ -138,7 +158,8 @@ describe('MembershipsService', () => {
     const service = new MembershipsService(
       transactionPrisma(transaction),
       context(MembershipRole.ADMIN),
-      {} as TenantScopedPrismaService
+      {} as TenantScopedPrismaService,
+      auditService()
     );
 
     await service.removeMembership('mem_member');
