@@ -12,7 +12,8 @@ Phase 2 — Backend Core in progress.
 
 Current Task
 
-None assigned. M5 has not started.
+M5 — Production Operations Foundation is implemented on the feature branch and
+awaiting review.
 
 ---
 
@@ -81,6 +82,13 @@ per-request WooCommerce REST client, and a credential-safe connection test.
 Store responses use explicit Prisma selections that omit encrypted fields, and
 cross-tenant or deleted records resolve as not found.
 
+M5 adds append-only audit event creation for membership and store operations,
+with tenant and actor identity sourced from server request context and strict
+metadata allowlisting. One BullMQ operations queue and in-process reference
+worker provide validated tenant-aware payloads, bounded exponential retries,
+terminal structured error logging, Redis/PostgreSQL readiness checks, and clean
+shutdown through Nest lifecycle hooks.
+
 ---
 
 Plugin
@@ -130,7 +138,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-main
+feat/m5-production-operations-foundation
 
 ---
 
@@ -160,7 +168,7 @@ None
 
 Next Milestone
 
-Await the next approved milestone. M5 has not started.
+Review M5. Phase 3 has not started.
 
 ---
 

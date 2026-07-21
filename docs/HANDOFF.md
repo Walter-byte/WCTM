@@ -43,7 +43,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-013)
+## 3. Architectural Decisions (D-001–D-014)
 
 | ID    | Decision                                                                                                                                                    | Status   |
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -60,8 +60,9 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-011 | Prisma ORM + Prisma Migrate; `schema.prisma` is single source of truth; all models have `created_at`/`updated_at`; soft-delete on Tenant, Store, Membership | Accepted |
 | D-012 | PrismaService uses Prisma's official PostgreSQL driver adapter                                                                                              | Accepted |
 | D-013 | Global typed configuration uses `@nestjs/config` with Joi validation                                                                                        | Accepted |
+| D-014 | One in-process BullMQ operations worker with three exponential-backoff attempts                                                                             | Accepted |
 
-Next decision number: **D-014**, if a future task produces a genuine
+Next decision number: **D-015**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -301,6 +302,42 @@ runtime migration execution path requires a future approved infrastructure fix.
   results, cross-tenant isolation, and MEMBER mutation denial
 - M4 was merged into `main` in commit `2da985b`
 
+#### M5 — Production Operations Foundation (implemented, awaiting review)
+
+- `AuditModule` exports `AuditService.record()` for action, entity, entity ID,
+  and metadata input; tenant and actor IDs come only from `TenantContextService`
+- Membership create/reactivate, role update, and removal plus Store create,
+  update, soft-delete, and connection tests emit append-only AuditLog records
+- Audit metadata accepts only approved roles, Store statuses, safe changed-field
+  names, credential-change booleans, and connection success; raw secrets,
+  tokens, passwords, keys, URLs, and payloads are not persisted
+- `QueueModule` owns one BullMQ `operations` queue, one reference producer, and
+  one in-process worker using exact-pinned BullMQ `5.80.10`
+- Producers source tenant identity from server context. Processors reject
+  missing or malformed `tenantId` and validate optional `storeId`
+- Reference jobs use three total attempts with exponential backoff starting at
+  one second. Exhausted jobs remain failed in BullMQ and emit a structured error
+  without logging exception text or payload contents
+- `GET /api/health` remains the public liveness endpoint;
+  `GET /api/health/readiness` returns 200 only when PostgreSQL and Redis respond
+- Nest shutdown hooks wait for active worker work, then close worker and queue
+  connections on SIGTERM/SIGINT
+- The existing AuditLog and Store schemas were sufficient; M5 has no migration
+
+Operational runbook:
+
+1. Start the backend with PostgreSQL and Redis available; the operations worker
+   starts inside the backend process outside `NODE_ENV=test`.
+2. Probe `/api/health` for process liveness and `/api/health/readiness` before
+   routing traffic. A readiness 503 means PostgreSQL or Redis is unavailable.
+3. Inspect structured backend logs for
+   `Background job exhausted retry attempts`; use the logged queue, job ID,
+   tenant ID, optional Store ID, and attempt count for diagnosis. Secrets and
+   raw errors are intentionally absent.
+4. Send SIGTERM/SIGINT or use `docker compose stop backend` for graceful worker
+   and queue connection shutdown. Do not force-kill during active work unless
+   recovery procedures require it.
+
 ---
 
 ## 5. Current Repository Structure
@@ -321,8 +358,9 @@ complete.
 
 ## 7. Current Task
 
-No milestone is currently assigned. M4 — WooCommerce Store Management is
-complete and merged into `main`. M5 has not started.
+M5 — Production Operations Foundation is implemented on
+`feat/m5-production-operations-foundation` and awaiting review. M4 remains the
+last milestone merged into `main`. Phase 3 has not started.
 
 **Do not begin another Phase 2 task without explicit approval from A.**
 

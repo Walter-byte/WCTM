@@ -234,4 +234,36 @@ Accepted.
 
 ---
 
+## D-014
+
+Date
+
+2026-07-21
+
+Decision
+
+The initial background-job topology uses one BullMQ `operations` queue and one
+in-process worker managed by the NestJS backend lifecycle. Reference jobs have
+three total attempts with exponential backoff starting at one second. Exhausted
+jobs remain in BullMQ's failed set and emit a structured, secret-safe error log.
+
+Reason
+
+This is the minimum production-operable topology for the current modular
+backend. It proves enqueue, processing, bounded retry, failure visibility, and
+graceful shutdown without adding a separate deployment process before business
+workers exist.
+
+Boundary
+
+Every job payload is validated and carries `tenantId`, plus `storeId` when
+relevant. Splitting workers into a separate process or changing retry policy
+requires a later approved task.
+
+Status
+
+Accepted.
+
+---
+
 Future decisions continue below.

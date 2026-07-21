@@ -7,6 +7,7 @@ import {
 import { MembershipRole, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
+import { AuditService } from '../common/audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantContextService } from '../tenant/tenant-context.service';
 import {
@@ -21,7 +22,8 @@ export class MembershipsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tenantContext: TenantContextService,
-    private readonly tenantPrisma: TenantScopedPrismaService
+    private readonly tenantPrisma: TenantScopedPrismaService,
+    private readonly audit: AuditService
   ) {}
 
   listMemberships(): Promise<MembershipSummary[]> {
@@ -71,7 +73,19 @@ export class MembershipsService {
       );
     }
 
-    return this.requireActiveMembership(membershipId);
+    const membership = await this.requireActiveMembership(membershipId);
+
+    await this.audit.record({
+      action: existing ? 'membership.reactivated' : 'membership.created',
+      entity: 'Membership',
+      entityId: membershipId,
+      metadata: {
+        role: input.role,
+        reactivated: existing !== null,
+      },
+    });
+
+    return membership;
   }
 
   async updateMembershipRole(
@@ -81,7 +95,7 @@ export class MembershipsService {
     const { tenantId } = this.tenantContext.active;
     const actorRole = this.assertManagementRole();
 
-    await this.prisma.$transaction(
+    const previousRole = await this.prisma.$transaction(
       async (transaction) => {
         const membership = await transaction.membership.findFirst({
           where: {
@@ -111,7 +125,7 @@ export class MembershipsService {
         }
 
         if (membership.role === input.role) {
-          return;
+          return null;
         }
 
         const result = await transaction.membership.updateMany({
@@ -127,9 +141,23 @@ export class MembershipsService {
         if (result.count !== 1) {
           throw new ConflictException('Membership changed; retry the request');
         }
+
+        return membership.role;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
     );
+
+    if (previousRole) {
+      await this.audit.record({
+        action: 'membership.role_updated',
+        entity: 'Membership',
+        entityId: membershipId,
+        metadata: {
+          previousRole,
+          newRole: input.role,
+        },
+      });
+    }
 
     return this.requireActiveMembership(membershipId);
   }
@@ -138,7 +166,7 @@ export class MembershipsService {
     const { tenantId } = this.tenantContext.active;
     const actorRole = this.assertManagementRole();
 
-    await this.prisma.$transaction(
+    const removedRole = await this.prisma.$transaction(
       async (transaction) => {
         const membership = await transaction.membership.findFirst({
           where: {
@@ -173,9 +201,18 @@ export class MembershipsService {
         if (result.count !== 1) {
           throw new ConflictException('Membership changed; retry the request');
         }
+
+        return membership.role;
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
     );
+
+    await this.audit.record({
+      action: 'membership.removed',
+      entity: 'Membership',
+      entityId: membershipId,
+      metadata: { role: removedRole },
+    });
   }
 
   private assertManagementRole(): MembershipRole {
