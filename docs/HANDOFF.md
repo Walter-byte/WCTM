@@ -2,7 +2,7 @@
 
 **Generated:** 2026-07-19
 
-**Updated:** 2026-07-21
+**Updated:** 2026-07-22
 
 **Reason:** Transitioning implementation agent from GapCode to Codex GPT
 
@@ -186,7 +186,7 @@ runtime migration execution path requires a future approved infrastructure fix.
 - Added one offline NestJS boot smoke test and a basic Node 20 CI workflow
 - Generated repository trees are intentionally excluded via `.gitignore`
 
-### Phase 2 — Backend Core (in progress)
+### Phase 2 — Backend Core (complete)
 
 #### Task 2.1 — Configuration Foundation (complete)
 
@@ -302,7 +302,7 @@ runtime migration execution path requires a future approved infrastructure fix.
   results, cross-tenant isolation, and MEMBER mutation denial
 - M4 was merged into `main` in commit `2da985b`
 
-#### M5 — Production Operations Foundation (implemented, awaiting review)
+#### M5 — Production Operations Foundation (complete)
 
 - `AuditModule` exports `AuditService.record()` for action, entity, entity ID,
   and metadata input; tenant and actor IDs come only from `TenantContextService`
@@ -323,6 +323,7 @@ runtime migration execution path requires a future approved infrastructure fix.
 - Nest shutdown hooks wait for active worker work, then close worker and queue
   connections on SIGTERM/SIGINT
 - The existing AuditLog and Store schemas were sufficient; M5 has no migration
+- M5 was merged into `main` in commit `0cdf0e6`
 
 Operational runbook:
 
@@ -358,11 +359,11 @@ complete.
 
 ## 7. Current Task
 
-M5 — Production Operations Foundation is implemented on
-`feat/m5-production-operations-foundation` and awaiting review. M4 remains the
-last milestone merged into `main`. Phase 3 has not started.
+No milestone is currently assigned. M5 — Production Operations Foundation is
+complete and merged into `main`. Phase 2 is complete, and Phase 3 has not
+started.
 
-**Do not begin another Phase 2 task without explicit approval from A.**
+**Do not begin Phase 3 without explicit approval from A.**
 
 ---
 
