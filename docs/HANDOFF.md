@@ -276,6 +276,30 @@ runtime migration execution path requires a future approved infrastructure fix.
   billing, background-job, or audit tooling
 - M3 was merged into `main` in commit `c042b5b`
 
+#### M4 — WooCommerce Store Management (implemented, awaiting review)
+
+- `EncryptionModule` exports `EncryptionService`, whose `encrypt()` and
+  `decrypt()` methods use AES-256-GCM with the typed
+  `ApplicationConfigService.encryption.key`; stored values use base64
+  `iv:authTag:ciphertext` components
+- `WooCommerceClient` is instantiated per connection test with decrypted
+  in-memory credentials and exposes
+  `testConnection(): Promise<{ success, storeName?, error? }>`
+- `StoreModule` registers tenant-scoped `/stores` create, list, read, update,
+  soft-delete, and `/:id/test-connection` routes
+- `TenantScopedPrismaService` injects the active server-side tenant into every
+  Store query; missing, deleted, and cross-tenant records return 404 without
+  confirming ownership
+- Store API responses use credential-free Prisma selections. Raw and encrypted
+  consumer credentials are never returned or logged; decrypted values exist
+  only while constructing the per-request WooCommerce client
+- OWNER and ADMIN memberships may create, update, and delete stores; MEMBER may
+  read stores and run a connection test
+- M4 adds only the required direct `axios` runtime dependency for the approved
+  WooCommerce REST client; the existing Store schema requires no migration
+- Eleven focused M4 tests cover encryption, CRUD, soft deletion, connection
+  results, cross-tenant isolation, and MEMBER mutation denial
+
 ---
 
 ## 5. Current Repository Structure
@@ -296,8 +320,9 @@ complete.
 
 ## 7. Current Task
 
-No milestone is currently assigned. M3 — User & Tenant Management is complete
-and merged into `main`. M4 has not started.
+M4 — WooCommerce Store Management is implemented on
+`feat/m4-woocommerce-store-management` and awaiting review. M3 remains the last
+milestone merged into `main`. No later milestone has started.
 
 **Do not begin another Phase 2 task without explicit approval from A.**
 

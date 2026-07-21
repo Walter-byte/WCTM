@@ -10,6 +10,16 @@ const STORE_SUMMARY_SELECT = {
   name: true,
   baseUrl: true,
   status: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.StoreSelect;
+
+const STORE_CREDENTIALS_SELECT = {
+  id: true,
+  tenantId: true,
+  baseUrl: true,
+  consumerKeyEncrypted: true,
+  consumerSecretEncrypted: true,
 } satisfies Prisma.StoreSelect;
 
 const TENANT_SUMMARY_SELECT = {
@@ -47,6 +57,27 @@ const MEMBERSHIP_RECORD_SELECT = {
 export type TenantScopedStore = Prisma.StoreGetPayload<{
   select: typeof STORE_SUMMARY_SELECT;
 }>;
+
+export type TenantScopedStoreCredentials = Prisma.StoreGetPayload<{
+  select: typeof STORE_CREDENTIALS_SELECT;
+}>;
+
+export interface TenantScopedStoreCreate {
+  id: string;
+  name: string;
+  baseUrl: string;
+  status: Prisma.StoreCreateInput['status'];
+  consumerKeyEncrypted: string;
+  consumerSecretEncrypted: string;
+  webhookSecretEncrypted: string;
+}
+
+export interface TenantScopedStoreUpdate {
+  name?: string;
+  baseUrl?: string;
+  consumerKeyEncrypted?: string;
+  consumerSecretEncrypted?: string;
+}
 
 export type TenantSummary = Prisma.TenantGetPayload<{
   select: typeof TENANT_SUMMARY_SELECT;
@@ -181,6 +212,69 @@ export class TenantScopedPrismaService {
         deletedAt: null,
       },
       select: STORE_SUMMARY_SELECT,
+    });
+  }
+
+  listActiveStores(): Promise<TenantScopedStore[]> {
+    return this.prisma.store.findMany({
+      where: {
+        tenantId: this.tenantContext.active.tenantId,
+        deletedAt: null,
+      },
+      select: STORE_SUMMARY_SELECT,
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  createStore(input: TenantScopedStoreCreate): Promise<TenantScopedStore> {
+    return this.prisma.store.create({
+      data: {
+        ...input,
+        tenantId: this.tenantContext.active.tenantId,
+      },
+      select: STORE_SUMMARY_SELECT,
+    });
+  }
+
+  async updateStore(
+    storeId: string,
+    input: TenantScopedStoreUpdate
+  ): Promise<boolean> {
+    const result = await this.prisma.store.updateMany({
+      where: {
+        id: storeId,
+        tenantId: this.tenantContext.active.tenantId,
+        deletedAt: null,
+      },
+      data: input,
+    });
+
+    return result.count === 1;
+  }
+
+  async softDeleteStore(storeId: string, deletedAt: Date): Promise<boolean> {
+    const result = await this.prisma.store.updateMany({
+      where: {
+        id: storeId,
+        tenantId: this.tenantContext.active.tenantId,
+        deletedAt: null,
+      },
+      data: { deletedAt },
+    });
+
+    return result.count === 1;
+  }
+
+  findStoreCredentialsById(
+    storeId: string
+  ): Promise<TenantScopedStoreCredentials | null> {
+    return this.prisma.store.findFirst({
+      where: {
+        id: storeId,
+        tenantId: this.tenantContext.active.tenantId,
+        deletedAt: null,
+      },
+      select: STORE_CREDENTIALS_SELECT,
     });
   }
 

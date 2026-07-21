@@ -18,6 +18,7 @@ import { RequestContextModule } from './common/request-context/request-context.m
 import { ApplicationConfigModule } from './config/application-config.module';
 import { MembershipsModule } from './memberships/memberships.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { StoreModule } from './store/store.module';
 import { TenantContextGuard } from './tenant/guards/tenant-context.guard';
 import { TenantContextModule } from './tenant/tenant-context.module';
 import { TenantsModule } from './tenants/tenants.module';
@@ -40,6 +41,7 @@ class HealthController {
     AuthModule,
     PrismaModule,
     TenantContextModule,
+    StoreModule,
     UsersModule,
     TenantsModule,
     MembershipsModule,
