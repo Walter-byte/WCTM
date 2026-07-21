@@ -34,7 +34,7 @@ describe('StructuredLoggerService', () => {
       requestContext.setTenant({
         tenantId: 'ten_logger',
         userId: 'usr_logger',
-        membershipRole: 'owner',
+        membershipRole: 'OWNER',
       });
       logger.log(
         'processing request',
@@ -68,7 +68,7 @@ describe('StructuredLoggerService', () => {
       requestId: 'req-structured',
       tenantId: 'ten_logger',
       userId: 'usr_logger',
-      membershipRole: 'owner',
+      membershipRole: 'OWNER',
       context: 'LoggerTest',
       message: 'processing request',
       metadata: {

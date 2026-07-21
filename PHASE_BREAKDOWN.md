@@ -72,7 +72,15 @@ machine.
 - Tests proving context resolution, 403 rejection, public bypass, and
   cross-tenant read/write isolation
 
-No current milestone is assigned. M3 has not started.
+### M3 — User & Tenant Management ✅ Complete (awaiting review)
+
+- Persisted own-profile read and display-name update operations
+- Tenant creation with atomic creator-as-OWNER membership provisioning
+- Tenant read, metadata update, and soft deletion through tenant-scoped access
+- Membership add/list, role update, and soft deletion for existing users
+- `MembershipRole` enum with `OWNER`, `ADMIN`, and `MEMBER`
+- Owner/admin management boundaries and last-active-owner protection
+- Joi-validated DTOs plus unit and authorization integration tests
 
 ### Planned follow-up tasks
 

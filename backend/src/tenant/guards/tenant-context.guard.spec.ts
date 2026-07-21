@@ -1,12 +1,14 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import type { ExecutionContext } from '@nestjs/common';
 import { ForbiddenException } from '@nestjs/common';
+import { MembershipRole } from '@prisma/client';
 import type { Reflector } from '@nestjs/core';
 
 import { IS_PUBLIC_KEY } from '../../auth/decorators/public.decorator';
 import { RequestContextService } from '../../common/request-context/request-context.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { REQUIRED_MEMBERSHIP_ROLES_KEY } from '../decorators/require-membership.decorator';
+import { IS_TENANT_OPTIONAL_KEY } from '../decorators/tenant-optional.decorator';
 import { TenantContextService } from '../tenant-context.service';
 import { TenantContextGuard } from './tenant-context.guard';
 
@@ -20,7 +22,8 @@ function executionContext(user?: Record<string, unknown>): ExecutionContext {
 
 function reflector(
   isPublic = false,
-  requiredRoles: readonly string[] = []
+  requiredRoles: readonly string[] = [],
+  isTenantOptional = false
 ): Reflector {
   return {
     getAllAndOverride: jest.fn((key: string) => {
@@ -32,13 +35,17 @@ function reflector(
         return requiredRoles;
       }
 
+      if (key === IS_TENANT_OPTIONAL_KEY) {
+        return isTenantOptional;
+      }
+
       return undefined;
     }),
   } as unknown as Reflector;
 }
 
 function prismaWithMembership(
-  membership: { tenantId: string; userId: string; role: string } | null
+  membership: { tenantId: string; userId: string; role: MembershipRole } | null
 ): { prisma: PrismaService; findFirst: jest.Mock } {
   const findFirst = jest.fn().mockResolvedValue(membership as never);
 
@@ -55,7 +62,7 @@ describe('TenantContextGuard', () => {
     const { prisma, findFirst } = prismaWithMembership({
       tenantId: 'ten_a',
       userId: 'usr_a',
-      role: 'owner',
+      role: MembershipRole.OWNER,
     });
     const guard = new TenantContextGuard(reflector(), prisma, tenantContext);
 
@@ -66,7 +73,7 @@ describe('TenantContextGuard', () => {
       expect(tenantContext.active).toEqual({
         tenantId: 'ten_a',
         userId: 'usr_a',
-        membershipRole: 'owner',
+        membershipRole: MembershipRole.OWNER,
       });
     });
 
@@ -111,16 +118,32 @@ describe('TenantContextGuard', () => {
     expect(findFirst).not.toHaveBeenCalled();
   });
 
+  it('bypasses tenant resolution only when a JWT-protected route is tenant-optional', async () => {
+    const requestContext = new RequestContextService();
+    const tenantContext = new TenantContextService(requestContext);
+    const { prisma, findFirst } = prismaWithMembership(null);
+    const guard = new TenantContextGuard(
+      reflector(false, [], true),
+      prisma,
+      tenantContext
+    );
+
+    await expect(
+      guard.canActivate(executionContext({ sub: 'usr_bootstrap' }))
+    ).resolves.toBe(true);
+    expect(findFirst).not.toHaveBeenCalled();
+  });
+
   it('enforces a declared membership role without a permission matrix', async () => {
     const requestContext = new RequestContextService();
     const tenantContext = new TenantContextService(requestContext);
     const { prisma } = prismaWithMembership({
       tenantId: 'ten_a',
       userId: 'usr_a',
-      role: 'viewer',
+      role: MembershipRole.MEMBER,
     });
     const guard = new TenantContextGuard(
-      reflector(false, ['owner']),
+      reflector(false, [MembershipRole.OWNER]),
       prisma,
       tenantContext
     );
