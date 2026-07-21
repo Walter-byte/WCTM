@@ -62,7 +62,7 @@ machine.
 - Normalized global error responses with request IDs
 - Focused common-infrastructure tests
 
-### M2 — Multi-Tenant Core ✅ Complete (awaiting review)
+### M2 — Multi-Tenant Core ✅ Complete
 
 - Tenant context containing authenticated tenant, user, and membership role
 - Active Membership resolution after JWT authentication with `@Public()` bypass
@@ -71,6 +71,8 @@ machine.
   writes
 - Tests proving context resolution, 403 rejection, public bypass, and
   cross-tenant read/write isolation
+
+No current milestone is assigned. M3 has not started.
 
 ### Planned follow-up tasks
 

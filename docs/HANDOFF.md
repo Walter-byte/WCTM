@@ -233,7 +233,7 @@ that the migration commands complete inside the Docker network.
 - M1 introduces no schema, tenant, RBAC, user, WooCommerce, audit, or job logic
 - M1 was merged into `main` in commit `2dcade7`
 
-#### M2 — Multi-Tenant Core (complete, awaiting review)
+#### M2 — Multi-Tenant Core (complete)
 
 - `TenantContextService` exposes the active authenticated `tenantId`, `userId`,
   and membership role and fails closed when tenant context is unavailable
@@ -250,6 +250,7 @@ that the migration commands complete inside the Docker network.
 - Isolation tests prove Tenant A cannot read or mutate Tenant B's Store row
 - M2 adds no schema migration, tenant CRUD, user management, store endpoint,
   integration, billing, or job logic
+- M2 was merged into `main` in commit `80ac3ee`
 
 ---
 
@@ -271,8 +272,8 @@ complete.
 
 ## 7. Current Task
 
-M2 — Multi-Tenant Core is implemented on `feat/m2-multi-tenant-core` and
-awaiting review. M1 remains the last milestone merged into `main`.
+No milestone is currently assigned. M2 — Multi-Tenant Core is complete and
+merged into `main`. M3 has not started.
 
 **Do not begin another Phase 2 task without explicit approval from A.**
 

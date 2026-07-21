@@ -70,12 +70,12 @@ Status:
 Deliverables
 
 - Authentication foundation — Task 2.2 complete
-- Multi-tenancy
+- Multi-tenancy — M2 complete
 - Database schema
 - User system
 - Tenant management
 - Store management
-- Logging
+- Application foundation and structured logging — M1 complete
 - Configuration system — Task 2.1 complete
 
 Exit Criteria
