@@ -216,6 +216,22 @@ that the migration commands complete inside the Docker network.
   refresh tokens, RBAC, and tenant authorization
 - Task 2.2 was merged into `main` in commit `9a9bbd4`
 
+#### M1 — Database & Application Foundation (complete, awaiting review)
+
+- `backend/src/common/logging/` provides the global structured JSON logger and
+  request logging interceptor; `LOG_LEVEL` comes from
+  `ApplicationConfigService`
+- `backend/src/common/request-context/` uses AsyncLocalStorage to preserve an
+  inbound `x-request-id` or generate a UUID, echo it on the response, and attach
+  it to request logs
+- `backend/src/common/filters/` normalizes HTTP and unknown exceptions as
+  `{ statusCode, error, message, requestId }` without exposing unknown internals
+- `backend/src/common/utils/` is reserved for shared utilities used by common
+  infrastructure; M1 adds only secret-safe redaction and serialization support
+- Jest covers the new common infrastructure while the existing Node smoke,
+  configuration, and authentication tests remain part of the full suite
+- M1 introduces no schema, tenant, RBAC, user, WooCommerce, audit, or job logic
+
 ---
 
 ## 5. Current Repository Structure
@@ -236,8 +252,8 @@ complete.
 
 ## 7. Current Task
 
-No implementation task is currently assigned. Task 2.2 — Authentication
-Foundation is complete and merged into `main`. Task 2.3 has not started.
+M1 — Database & Application Foundation is implemented on
+`feat/m1-app-foundation` and awaiting review. M2 has not started.
 
 **Do not begin another Phase 2 task without explicit approval from A.**
 

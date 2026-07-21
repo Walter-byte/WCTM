@@ -126,23 +126,51 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
     const baseUrl = `http://127.0.0.1:${address.port}`;
     const publicResponse = await fetch(`${baseUrl}/auth-test/public`);
     assert.equal(publicResponse.status, 200);
+    assert.match(
+      publicResponse.headers.get('x-request-id'),
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
 
     const missingResponse = await fetch(`${baseUrl}/auth-test/protected`);
     assert.equal(missingResponse.status, 401);
+    assert.match(
+      missingResponse.headers.get('x-request-id'),
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    );
 
+    const invalidRequestId = 'invalid-auth-request';
     const invalidResponse = await fetch(`${baseUrl}/auth-test/protected`, {
-      headers: { Authorization: 'Bearer invalid-token' },
+      headers: {
+        Authorization: 'Bearer invalid-token',
+        'x-request-id': invalidRequestId,
+      },
     });
     assert.equal(invalidResponse.status, 401);
-    assert.doesNotMatch(await invalidResponse.text(), new RegExp(JWT_SECRET));
+    assert.equal(invalidResponse.headers.get('x-request-id'), invalidRequestId);
+    const invalidResponseBody = await invalidResponse.json();
+    assert.deepEqual(invalidResponseBody, {
+      statusCode: 401,
+      error: 'Unauthorized',
+      message: 'Unauthorized',
+      requestId: invalidRequestId,
+    });
+    assert.doesNotMatch(
+      JSON.stringify(invalidResponseBody),
+      new RegExp(JWT_SECRET)
+    );
 
     const authService = application.get(AuthService);
     const token = await authService.signAccessToken({ sub: 'usr_test' });
+    const validRequestId = 'valid-auth-request';
     const validResponse = await fetch(`${baseUrl}/auth-test/protected`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'x-request-id': validRequestId,
+      },
     });
 
     assert.equal(validResponse.status, 200);
+    assert.equal(validResponse.headers.get('x-request-id'), validRequestId);
     assert.equal((await validResponse.json()).sub, 'usr_test');
   } finally {
     if (application) {
