@@ -65,22 +65,23 @@ Exit Criteria
 ## Phase 2 — Backend Core
 
 Status:
-🟨 In Progress
+✅ Complete
 
 Deliverables
 
 - Authentication foundation — Task 2.2 complete
 - Multi-tenancy — M2 complete
-- Database schema
+- Database schema — complete
 - User system — M3 complete
 - Tenant management — M3 complete
 - Store management — M4 complete
+- Production operations foundation — M5 complete
 - Application foundation and structured logging — M1 complete
 - Configuration system — Task 2.1 complete
 
 Exit Criteria
 
-Backend API is operational.
+✅ Met on 2026-07-22: Backend API is operational.
 
 ---
 

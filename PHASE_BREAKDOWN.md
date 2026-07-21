@@ -1,8 +1,8 @@
 # Phase Breakdown
 
 This document expands the approved phases in `docs/MASTER-ROADMAP.md` into
-implementation tasks. Phase 2 work proceeds one approved task at a time; later
-phases remain planned.
+implementation tasks. Work proceeds one approved task at a time; later phases
+remain planned.
 
 ## Phase 0 — Foundation ✅ Complete
 
@@ -38,7 +38,7 @@ phases remain planned.
 Exit criterion met on 2026-07-20: the project builds successfully on a clean
 machine.
 
-## Phase 2 — Backend Core 🟨 In Progress
+## Phase 2 — Backend Core ✅ Complete
 
 ### Task 2.1 — Configuration foundation ✅ Complete
 
@@ -100,7 +100,7 @@ Acceptance checklist:
 - [x] Return safe success/failure results from connection tests
 - [x] Pass 11 focused encryption, CRUD, isolation, and authorization tests
 
-### M5 — Production Operations Foundation 🟨 Awaiting Review
+### M5 — Production Operations Foundation ✅ Complete
 
 - Append-only, tenant-context-derived audit events for membership and store
   lifecycle operations
@@ -120,9 +120,8 @@ Acceptance checklist:
 - [x] Queue and worker connections close through Nest shutdown hooks
 - [x] No schema migration is required
 
-### Planned follow-up tasks
-
-- No later milestone is currently assigned.
+Phase 2 is complete. No current milestone is assigned, and Phase 3 has not
+started.
 
 ## Phase 3 — WooCommerce Integration ⬜ Planned
 
