@@ -10,6 +10,7 @@ export interface ValidatedEnvironment {
   DATABASE_URL: string;
   REDIS_URL: string;
   JWT_SECRET: string;
+  JWT_ACCESS_TTL: string;
   APP_ENCRYPTION_KEY: string;
   TELEGRAM_BOT_TOKEN: string;
   WOOCOMMERCE_WEBHOOK_SECRET: string;
@@ -26,6 +27,7 @@ export const CONFIG_ENV_KEYS = [
   'DATABASE_URL',
   'REDIS_URL',
   'JWT_SECRET',
+  'JWT_ACCESS_TTL',
   'APP_ENCRYPTION_KEY',
   'TELEGRAM_BOT_TOKEN',
   'WOOCOMMERCE_WEBHOOK_SECRET',
@@ -51,6 +53,7 @@ export interface RedisSettings {
 
 export interface JwtSettings {
   secret: string;
+  accessTokenTtl: string;
 }
 
 export interface EncryptionSettings {

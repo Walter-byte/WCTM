@@ -48,9 +48,15 @@ machine.
 - Secret-safe serialization and error reporting
 - Focused configuration tests and synchronized environment documentation
 
+### Task 2.2 — Authentication foundation 🟨 In Review
+
+- Access-token-only JWT signing and verification through typed configuration
+- Passport JWT bearer strategy and deny-by-default global authentication guard
+- Explicit `@Public()` route opt-out and `@CurrentUser()` payload access
+- Focused configuration, token, expiry, guard, and public-route tests
+
 ### Planned follow-up tasks
 
-- Authentication
 - Multi-tenancy
 - Database schema evolution
 - User, tenant, and store management

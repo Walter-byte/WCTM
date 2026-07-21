@@ -153,6 +153,7 @@ function createEnvironmentSchema(
     DATABASE_URL: databaseUrl,
     REDIS_URL: redisUrl,
     JWT_SECRET: jwtSecret,
+    JWT_ACCESS_TTL: Joi.string().trim().min(1).required(),
     APP_ENCRYPTION_KEY: encryptionKey,
     TELEGRAM_BOT_TOKEN: telegramBotToken,
     WOOCOMMERCE_WEBHOOK_SECRET: webhookSecret,
