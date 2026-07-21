@@ -11,6 +11,9 @@ const {
 } = require('../dist/auth/decorators/current-user.decorator');
 const { Public } = require('../dist/auth/decorators/public.decorator');
 const { JwtStrategy } = require('../dist/auth/strategies/jwt.strategy');
+const {
+  TenantContextService,
+} = require('../dist/tenant/tenant-context.service');
 
 const JWT_SECRET = 'authentication-test-secret-at-least-32-characters';
 
@@ -80,7 +83,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
 
   class AuthTestController {
     protectedRoute(user) {
-      return user;
+      return { user, tenant: tenantContextForTest.active };
     }
 
     publicRoute() {
@@ -114,9 +117,16 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
   );
 
   let application;
+  let tenantContextForTest;
 
   try {
     application = await NestFactory.create(AuthTestModule, { logger: false });
+    const prisma = application.get(PrismaService);
+    prisma.membership.findFirst = async ({ where }) =>
+      where.userId === 'usr_test' && where.tenantId === 'ten_test'
+        ? { tenantId: 'ten_test', userId: 'usr_test', role: 'owner' }
+        : null;
+    tenantContextForTest = application.get(TenantContextService);
     await application.listen(0, '127.0.0.1');
 
     const address = application.getHttpServer().address();
@@ -160,7 +170,19 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
     );
 
     const authService = application.get(AuthService);
-    const token = await authService.signAccessToken({ sub: 'usr_test' });
+    const noMembershipToken = await authService.signAccessToken({
+      sub: 'usr_missing',
+      tenantId: 'ten_test',
+    });
+    const noMembershipResponse = await fetch(`${baseUrl}/auth-test/protected`, {
+      headers: { Authorization: `Bearer ${noMembershipToken}` },
+    });
+    assert.equal(noMembershipResponse.status, 403);
+
+    const token = await authService.signAccessToken({
+      sub: 'usr_test',
+      tenantId: 'ten_test',
+    });
     const validRequestId = 'valid-auth-request';
     const validResponse = await fetch(`${baseUrl}/auth-test/protected`, {
       headers: {
@@ -171,7 +193,19 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
 
     assert.equal(validResponse.status, 200);
     assert.equal(validResponse.headers.get('x-request-id'), validRequestId);
-    assert.equal((await validResponse.json()).sub, 'usr_test');
+    assert.deepEqual(await validResponse.json(), {
+      user: {
+        sub: 'usr_test',
+        tenantId: 'ten_test',
+        iat: (await authService.verifyAccessToken(token)).iat,
+        exp: (await authService.verifyAccessToken(token)).exp,
+      },
+      tenant: {
+        tenantId: 'ten_test',
+        userId: 'usr_test',
+        membershipRole: 'owner',
+      },
+    });
   } finally {
     if (application) {
       await application.close();
