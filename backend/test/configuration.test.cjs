@@ -23,6 +23,7 @@ const validEnvironment = (overrides = {}) => ({
   DATABASE_URL: 'postgresql://app:database-password@localhost:5432/app',
   REDIS_URL: 'redis://:redis-password@localhost:6379',
   JWT_SECRET: 'valid-jwt-secret-value-at-least-32-characters',
+  JWT_ACCESS_TTL: '15m',
   APP_ENCRYPTION_KEY: 'AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=',
   TELEGRAM_BOT_TOKEN: '1234567890:valid-test-token-value-12345',
   WOOCOMMERCE_WEBHOOK_SECRET:
@@ -55,6 +56,7 @@ test('valid environment loads typed configuration values', () => {
     configuration.jwt.secret,
     'valid-jwt-secret-value-at-least-32-characters'
   );
+  assert.equal(configuration.jwt.accessTokenTtl, '15m');
   assert.equal(
     configuration.encryption.key,
     'AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI='
@@ -62,7 +64,10 @@ test('valid environment loads typed configuration values', () => {
 });
 
 test('test environment supplies isolated safe defaults', () => {
-  const validated = validateEnvironment({ NODE_ENV: 'test' });
+  const validated = validateEnvironment({
+    NODE_ENV: 'test',
+    JWT_ACCESS_TTL: '15m',
+  });
 
   assert.equal(validated.NODE_ENV, 'test');
   assert.equal(validated.PORT, 3000);
@@ -77,6 +82,7 @@ test('missing required variables produce one aggregated safe error', () => {
       assert.match(error.message, /Configuration validation failed/);
       assert.match(error.message, /DATABASE_URL is required/);
       assert.match(error.message, /JWT_SECRET is required/);
+      assert.match(error.message, /JWT_ACCESS_TTL is required/);
       assert.match(error.message, /APP_ENCRYPTION_KEY is required/);
       assert.match(error.message, /TELEGRAM_BOT_TOKEN is required/);
       assert.match(error.message, /WOOCOMMERCE_WEBHOOK_SECRET is required/);
@@ -102,6 +108,7 @@ test('invalid production bootstrap exits non-zero with aggregated errors', () =>
   assert.match(output, /DATABASE_URL is required/);
   assert.match(output, /REDIS_URL is required/);
   assert.match(output, /JWT_SECRET is required/);
+  assert.match(output, /JWT_ACCESS_TTL is required/);
   assert.match(output, /APP_ENCRYPTION_KEY is required/);
   assert.match(output, /TELEGRAM_BOT_TOKEN is required/);
   assert.match(output, /WOOCOMMERCE_WEBHOOK_SECRET is required/);
@@ -141,6 +148,7 @@ test('production rejects documented development placeholder values', () => {
           'postgresql://wc_telegram:development-only-postgres-password@postgres:5432/wc_telegram',
         REDIS_URL: 'redis://redis:6379',
         JWT_SECRET: developmentOnlyJwtSecret,
+        JWT_ACCESS_TTL: '15m',
         APP_ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
         TELEGRAM_BOT_TOKEN: '0000000000:development-placeholder-token',
         WOOCOMMERCE_WEBHOOK_SECRET: 'development-only-webhook-secret-change-me',

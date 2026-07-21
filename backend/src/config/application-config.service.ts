@@ -40,6 +40,7 @@ export class ApplicationConfigService {
     });
     this.jwt = guardSecretSerialization({
       secret: this.configService.get('JWT_SECRET', { infer: true }),
+      accessTokenTtl: this.configService.get('JWT_ACCESS_TTL', { infer: true }),
     });
     this.encryption = guardSecretSerialization({
       key: this.configService.get('APP_ENCRYPTION_KEY', { infer: true }),

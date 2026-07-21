@@ -12,7 +12,7 @@ Phase 2 — Backend Core in progress.
 
 Current Task
 
-None assigned. Task 2.2 has not started.
+Task 2.2 — Authentication Foundation, implemented and awaiting review.
 
 ---
 
@@ -48,6 +48,11 @@ A global ApplicationConfigModule validates the environment before startup and
 exposes typed application, PostgreSQL, Redis, JWT, encryption, Telegram, and
 WooCommerce settings through ApplicationConfigService. Validation aggregates
 failures, enforces development/test/production boundaries, and redacts secrets.
+
+An AuthModule provides access-token signing and verification, Passport JWT
+bearer validation, a global deny-by-default authentication guard, `@Public()`
+route opt-out, and `@CurrentUser()` payload access. User persistence, login,
+refresh tokens, RBAC, and tenant authorization remain outside Task 2.2.
 
 ---
 
@@ -98,7 +103,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-main
+task/2.2-auth-foundation
 
 ---
 
@@ -123,7 +128,7 @@ None
 
 Next Milestone
 
-Await the next approved Phase 2 implementation task. Task 2.2 has not started.
+Review and merge Task 2.2 before assigning another Phase 2 task.
 
 ---
 

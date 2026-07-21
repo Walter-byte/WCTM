@@ -32,6 +32,8 @@ provides defaults only for non-secret settings such as `PORT`, `LOG_LEVEL`, and
 canonical application value and rejects the documented development placeholders.
 
 `APP_ENCRYPTION_KEY` must be standard base64 encoding of exactly 32 bytes.
+`JWT_ACCESS_TTL` controls the access-token lifetime using a duration such as
+`15m` and is required in every environment.
 Configuration validation reports all invalid variable names together without
 including their values.
 
