@@ -72,7 +72,7 @@ machine.
 - Tests proving context resolution, 403 rejection, public bypass, and
   cross-tenant read/write isolation
 
-### M3 — User & Tenant Management ✅ Complete (awaiting review)
+### M3 — User & Tenant Management ✅ Complete
 
 - Persisted own-profile read and display-name update operations
 - Tenant creation with atomic creator-as-OWNER membership provisioning
@@ -81,6 +81,8 @@ machine.
 - `MembershipRole` enum with `OWNER`, `ADMIN`, and `MEMBER`
 - Owner/admin management boundaries and last-active-owner protection
 - Joi-validated DTOs plus unit and authorization integration tests
+
+No current milestone is assigned. M4 has not started.
 
 ### Planned follow-up tasks
 

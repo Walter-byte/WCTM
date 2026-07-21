@@ -72,8 +72,8 @@ Deliverables
 - Authentication foundation — Task 2.2 complete
 - Multi-tenancy — M2 complete
 - Database schema
-- User system
-- Tenant management
+- User system — M3 complete
+- Tenant management — M3 complete
 - Store management
 - Application foundation and structured logging — M1 complete
 - Configuration system — Task 2.1 complete
