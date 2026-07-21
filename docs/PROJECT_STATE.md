@@ -12,7 +12,7 @@ Phase 2 — Backend Core in progress.
 
 Current Task
 
-M2 — Multi-Tenant Core, implementation complete and awaiting review.
+None assigned. M3 has not started.
 
 ---
 
@@ -116,7 +116,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-feat/m2-multi-tenant-core
+main
 
 ---
 
@@ -141,13 +141,13 @@ None
 
 Next Milestone
 
-Review and merge M2 before assigning another milestone.
+Await the next approved milestone. M3 has not started.
 
 ---
 
 Last Completed
 
-M1 — Database & Application Foundation, merged into main.
+M2 — Multi-Tenant Core, merged into main in commit `80ac3ee`.
 
 ---
 
