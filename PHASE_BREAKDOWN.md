@@ -82,7 +82,7 @@ machine.
 - Owner/admin management boundaries and last-active-owner protection
 - Joi-validated DTOs plus unit and authorization integration tests
 
-### M4 — WooCommerce Store Management 🟨 Awaiting Review
+### M4 — WooCommerce Store Management ✅ Complete
 
 - AES-256-GCM credential encryption through `ApplicationConfigService`
 - Per-request WooCommerce REST client with a safe connection result
@@ -99,6 +99,8 @@ Acceptance checklist:
 - [x] Soft-delete stores and reject repeated deletion
 - [x] Return safe success/failure results from connection tests
 - [x] Pass 11 focused encryption, CRUD, isolation, and authorization tests
+
+No current milestone is assigned. M5 has not started.
 
 ### Planned follow-up tasks
 

@@ -276,7 +276,7 @@ runtime migration execution path requires a future approved infrastructure fix.
   billing, background-job, or audit tooling
 - M3 was merged into `main` in commit `c042b5b`
 
-#### M4 — WooCommerce Store Management (implemented, awaiting review)
+#### M4 — WooCommerce Store Management (complete)
 
 - `EncryptionModule` exports `EncryptionService`, whose `encrypt()` and
   `decrypt()` methods use AES-256-GCM with the typed
@@ -299,6 +299,7 @@ runtime migration execution path requires a future approved infrastructure fix.
   WooCommerce REST client; the existing Store schema requires no migration
 - Eleven focused M4 tests cover encryption, CRUD, soft deletion, connection
   results, cross-tenant isolation, and MEMBER mutation denial
+- M4 was merged into `main` in commit `2da985b`
 
 ---
 
@@ -320,9 +321,8 @@ complete.
 
 ## 7. Current Task
 
-M4 — WooCommerce Store Management is implemented on
-`feat/m4-woocommerce-store-management` and awaiting review. M3 remains the last
-milestone merged into `main`. No later milestone has started.
+No milestone is currently assigned. M4 — WooCommerce Store Management is
+complete and merged into `main`. M5 has not started.
 
 **Do not begin another Phase 2 task without explicit approval from A.**
 
