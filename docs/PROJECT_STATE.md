@@ -12,7 +12,7 @@ Phase 2 — Backend Core in progress.
 
 Current Task
 
-M3 — User & Tenant Management, implementation complete and awaiting review.
+None assigned. M4 has not started.
 
 ---
 
@@ -124,7 +124,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-feat/m3-user-tenant-management
+main
 
 ---
 
@@ -154,13 +154,13 @@ None
 
 Next Milestone
 
-Review and merge M3 before assigning M4 or another milestone.
+Await the next approved milestone. M4 has not started.
 
 ---
 
 Last Completed
 
-M2 — Multi-Tenant Core, merged into main in commit `80ac3ee`.
+M3 — User & Tenant Management, merged into main in commit `c042b5b`.
 
 ---
 

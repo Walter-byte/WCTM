@@ -255,7 +255,7 @@ runtime migration execution path requires a future approved infrastructure fix.
   integration, billing, or job logic
 - M2 was merged into `main` in commit `80ac3ee`
 
-#### M3 — User & Tenant Management (complete, awaiting review)
+#### M3 — User & Tenant Management (complete)
 
 - `UsersModule` exposes JWT-protected, tenant-optional own-profile read and
   display-name update endpoints backed by persisted User records
@@ -274,6 +274,7 @@ runtime migration execution path requires a future approved infrastructure fix.
   lifecycle behavior, role enforcement, cross-tenant denial, and soft deletes
 - M3 adds no authentication flow, advanced RBAC, store CRUD, integration,
   billing, background-job, or audit tooling
+- M3 was merged into `main` in commit `c042b5b`
 
 ---
 
@@ -295,9 +296,8 @@ complete.
 
 ## 7. Current Task
 
-M3 — User & Tenant Management is implemented on
-`feat/m3-user-tenant-management` and awaiting review. M2 remains the last
-milestone merged into `main`.
+No milestone is currently assigned. M3 — User & Tenant Management is complete
+and merged into `main`. M4 has not started.
 
 **Do not begin another Phase 2 task without explicit approval from A.**
 
