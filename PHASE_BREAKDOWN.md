@@ -82,12 +82,27 @@ machine.
 - Owner/admin management boundaries and last-active-owner protection
 - Joi-validated DTOs plus unit and authorization integration tests
 
-No current milestone is assigned. M4 has not started.
+### M4 — WooCommerce Store Management 🟨 Awaiting Review
+
+- AES-256-GCM credential encryption through `ApplicationConfigService`
+- Per-request WooCommerce REST client with a safe connection result
+- Tenant-scoped Store create, list, read, update, and soft-delete operations
+- Role enforcement: all members may read/test; OWNER and ADMIN may mutate
+- Explicit safe response selections that never expose credential fields
+
+Acceptance checklist:
+
+- [x] Create stores with encrypted credentials and sanitized responses
+- [x] List and read only active stores in the authenticated tenant
+- [x] Return 404 for missing, deleted, or cross-tenant stores
+- [x] Re-encrypt updated credential fields
+- [x] Soft-delete stores and reject repeated deletion
+- [x] Return safe success/failure results from connection tests
+- [x] Pass 11 focused encryption, CRUD, isolation, and authorization tests
 
 ### Planned follow-up tasks
 
-- Database schema evolution
-- User, tenant, and store management
+- No later milestone is currently assigned.
 
 ## Phase 3 — WooCommerce Integration ⬜ Planned
 

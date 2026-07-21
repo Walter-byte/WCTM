@@ -12,7 +12,8 @@ Phase 2 — Backend Core in progress.
 
 Current Task
 
-None assigned. M4 has not started.
+M4 — WooCommerce Store Management is implemented on the feature branch and
+awaiting review.
 
 ---
 
@@ -75,6 +76,12 @@ are constrained by the Prisma `MembershipRole` enum (`OWNER`, `ADMIN`,
 last active OWNER. JWT-protected `@TenantOptional()` routes are limited to own
 profile and tenant bootstrap operations.
 
+M4 adds tenant-scoped WooCommerce Store CRUD with soft deletion, AES-256-GCM
+credential encryption through the typed application encryption setting, a thin
+per-request WooCommerce REST client, and a credential-safe connection test.
+Store responses use explicit Prisma selections that omit encrypted fields, and
+cross-tenant or deleted records resolve as not found.
+
 ---
 
 Plugin
@@ -124,7 +131,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-main
+feat/m4-woocommerce-store-management
 
 ---
 
@@ -154,7 +161,7 @@ None
 
 Next Milestone
 
-Await the next approved milestone. M4 has not started.
+Review M4. No later milestone has started.
 
 ---
 
