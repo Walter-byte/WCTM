@@ -12,7 +12,8 @@ Phase 2 — Backend Core in progress.
 
 Current Task
 
-None assigned. Task 2.3 has not started.
+M1 — Database & Application Foundation, implementation complete and awaiting
+review.
 
 ---
 
@@ -53,6 +54,12 @@ An AuthModule provides access-token signing and verification, Passport JWT
 bearer validation, a global deny-by-default authentication guard, `@Public()`
 route opt-out, and `@CurrentUser()` payload access. User persistence, login,
 refresh tokens, RBAC, and tenant authorization remain outside Task 2.2.
+
+Global backend infrastructure under `backend/src/common/` provides structured
+JSON logging at the configured `LOG_LEVEL`, secret redaction, AsyncLocalStorage
+request context with generated or preserved `x-request-id` correlation IDs, and
+a normalized global error contract containing `statusCode`, `error`, `message`,
+and `requestId`. The common layer contains cross-cutting infrastructure only.
 
 ---
 
@@ -103,7 +110,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-main
+feat/m1-app-foundation
 
 ---
 
@@ -128,7 +135,7 @@ None
 
 Next Milestone
 
-Await the next approved Phase 2 implementation task. Task 2.3 has not started.
+Review and merge M1 before assigning M2 or any other implementation work.
 
 ---
 
