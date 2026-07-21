@@ -74,7 +74,7 @@ Deliverables
 - Database schema
 - User system — M3 complete
 - Tenant management — M3 complete
-- Store management
+- Store management — M4 complete
 - Application foundation and structured logging — M1 complete
 - Configuration system — Task 2.1 complete
 

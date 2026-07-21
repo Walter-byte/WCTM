@@ -12,8 +12,7 @@ Phase 2 — Backend Core in progress.
 
 Current Task
 
-M4 — WooCommerce Store Management is implemented on the feature branch and
-awaiting review.
+None assigned. M5 has not started.
 
 ---
 
@@ -131,7 +130,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-feat/m4-woocommerce-store-management
+main
 
 ---
 
@@ -161,13 +160,13 @@ None
 
 Next Milestone
 
-Review M4. No later milestone has started.
+Await the next approved milestone. M5 has not started.
 
 ---
 
 Last Completed
 
-M3 — User & Tenant Management, merged into main in commit `c042b5b`.
+M4 — WooCommerce Store Management, merged into main in commit `2da985b`.
 
 ---
 
