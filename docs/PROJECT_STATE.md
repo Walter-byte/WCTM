@@ -12,7 +12,7 @@ Phase 2 — Backend Core in progress.
 
 Current Task
 
-None assigned. M3 has not started.
+M3 — User & Tenant Management, implementation complete and awaiting review.
 
 ---
 
@@ -67,6 +67,14 @@ unauthorized memberships, and skips explicit `@Public()` routes. Tenant-owned
 Store access demonstrates the required TenantScopedPrisma pattern: tenant IDs
 come only from server-side context and are injected into every read and write.
 
+M3 adds persisted own-profile access, tenant creation with atomic OWNER
+provisioning, tenant metadata and soft-delete operations, and tenant-scoped
+membership listing, addition, role updates, and soft deletion. Membership roles
+are constrained by the Prisma `MembershipRole` enum (`OWNER`, `ADMIN`,
+`MEMBER`); serializable membership mutations prevent removing or demoting the
+last active OWNER. JWT-protected `@TenantOptional()` routes are limited to own
+profile and tenant bootstrap operations.
+
 ---
 
 Plugin
@@ -116,7 +124,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-main
+feat/m3-user-tenant-management
 
 ---
 
@@ -124,6 +132,11 @@ Known Issues
 
 AuditLog structural immutability is not yet enforced; the schema includes an
 updatable timestamp. A future approved decision must define enforcement.
+
+The production backend image omits the Prisma CLI because production dependency
+installation excludes the Prisma development dependency. M3 migrations were
+verified with the Docker builder stage; the production migration execution path
+requires a future approved infrastructure correction.
 
 ---
 
@@ -141,7 +154,7 @@ None
 
 Next Milestone
 
-Await the next approved milestone. M3 has not started.
+Review and merge M3 before assigning M4 or another milestone.
 
 ---
 

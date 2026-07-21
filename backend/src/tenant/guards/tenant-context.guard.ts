@@ -4,12 +4,14 @@ import {
   ForbiddenException,
   Injectable,
 } from '@nestjs/common';
+import type { MembershipRole } from '@prisma/client';
 import { Reflector } from '@nestjs/core';
 
 import type { JwtPayload } from '../../auth/auth.service';
 import { IS_PUBLIC_KEY } from '../../auth/decorators/public.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { REQUIRED_MEMBERSHIP_ROLES_KEY } from '../decorators/require-membership.decorator';
+import { IS_TENANT_OPTIONAL_KEY } from '../decorators/tenant-optional.decorator';
 import { TenantContextService } from '../tenant-context.service';
 
 interface AuthenticatedRequest {
@@ -31,6 +33,15 @@ export class TenantContextGuard implements CanActivate {
     ]);
 
     if (isPublic) {
+      return true;
+    }
+
+    const isTenantOptional = this.reflector.getAllAndOverride<boolean>(
+      IS_TENANT_OPTIONAL_KEY,
+      [context.getHandler(), context.getClass()]
+    );
+
+    if (isTenantOptional) {
       return true;
     }
 
@@ -56,7 +67,7 @@ export class TenantContextGuard implements CanActivate {
     }
 
     const requiredRoles =
-      this.reflector.getAllAndOverride<readonly string[]>(
+      this.reflector.getAllAndOverride<readonly MembershipRole[]>(
         REQUIRED_MEMBERSHIP_ROLES_KEY,
         [context.getHandler(), context.getClass()]
       ) ?? [];

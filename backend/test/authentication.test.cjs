@@ -124,7 +124,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
     const prisma = application.get(PrismaService);
     prisma.membership.findFirst = async ({ where }) =>
       where.userId === 'usr_test' && where.tenantId === 'ten_test'
-        ? { tenantId: 'ten_test', userId: 'usr_test', role: 'owner' }
+        ? { tenantId: 'ten_test', userId: 'usr_test', role: 'OWNER' }
         : null;
     tenantContextForTest = application.get(TenantContextService);
     await application.listen(0, '127.0.0.1');
@@ -203,7 +203,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
       tenant: {
         tenantId: 'ten_test',
         userId: 'usr_test',
-        membershipRole: 'owner',
+        membershipRole: 'OWNER',
       },
     });
   } finally {

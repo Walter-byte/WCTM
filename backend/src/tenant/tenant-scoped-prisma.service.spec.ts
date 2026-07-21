@@ -102,7 +102,7 @@ describe('TenantScopedPrismaService', () => {
       requestContext.setTenant({
         tenantId: 'ten_a',
         userId: 'usr_a',
-        membershipRole: 'owner',
+        membershipRole: 'OWNER',
       });
 
       await expect(service.findStoreById('sto_a')).resolves.toMatchObject({
@@ -123,6 +123,130 @@ describe('TenantScopedPrismaService', () => {
 
     expect(() => service.findStoreById('sto_a')).toThrow(
       'Tenant context is not available'
+    );
+  });
+
+  it('excludes soft-deleted tenants and their memberships from active queries', async () => {
+    const tenant = {
+      id: 'ten_a',
+      name: 'Tenant A',
+      plan: 'FREE',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null as Date | null,
+    };
+    const membership = {
+      id: 'mem_a',
+      tenantId: 'ten_a',
+      userId: 'usr_a',
+      role: 'OWNER',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      deletedAt: null,
+      user: {
+        id: 'usr_a',
+        email: 'a@example.com',
+        displayName: null,
+      },
+    };
+    const prisma = {
+      tenant: {
+        findFirst: jest.fn(async () =>
+          tenant.deletedAt === null ? tenant : null
+        ),
+        updateMany: jest.fn(async ({ data }: { data: { deletedAt: Date } }) => {
+          if (tenant.deletedAt !== null) {
+            return { count: 0 };
+          }
+
+          tenant.deletedAt = data.deletedAt;
+          return { count: 1 };
+        }),
+      },
+      membership: {
+        findMany: jest.fn(async () =>
+          tenant.deletedAt === null ? [membership] : []
+        ),
+      },
+    } as unknown as PrismaService;
+    const requestContext = new RequestContextService();
+    const context = new TenantContextService(requestContext);
+    const service = new TenantScopedPrismaService(prisma, context);
+
+    await requestContext.run('req-soft-delete', async () => {
+      requestContext.setTenant({
+        tenantId: 'ten_a',
+        userId: 'usr_a',
+        membershipRole: 'OWNER',
+      });
+
+      await expect(service.findActiveTenant()).resolves.toMatchObject({
+        id: 'ten_a',
+      });
+      await expect(service.listActiveMemberships()).resolves.toHaveLength(1);
+      await expect(service.softDeleteActiveTenant(new Date())).resolves.toBe(
+        true
+      );
+      await expect(service.findActiveTenant()).resolves.toBeNull();
+      await expect(service.listActiveMemberships()).resolves.toEqual([]);
+    });
+  });
+
+  it('excludes soft-deleted memberships while the tenant remains active', async () => {
+    const memberships = [
+      {
+        id: 'mem_active',
+        tenantId: 'ten_a',
+        userId: 'usr_active',
+        role: 'MEMBER',
+        deletedAt: null,
+      },
+      {
+        id: 'mem_deleted',
+        tenantId: 'ten_a',
+        userId: 'usr_deleted',
+        role: 'MEMBER',
+        deletedAt: new Date(),
+      },
+    ];
+    const findMany = jest.fn(
+      async ({
+        where,
+      }: {
+        where: { tenantId: string; deletedAt: Date | null };
+      }) =>
+        memberships.filter(
+          (membership) =>
+            membership.tenantId === where.tenantId &&
+            membership.deletedAt === where.deletedAt
+        )
+    );
+    const prisma = {
+      membership: { findMany },
+    } as unknown as PrismaService;
+    const requestContext = new RequestContextService();
+    const context = new TenantContextService(requestContext);
+    const service = new TenantScopedPrismaService(prisma, context);
+
+    await requestContext.run('req-active-memberships', async () => {
+      requestContext.setTenant({
+        tenantId: 'ten_a',
+        userId: 'usr_owner',
+        membershipRole: 'OWNER',
+      });
+
+      await expect(service.listActiveMemberships()).resolves.toEqual([
+        expect.objectContaining({ id: 'mem_active' }),
+      ]);
+    });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tenantId: 'ten_a',
+          deletedAt: null,
+        }),
+      })
     );
   });
 });

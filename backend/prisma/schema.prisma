@@ -23,6 +23,14 @@ enum StoreStatus {
   @@map("store_status")
 }
 
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MEMBER
+
+  @@map("membership_role")
+}
+
 model Tenant {
   id            String         @id @map("id") @db.VarChar(64)
   name          String         @map("name") @db.VarChar(255)
@@ -51,15 +59,15 @@ model User {
 }
 
 model Membership {
-  id        String    @id @map("id") @db.VarChar(64)
-  tenantId  String    @map("tenant_id") @db.VarChar(64)
-  userId    String    @map("user_id") @db.VarChar(64)
-  role      String    @map("role") @db.VarChar(50)
-  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  id        String         @id @map("id") @db.VarChar(64)
+  tenantId  String         @map("tenant_id") @db.VarChar(64)
+  userId    String         @map("user_id") @db.VarChar(64)
+  role      MembershipRole @default(MEMBER) @map("role")
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime?      @map("deleted_at") @db.Timestamptz(3)
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  user      User           @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([tenantId, userId])
   @@index([tenantId])

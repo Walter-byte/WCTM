@@ -16,9 +16,12 @@ import { StructuredLoggingModule } from './common/logging/structured-logging.mod
 import { CorrelationIdMiddleware } from './common/request-context/correlation-id.middleware';
 import { RequestContextModule } from './common/request-context/request-context.module';
 import { ApplicationConfigModule } from './config/application-config.module';
+import { MembershipsModule } from './memberships/memberships.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { TenantContextGuard } from './tenant/guards/tenant-context.guard';
 import { TenantContextModule } from './tenant/tenant-context.module';
+import { TenantsModule } from './tenants/tenants.module';
+import { UsersModule } from './users/users.module';
 
 @Controller('health')
 @Public()
@@ -37,6 +40,9 @@ class HealthController {
     AuthModule,
     PrismaModule,
     TenantContextModule,
+    UsersModule,
+    TenantsModule,
+    MembershipsModule,
   ],
   controllers: [HealthController],
   providers: [

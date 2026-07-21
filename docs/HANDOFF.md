@@ -100,7 +100,7 @@ architectural or product decision.
 
 - `Tenant` — organization/account; has `plan` (TenantPlan enum), soft-delete (`deleted_at`)
 - `User` — global user model; linked to tenants via Membership
-- `Membership` — links User↔ Tenant with RBAC `role`; soft-delete
+- `Membership` — links User↔ Tenant with `MembershipRole`; soft-delete
 - `Store` — WooCommerce store owned by a Tenant; has `status` (StoreStatus enum),
   encrypted credential fields (`consumer_key_encrypted`, `consumer_secret_encrypted`,
   `webhook_secret_encrypted`), soft-delete
@@ -109,10 +109,11 @@ architectural or product decision.
   the model includes an updatable timestamp. This is a known limitation and a
   candidate decision for A, not a Task 1.4 schema change.
 
-**Enums (2 total):**
+**Enums (3 total):**
 
 - `TenantPlan`: future billing tiers (no billing logic yet)
 - `StoreStatus`: store health/connection state
+- `MembershipRole`: minimal tenant roles (`OWNER`, `ADMIN`, `MEMBER`)
 
 **Schema conventions enforced:**
 
@@ -142,8 +143,10 @@ only resolvable inside the Docker network. Run migrations via:
 docker compose exec backend npx --no-install prisma migrate deploy
 ```
 
-Task 1.4 confirmed that the production backend image contains the Prisma CLI and
-that the migration commands complete inside the Docker network.
+The production backend image currently omits the Prisma CLI because Prisma is a
+development dependency excluded by its production install. M3 migration
+verification used the Docker builder stage inside the Compose network. The
+runtime migration execution path requires a future approved infrastructure fix.
 
 #### Task 1.3 — NestJS Prisma Module Integration
 
@@ -252,6 +255,26 @@ that the migration commands complete inside the Docker network.
   integration, billing, or job logic
 - M2 was merged into `main` in commit `80ac3ee`
 
+#### M3 — User & Tenant Management (complete, awaiting review)
+
+- `UsersModule` exposes JWT-protected, tenant-optional own-profile read and
+  display-name update endpoints backed by persisted User records
+- `TenantsModule` creates a tenant and its creator's OWNER membership atomically;
+  current-tenant read, name update, and soft deletion use server tenant context
+- `MembershipsModule` adds existing users, lists active memberships, changes
+  roles, and soft-deletes memberships within the active tenant only
+- `MembershipRole` replaces the free-form role string with `OWNER`, `ADMIN`, and
+  `MEMBER`; migration `20260721160000_membership_role_enum` is applied and in
+  sync in the local verification database
+- OWNER and ADMIN may manage non-owner memberships; only OWNER may grant or
+  manage OWNER, and the final active OWNER cannot be removed or demoted
+- `@TenantOptional()` bypasses tenant resolution only for JWT-authenticated own
+  profile and tenant-bootstrap routes; it does not bypass authentication
+- Joi request pipes validate DTOs without adding dependencies, and tests cover
+  lifecycle behavior, role enforcement, cross-tenant denial, and soft deletes
+- M3 adds no authentication flow, advanced RBAC, store CRUD, integration,
+  billing, background-job, or audit tooling
+
 ---
 
 ## 5. Current Repository Structure
@@ -272,8 +295,9 @@ complete.
 
 ## 7. Current Task
 
-No milestone is currently assigned. M2 — Multi-Tenant Core is complete and
-merged into `main`. M3 has not started.
+M3 — User & Tenant Management is implemented on
+`feat/m3-user-tenant-management` and awaiting review. M2 remains the last
+milestone merged into `main`.
 
 **Do not begin another Phase 2 task without explicit approval from A.**
 
