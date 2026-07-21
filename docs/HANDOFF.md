@@ -201,7 +201,7 @@ that the migration commands complete inside the Docker network.
 - Task 2.1 was merged into `main` in commit `19cb0d3`, containing implementation
   commit `2a39455`
 
-#### Task 2.2 — Authentication Foundation (in review)
+#### Task 2.2 — Authentication Foundation (complete)
 
 - The existing JWT configuration namespace now exposes the required
   `JWT_ACCESS_TTL` value as `accessTokenTtl`
@@ -214,6 +214,7 @@ that the migration commands complete inside the Docker network.
   to work
 - This foundation intentionally excludes user persistence, credential login,
   refresh tokens, RBAC, and tenant authorization
+- Task 2.2 was merged into `main` in commit `9a9bbd4`
 
 ---
 
@@ -235,8 +236,8 @@ complete.
 
 ## 7. Current Task
 
-Phase 2, Task 2.2 — Authentication Foundation is implemented on
-`task/2.2-auth-foundation` and awaiting review. No later task has started.
+No implementation task is currently assigned. Task 2.2 — Authentication
+Foundation is complete and merged into `main`. Task 2.3 has not started.
 
 **Do not begin another Phase 2 task without explicit approval from A.**
 
