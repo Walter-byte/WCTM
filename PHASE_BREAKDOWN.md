@@ -48,7 +48,7 @@ machine.
 - Secret-safe serialization and error reporting
 - Focused configuration tests and synchronized environment documentation
 
-### Task 2.2 — Authentication foundation 🟨 In Review
+### Task 2.2 — Authentication foundation ✅ Complete
 
 - Access-token-only JWT signing and verification through typed configuration
 - Passport JWT bearer strategy and deny-by-default global authentication guard

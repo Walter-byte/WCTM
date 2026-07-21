@@ -69,7 +69,7 @@ Status:
 
 Deliverables
 
-- Authentication
+- Authentication foundation — Task 2.2 complete
 - Multi-tenancy
 - Database schema
 - User system

@@ -12,7 +12,7 @@ Phase 2 — Backend Core in progress.
 
 Current Task
 
-Task 2.2 — Authentication Foundation, implemented and awaiting review.
+None assigned. Task 2.3 has not started.
 
 ---
 
@@ -103,7 +103,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-task/2.2-auth-foundation
+main
 
 ---
 
@@ -128,13 +128,13 @@ None
 
 Next Milestone
 
-Review and merge Task 2.2 before assigning another Phase 2 task.
+Await the next approved Phase 2 implementation task. Task 2.3 has not started.
 
 ---
 
 Last Completed
 
-Phase 2, Task 2.1 — Configuration Foundation, merged into main.
+Phase 2, Task 2.2 — Authentication Foundation, merged into main.
 
 ---
 
