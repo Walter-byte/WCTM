@@ -12,8 +12,7 @@ Phase 2 — Backend Core in progress.
 
 Current Task
 
-M1 — Database & Application Foundation, implementation complete and awaiting
-review.
+M2 — Multi-Tenant Core, implementation complete and awaiting review.
 
 ---
 
@@ -60,6 +59,13 @@ JSON logging at the configured `LOG_LEVEL`, secret redaction, AsyncLocalStorage
 request context with generated or preserved `x-request-id` correlation IDs, and
 a normalized global error contract containing `statusCode`, `error`, `message`,
 and `requestId`. The common layer contains cross-cutting infrastructure only.
+
+The M2 tenant foundation extends that same request AsyncLocalStorage context
+with the authenticated `tenantId`, `userId`, and membership role. A global guard
+resolves active Membership records after JWT authentication, rejects missing or
+unauthorized memberships, and skips explicit `@Public()` routes. Tenant-owned
+Store access demonstrates the required TenantScopedPrisma pattern: tenant IDs
+come only from server-side context and are injected into every read and write.
 
 ---
 
@@ -110,7 +116,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-feat/m1-app-foundation
+feat/m2-multi-tenant-core
 
 ---
 
@@ -135,13 +141,13 @@ None
 
 Next Milestone
 
-Review and merge M1 before assigning M2 or any other implementation work.
+Review and merge M2 before assigning another milestone.
 
 ---
 
 Last Completed
 
-Phase 2, Task 2.2 — Authentication Foundation, merged into main.
+M1 — Database & Application Foundation, merged into main.
 
 ---
 

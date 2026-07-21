@@ -216,7 +216,7 @@ that the migration commands complete inside the Docker network.
   refresh tokens, RBAC, and tenant authorization
 - Task 2.2 was merged into `main` in commit `9a9bbd4`
 
-#### M1 — Database & Application Foundation (complete, awaiting review)
+#### M1 — Database & Application Foundation (complete)
 
 - `backend/src/common/logging/` provides the global structured JSON logger and
   request logging interceptor; `LOG_LEVEL` comes from
@@ -231,6 +231,25 @@ that the migration commands complete inside the Docker network.
 - Jest covers the new common infrastructure while the existing Node smoke,
   configuration, and authentication tests remain part of the full suite
 - M1 introduces no schema, tenant, RBAC, user, WooCommerce, audit, or job logic
+- M1 was merged into `main` in commit `2dcade7`
+
+#### M2 — Multi-Tenant Core (complete, awaiting review)
+
+- `TenantContextService` exposes the active authenticated `tenantId`, `userId`,
+  and membership role and fails closed when tenant context is unavailable
+- Tenant data extends M1's existing request AsyncLocalStorage context; M2 does
+  not introduce a second request-lifecycle store
+- The global `TenantContextGuard` runs after JWT authentication, resolves an
+  active Membership using signed `sub` and `tenantId` claims, and rejects absent
+  or unauthorized membership with 403
+- Explicit `@Public()` routes bypass tenant resolution; `@RequireMembership()`
+  optionally restricts a route to listed membership roles without introducing
+  an RBAC permission matrix
+- `TenantScopedPrismaService` demonstrates tenant-owned Store reads and writes;
+  it sources `tenantId` only from TenantContext and injects it into every query
+- Isolation tests prove Tenant A cannot read or mutate Tenant B's Store row
+- M2 adds no schema migration, tenant CRUD, user management, store endpoint,
+  integration, billing, or job logic
 
 ---
 
@@ -252,8 +271,8 @@ complete.
 
 ## 7. Current Task
 
-M1 — Database & Application Foundation is implemented on
-`feat/m1-app-foundation` and awaiting review. M2 has not started.
+M2 — Multi-Tenant Core is implemented on `feat/m2-multi-tenant-core` and
+awaiting review. M1 remains the last milestone merged into `main`.
 
 **Do not begin another Phase 2 task without explicit approval from A.**
 

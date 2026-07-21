@@ -55,12 +55,27 @@ machine.
 - Explicit `@Public()` route opt-out and `@CurrentUser()` payload access
 - Focused configuration, token, expiry, guard, and public-route tests
 
+### M1 — Database & Application Foundation ✅ Complete
+
+- Structured JSON logging with configured levels and secret redaction
+- Correlation IDs carried through the shared request AsyncLocalStorage context
+- Normalized global error responses with request IDs
+- Focused common-infrastructure tests
+
+### M2 — Multi-Tenant Core ✅ Complete (awaiting review)
+
+- Tenant context containing authenticated tenant, user, and membership role
+- Active Membership resolution after JWT authentication with `@Public()` bypass
+- Global membership enforcement and minimal role requirement metadata
+- TenantScopedPrisma Store access with server-side tenant filters on reads and
+  writes
+- Tests proving context resolution, 403 rejection, public bypass, and
+  cross-tenant read/write isolation
+
 ### Planned follow-up tasks
 
-- Multi-tenancy
 - Database schema evolution
 - User, tenant, and store management
-- Logging
 
 ## Phase 3 — WooCommerce Integration ⬜ Planned
 

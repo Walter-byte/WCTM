@@ -17,6 +17,8 @@ import { CorrelationIdMiddleware } from './common/request-context/correlation-id
 import { RequestContextModule } from './common/request-context/request-context.module';
 import { ApplicationConfigModule } from './config/application-config.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { TenantContextGuard } from './tenant/guards/tenant-context.guard';
+import { TenantContextModule } from './tenant/tenant-context.module';
 
 @Controller('health')
 @Public()
@@ -34,12 +36,17 @@ class HealthController {
     StructuredLoggingModule,
     AuthModule,
     PrismaModule,
+    TenantContextModule,
   ],
   controllers: [HealthController],
   providers: [
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: TenantContextGuard,
     },
     {
       provide: APP_FILTER,

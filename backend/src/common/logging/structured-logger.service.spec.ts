@@ -31,6 +31,11 @@ describe('StructuredLoggerService', () => {
       .mockImplementation(() => true);
 
     requestContext.run('req-structured', () => {
+      requestContext.setTenant({
+        tenantId: 'ten_logger',
+        userId: 'usr_logger',
+        membershipRole: 'owner',
+      });
       logger.log(
         'processing request',
         {
@@ -50,6 +55,9 @@ describe('StructuredLoggerService', () => {
     const record = JSON.parse(output) as {
       level: string;
       requestId: string;
+      tenantId: string;
+      userId: string;
+      membershipRole: string;
       context: string;
       message: string;
       metadata: Record<string, unknown>;
@@ -58,6 +66,9 @@ describe('StructuredLoggerService', () => {
     expect(record).toMatchObject({
       level: 'log',
       requestId: 'req-structured',
+      tenantId: 'ten_logger',
+      userId: 'usr_logger',
+      membershipRole: 'owner',
       context: 'LoggerTest',
       message: 'processing request',
       metadata: {
