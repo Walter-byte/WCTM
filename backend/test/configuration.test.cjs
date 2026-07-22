@@ -61,6 +61,14 @@ test('valid environment loads typed configuration values', () => {
     configuration.encryption.key,
     'AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI='
   );
+  assert.deepEqual(configuration.woocommerce.rest, {
+    maxAttempts: 3,
+    attemptTimeoutMs: 5000,
+    totalTimeoutMs: 15000,
+    backoffBaseMs: 300,
+    backoffFactor: 2,
+    jitterRatio: 0.2,
+  });
 });
 
 test('test environment supplies isolated safe defaults', () => {
@@ -73,6 +81,28 @@ test('test environment supplies isolated safe defaults', () => {
   assert.equal(validated.PORT, 3000);
   assert.equal(validated.LOG_LEVEL, 'error');
   assert.match(validated.DATABASE_URL, /wc_telegram_test/);
+});
+
+test('WooCommerce REST resilience limits accept typed configuration overrides', () => {
+  const configuration = createConfiguration(
+    validEnvironment({
+      WOOCOMMERCE_REST_MAX_ATTEMPTS: '4',
+      WOOCOMMERCE_REST_ATTEMPT_TIMEOUT_MS: '4500',
+      WOOCOMMERCE_REST_TOTAL_TIMEOUT_MS: '14000',
+      WOOCOMMERCE_REST_BACKOFF_BASE_MS: '250',
+      WOOCOMMERCE_REST_BACKOFF_FACTOR: '3',
+      WOOCOMMERCE_REST_JITTER_RATIO: '0.1',
+    })
+  );
+
+  assert.deepEqual(configuration.woocommerce.rest, {
+    maxAttempts: 4,
+    attemptTimeoutMs: 4500,
+    totalTimeoutMs: 14000,
+    backoffBaseMs: 250,
+    backoffFactor: 3,
+    jitterRatio: 0.1,
+  });
 });
 
 test('missing required variables produce one aggregated safe error', () => {

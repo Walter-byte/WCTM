@@ -157,6 +157,21 @@ function createEnvironmentSchema(
     APP_ENCRYPTION_KEY: encryptionKey,
     TELEGRAM_BOT_TOKEN: telegramBotToken,
     WOOCOMMERCE_WEBHOOK_SECRET: webhookSecret,
+    WOOCOMMERCE_REST_MAX_ATTEMPTS: Joi.number().integer().min(1).default(3),
+    WOOCOMMERCE_REST_ATTEMPT_TIMEOUT_MS: Joi.number()
+      .integer()
+      .min(1)
+      .default(5000),
+    WOOCOMMERCE_REST_TOTAL_TIMEOUT_MS: Joi.number()
+      .integer()
+      .min(1)
+      .default(15000),
+    WOOCOMMERCE_REST_BACKOFF_BASE_MS: Joi.number()
+      .integer()
+      .min(0)
+      .default(300),
+    WOOCOMMERCE_REST_BACKOFF_FACTOR: Joi.number().min(1).default(2),
+    WOOCOMMERCE_REST_JITTER_RATIO: Joi.number().min(0).max(1).default(0.2),
     POSTGRES_DB: Joi.string().trim().min(1).optional(),
     POSTGRES_USER: Joi.string().trim().min(1).optional(),
     POSTGRES_PASSWORD: postgresPassword,
@@ -182,8 +197,9 @@ function describeValidationFailure(detail: Joi.ValidationErrorItem): string {
     case 'number.integer':
       return `${variable} must be an integer`;
     case 'number.min':
+      return `${variable} must be at least ${String(detail.context?.['limit'])}`;
     case 'number.max':
-      return `${variable} must be between 1 and 65535`;
+      return `${variable} must be at most ${String(detail.context?.['limit'])}`;
     case 'string.empty':
       return `${variable} must not be empty`;
     case 'string.min':

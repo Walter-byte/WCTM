@@ -266,4 +266,41 @@ Accepted.
 
 ---
 
+## D-015
+
+Date
+
+2026-07-22
+
+Decision
+
+WooCommerce REST validation uses three total attempts, a five-second timeout per
+attempt, and a 15-second hard operation cap. Retry delays use exponential
+backoff starting at 300 milliseconds with factor two and ±20% jitter. Only
+transport failures, timeouts, HTTP 429, and HTTP 5xx are retried.
+
+Store creation must validate live WooCommerce reachability and authentication
+before persistence. A credential-changing Store update must validate the
+proposed credential set before replacing encrypted values; every validation
+failure fails the operation without mutating the Store.
+
+Reason
+
+Fail-closed validation prevents unusable or unverified credentials from becoming
+active tenant data while bounded retries tolerate transient WooCommerce and
+network failures without extending request duration indefinitely.
+
+Boundary
+
+Failures normalize to the secret-safe categories `auth`, `not-found`,
+`transport`, `rate-limited`, `timeout`, and `unexpected`. This decision adds no
+WooCommerce resource operations, webhook behavior, plugin registration, sync
+service, dependency, or schema change.
+
+Status
+
+Accepted.
+
+---
+
 Future decisions continue below.

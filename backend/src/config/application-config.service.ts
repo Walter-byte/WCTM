@@ -52,6 +52,30 @@ export class ApplicationConfigService {
       webhookSecret: this.configService.get('WOOCOMMERCE_WEBHOOK_SECRET', {
         infer: true,
       }),
+      rest: {
+        maxAttempts: this.configService.get('WOOCOMMERCE_REST_MAX_ATTEMPTS', {
+          infer: true,
+        }),
+        attemptTimeoutMs: this.configService.get(
+          'WOOCOMMERCE_REST_ATTEMPT_TIMEOUT_MS',
+          { infer: true }
+        ),
+        totalTimeoutMs: this.configService.get(
+          'WOOCOMMERCE_REST_TOTAL_TIMEOUT_MS',
+          { infer: true }
+        ),
+        backoffBaseMs: this.configService.get(
+          'WOOCOMMERCE_REST_BACKOFF_BASE_MS',
+          { infer: true }
+        ),
+        backoffFactor: this.configService.get(
+          'WOOCOMMERCE_REST_BACKOFF_FACTOR',
+          { infer: true }
+        ),
+        jitterRatio: this.configService.get('WOOCOMMERCE_REST_JITTER_RATIO', {
+          infer: true,
+        }),
+      },
     });
   }
 

@@ -6,13 +6,13 @@ Version: 1.0
 
 Current Phase
 
-Phase 2 — Backend Core complete. Phase 3 has not started.
+Phase 3 — WooCommerce Integration active. M6 is complete.
 
 ---
 
 Current Task
 
-None assigned. Phase 3 has not started.
+None assigned. M6 is complete; await review and the next approved milestone.
 
 ---
 
@@ -88,6 +88,20 @@ worker provide validated tenant-aware payloads, bounded exponential retries,
 terminal structured error logging, Redis/PostgreSQL readiness checks, and clean
 shutdown through Nest lifecycle hooks.
 
+M6 hardens the per-request WooCommerce REST client with typed resilience
+configuration, a five-second per-attempt timeout, a 15-second total cap, and up
+to three attempts using 300/600ms exponential backoff with ±20% jitter. Retries
+are restricted to transport failures, timeouts, HTTP 429, and HTTP 5xx.
+WooCommerce failures normalize to six secret-safe categories without retaining
+raw request errors or authorization data.
+
+Store creation now validates live reachability and credentials before any Store
+row is persisted. Credential-changing updates validate the proposed credential
+set before any Store field is mutated, so failed validation preserves the
+existing encrypted credentials and metadata. The existing connection-test
+response shape is preserved. M6 adds no dependency, schema migration, webhook,
+plugin registration, resource endpoint, or synchronization behavior.
+
 ---
 
 Plugin
@@ -137,7 +151,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-main
+feature/m6-rest-client-hardening
 
 ---
 
@@ -167,13 +181,14 @@ None
 
 Next Milestone
 
-Await the next approved milestone. Phase 3 has not started.
+Await review of M6 and the next approved Phase 3 milestone.
 
 ---
 
 Last Completed
 
-M5 — Production Operations Foundation, merged into main in commit `0cdf0e6`.
+M6 — REST Client Hardening & Credential Validation, complete on feature branch
+`feature/m6-rest-client-hardening` and awaiting review and merge.
 
 ---
 

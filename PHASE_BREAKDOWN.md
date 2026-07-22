@@ -123,10 +123,30 @@ Acceptance checklist:
 Phase 2 is complete. No current milestone is assigned, and Phase 3 has not
 started.
 
-## Phase 3 — WooCommerce Integration ⬜ Planned
+## Phase 3 — WooCommerce Integration 🟨 Active
 
-- REST client, webhook verification, plugin communication, credential validation,
-  store registration, and synchronization
+### M6 — REST Client Hardening & Credential Validation ✅ Complete
+
+- WooCommerce probes use typed configuration for a 5-second attempt timeout,
+  15-second total cap, and three attempts with 300/600ms exponential backoff
+  plus ±20% jitter.
+- Retries are limited to transport failures, timeouts, HTTP 429, and HTTP 5xx;
+  authentication and other HTTP 4xx failures fail fast.
+- Failures normalize to secret-safe `auth`, `not-found`, `transport`,
+  `rate-limited`, `timeout`, or `unexpected` categories.
+- Store creation validates live credentials before persistence, and credential
+  updates validate the proposed credential set before changing any Store data.
+- The existing connection-test response contract remains unchanged.
+
+Acceptance checklist:
+
+- [x] Invalid credentials prevent Store creation
+- [x] Failed credential updates preserve existing encrypted credentials
+- [x] Successful validation precedes persistence
+- [x] Retry, timeout, hard-cap, error mapping, and secret safety are tested
+- [x] No schema migration or new dependency is required
+
+Phase 3 remains active. No next milestone is assigned.
 
 ## Phase 4 — Telegram Platform ⬜ Planned
 
