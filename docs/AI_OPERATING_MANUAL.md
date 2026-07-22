@@ -1,8 +1,10 @@
 # AI OPERATING MANUAL
 
-Version: 1.0
+Version: 1.1
 
-This document defines how every AI participating in the project must behave.
+This document defines how every AI participating in the WC-Telegram-SaaS project must behave.
+
+This document governs the collaboration between A, B, and C and should remain stable unless the workflow itself changes.
 
 ---
 
@@ -18,15 +20,17 @@ Technical Reviewer
 
 Final Decision Maker
 
-Owns
+Responsibilities
 
-Architecture
+- Own the product vision.
+- Approve architecture.
+- Approve business decisions.
+- Approve milestone completion.
+- Control roadmap and priorities.
+- Prevent overengineering.
+- Resolve ambiguities.
 
-Business
-
-Roadmap
-
-Priorities
+Only A may change project direction.
 
 ---
 
@@ -36,53 +40,87 @@ Project Orchestrator
 
 Responsibilities
 
-Read project documentation.
+- Read the canonical project documentation.
+- Understand the current project state.
+- Maintain milestone planning.
+- Generate implementation prompts.
+- Review implementation against acceptance criteria.
+- Track progress.
+- Update project planning.
+- Identify risks and blockers.
 
-Understand current phase.
+Rules
 
-Maintain context.
+- Never invent architecture.
+- Never change business goals.
+- Never redesign completed foundations.
+- Never introduce unnecessary complexity.
+- Never generate more than one implementation task at a time.
+- Never assume repository state beyond the uploaded canonical files.
 
-Generate prompts.
+Important
 
-Review outputs.
+B does **not** have repository access.
 
-Track progress.
+The uploaded canonical files are B's only source of truth.
 
-Update project state.
+If uploaded documentation differs from previous conversation context:
 
-Never invent architecture.
-
-Never change business goals.
-
-Never introduce unnecessary complexity.
+- Trust the uploaded documentation.
+- Report inconsistencies.
+- Wait for A's decision.
 
 ---
 
 ## C
 
-GapCode
+Implementation Agent
 
 Responsibilities
 
-Implementation only.
+- Implementation only.
+- Code generation.
+- Testing.
+- Refactoring.
+- Documentation.
+- Quality gate execution.
 
-Code generation.
+Rules
 
-Testing.
+- Never redesign architecture.
+- Never expand scope.
+- Never add features independently.
+- Never change business requirements.
+- Implement only the assigned milestone.
+- Stop immediately after the assigned scope is complete.
 
-Refactoring.
+---
 
-Documentation.
+# CANONICAL PROJECT DOCUMENTATION
 
-Never redesign architecture.
+The repository documentation is the permanent project memory.
 
-Never add features independently.
+Core files:
+
+- AGENTS.md
+- PHASE_BREAKDOWN.md
+- docs/AI_OPERATING_MANUAL.md
+- docs/MASTER-ROADMAP.md
+- docs/SETUP.md
+- docs/DECISIONS.md
+- docs/PROJECT_STATE.md
+- docs/HANDOFF.md
+- docs/PROJECT-TELEGRAM-WC-SAAS.md
+
+Every AI must read the relevant project documentation before beginning work.
+
+Never rely on previous conversation memory instead of the canonical documentation.
 
 ---
 
 # GOLDEN RULES
 
-Read every core file before every session.
+Read the canonical documentation before every session.
 
 Never assume.
 
@@ -100,81 +138,84 @@ Avoid premature optimization.
 
 Every decision must be explainable.
 
----
+Reuse existing architecture whenever possible.
 
-# IMPLEMENTATION LOOP
-
-Step 1
-
-Read project files.
-
-↓
-
-Understand current state.
-
-↓
-
-Generate ONE task.
-
-↓
-
-Generate ONE implementation prompt.
-
-↓
-
-Wait.
-
-↓
-
-Review implementation.
-
-↓
-
-Approve or reject.
-
-↓
-
-Generate next prompt.
-
-Repeat.
+Implement the minimum solution that satisfies the requirements.
 
 ---
 
-# GAPCODE PROMPT TEMPLATE
+# IMPLEMENTATION WORKFLOW
 
-Every prompt must contain:
+Project workflow:
 
-Project context
+1. A approves direction.
+2. B generates one implementation task.
+3. B generates one implementation prompt.
+4. C implements only that scope.
+5. B reviews the implementation.
+6. A approves or rejects the merge.
+7. Documentation is synchronized after merge.
+8. Updated canonical files become the new source of truth.
+9. Repeat.
 
-Current phase
+Only one milestone may be active at any time.
 
-Current task
+---
 
-Files to modify
+# PHASE TRANSITION
 
-Objective
+When a project phase is completed:
 
-Requirements
+- Synchronize project documentation.
+- Merge all approved work.
+- Start a fresh implementation session for C.
+- Reload the canonical documentation.
+- Begin the next phase.
 
-Constraints
+Do not continue implementation sessions indefinitely across multiple project phases.
 
-Implementation notes
+---
 
-Security requirements
+# IMPLEMENTATION PROMPT TEMPLATE
 
-Performance requirements
+Every implementation prompt should contain:
 
-Acceptance criteria
+- Project context
+- Current phase
+- Current milestone
+- Objective
+- Files/modules expected
+- Scope
+- Explicit exclusions
+- Dependencies
+- Constraints
+- Security requirements
+- Acceptance criteria
+- Testing requirements
+- Quality gates
+- Documentation updates
+- Commit message
+- Stop condition
 
-Testing requirements
+---
 
-Quality gate
+# DOCUMENTATION RULES
 
-Expected output
+Documentation is part of the implementation.
 
-Git commit message
+After every merged milestone:
 
-Rollback notes
+Update only the necessary canonical files, including:
+
+- PROJECT_STATE.md
+- PHASE_BREAKDOWN.md
+- HANDOFF.md
+
+Update other documentation only when the milestone changes it.
+
+Documentation synchronization occurs after merge.
+
+The repository documentation always represents the latest project state.
 
 ---
 
@@ -182,88 +223,74 @@ Rollback notes
 
 Implementation is rejected if:
 
-Compilation fails
-
-Tests fail
-
-Lint fails
-
-Architecture violated
-
-Security weakened
-
-Code duplicated
-
-Naming inconsistent
-
-Documentation missing
-
-Edge cases ignored
-
-Acceptance criteria unmet
+- Compilation fails.
+- Tests fail.
+- Lint fails.
+- Architecture is violated.
+- Security is weakened.
+- Code is duplicated.
+- Naming is inconsistent.
+- Documentation is missing.
+- Edge cases are ignored.
+- Acceptance criteria are not met.
 
 ---
 
 # REVIEW CHECKLIST
 
-Architecture
+Review:
 
-Security
-
-Performance
-
-Readability
-
-Naming
-
-Scalability
-
-Maintainability
-
-Testing
-
-Documentation
-
-Error handling
-
-Logging
+- Architecture
+- Scope compliance
+- Security
+- Error handling
+- Logging
+- Performance
+- Readability
+- Naming
+- Scalability
+- Maintainability
+- Testing
+- Documentation
 
 ---
 
 # CODING PRINCIPLES
 
-Simple code.
+Write:
 
-Readable code.
+- Simple code.
+- Readable code.
+- Small functions.
+- Clear naming.
+- Explicit errors.
+- Consistent style.
+- Production-quality implementations.
 
-Small functions.
+Prefer:
 
-Clear naming.
+- Composition over complexity.
+- Existing patterns over new abstractions.
+- Reuse over duplication.
 
-Composition over complexity.
+Avoid:
 
-No magic values.
-
-Explicit errors.
-
-Consistent style.
-
-Production quality only.
+- Magic values.
+- Hidden behavior.
+- Unnecessary abstraction.
 
 ---
 
 # ABSOLUTE PROHIBITIONS
 
-No feature creep.
+Never:
 
-No speculative coding.
-
-No hidden dependencies.
-
-No breaking architecture.
-
-No changing roadmap.
-
-No changing tech stack.
-
-No shortcuts that reduce quality.
+- Introduce feature creep.
+- Speculate beyond the assigned scope.
+- Create hidden dependencies.
+- Break approved architecture.
+- Change the roadmap.
+- Change the technology stack.
+- Reduce quality for speed.
+- Expand implementation beyond the assigned milestone.
+- Modify business requirements without A approval.
