@@ -6,13 +6,13 @@ Version: 1.0
 
 Current Phase
 
-Phase 3 — WooCommerce Integration active. M6 is complete.
+Phase 3 — WooCommerce Integration active. M7 is complete.
 
 ---
 
 Current Task
 
-None assigned. M6 is complete; await review and the next approved milestone.
+None assigned. M7 is complete; await review and the next approved milestone.
 
 ---
 
@@ -102,11 +102,31 @@ existing encrypted credentials and metadata. The existing connection-test
 response shape is preserved. M6 adds no dependency, schema migration, webhook,
 plugin registration, resource endpoint, or synchronization behavior.
 
+M7 adds a single-use plugin registration handshake for pre-existing tenant
+Stores. Store creation now persists `PENDING` after M6 WooCommerce REST
+validation. OWNER and ADMIN members can issue a short-lived registration token;
+only its SHA-256 hash, expiry, and consumption state are stored. The public
+registration endpoint derives Store identity only from that token and uses the
+M6 WooCommerce REST test—there is no SaaS→plugin probe or plugin endpoint URL.
+
+Successful registration atomically consumes the token, replaces the hashed
+persistent plugin→SaaS credential, records registration, last-seen, and
+last-healthy timestamps, creates an audit event, and changes Store status to
+`ACTIVE`. Auth and transient failures leave all Store state unchanged. A
+tenant-scoped connection-health endpoint exposes only status, timestamps, and a
+registration boolean. A Redis fixed-window limiter applies only to public
+plugin registration.
+
+Store registration fields are introduced by migration
+`20260722142357_store_registration_handshake`. The final `StoreStatus` literals
+remain `PENDING`, `ACTIVE`, `DISCONNECTED`, and `DISABLED`.
+
 ---
 
 Plugin
 
-WooCommerce connector scaffold created.
+WooCommerce connector scaffold created. The SaaS-side MVP registration contract
+is available; plugin-side UI and implementation remain outside M7.
 
 ---
 
@@ -151,7 +171,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-feature/m6-rest-client-hardening
+feature/m7-store-registration
 
 ---
 
@@ -181,14 +201,14 @@ None
 
 Next Milestone
 
-Await review of M6 and the next approved Phase 3 milestone.
+Await review of M7 and the next approved Phase 3 milestone.
 
 ---
 
 Last Completed
 
-M6 — REST Client Hardening & Credential Validation, complete on feature branch
-`feature/m6-rest-client-hardening` and awaiting review and merge.
+M7 — Plugin Communication & Store Registration (MVP), complete on feature branch
+`feature/m7-store-registration` and awaiting review and merge.
 
 ---
 

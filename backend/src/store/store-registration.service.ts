@@ -1,0 +1,225 @@
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import { Prisma, StoreStatus } from '@prisma/client';
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from 'node:crypto';
+
+import { AuditService } from '../common/audit/audit.service';
+import { EncryptionService } from '../common/encryption/encryption.service';
+import { ApplicationConfigService } from '../config/application-config.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { TenantScopedPrismaService } from '../tenant/tenant-scoped-prisma.service';
+import {
+  type WooCommerceErrorCategory,
+  WooCommerceClient,
+} from '../woocommerce/client/woocommerce.client';
+import { PluginRegistrationRateLimiter } from './plugin-registration-rate-limiter.service';
+
+const INVALID_REGISTRATION_MESSAGE =
+  'Plugin registration is invalid or already completed';
+const VERIFICATION_FAILED_MESSAGE = 'Plugin registration could not be verified';
+const REGISTRATION_UNAVAILABLE_MESSAGE =
+  'Plugin registration is temporarily unavailable';
+const TRANSIENT_CATEGORIES = new Set<WooCommerceErrorCategory>([
+  'transport',
+  'timeout',
+  'rate-limited',
+]);
+
+export interface RegistrationTokenResult {
+  token: string;
+  expiresAt: Date;
+}
+
+export interface PluginRegistrationResult {
+  pluginCredential: string;
+  storeId: string;
+}
+
+export interface StoreConnectionHealthResult {
+  status: StoreStatus;
+  lastSeenAt: Date | null;
+  lastHealthyAt: Date | null;
+  registered: boolean;
+}
+
+@Injectable()
+export class StoreRegistrationService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tenantPrisma: TenantScopedPrismaService,
+    private readonly encryption: EncryptionService,
+    private readonly audit: AuditService,
+    private readonly configuration: ApplicationConfigService,
+    private readonly rateLimiter: PluginRegistrationRateLimiter
+  ) {}
+
+  async issueToken(storeId: string): Promise<RegistrationTokenResult> {
+    const token = `reg_${randomBytes(32).toString('base64url')}`;
+    const expiresAt = new Date(
+      Date.now() + this.configuration.pluginRegistration.tokenTtlSeconds * 1000
+    );
+    const issued = await this.tenantPrisma.issueStoreRegistrationToken(
+      storeId,
+      this.hash(token),
+      expiresAt
+    );
+
+    if (!issued) {
+      throw new NotFoundException('Store was not found');
+    }
+
+    await this.audit.record({
+      action: 'store.registration_token_issued',
+      entity: 'Store',
+      entityId: storeId,
+    });
+
+    return { token, expiresAt };
+  }
+
+  async register(
+    token: string,
+    clientIp: string
+  ): Promise<PluginRegistrationResult> {
+    const tokenHash = this.hash(token);
+
+    await this.rateLimiter.assertAllowed(clientIp, tokenHash);
+
+    return this.prisma.$transaction(
+      (transaction) => this.finalize(transaction, tokenHash),
+      {
+        timeout: this.configuration.woocommerce.rest.totalTimeoutMs + 5000,
+      }
+    );
+  }
+
+  async connectionHealth(
+    storeId: string
+  ): Promise<StoreConnectionHealthResult> {
+    const health = await this.tenantPrisma.findStoreConnectionHealth(storeId);
+
+    if (!health) {
+      throw new NotFoundException('Store was not found');
+    }
+
+    return {
+      status: health.status,
+      lastSeenAt: health.lastSeenAt,
+      lastHealthyAt: health.lastHealthyAt,
+      registered: health.pluginRegisteredAt !== null,
+    };
+  }
+
+  private async finalize(
+    transaction: Prisma.TransactionClient,
+    tokenHash: string
+  ): Promise<PluginRegistrationResult> {
+    const now = new Date();
+    const store = await transaction.store.findFirst({
+      where: {
+        registrationTokenHash: tokenHash,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        baseUrl: true,
+        consumerKeyEncrypted: true,
+        consumerSecretEncrypted: true,
+        registrationTokenHash: true,
+        registrationTokenExpiresAt: true,
+        registrationTokenConsumedAt: true,
+      },
+    });
+
+    if (
+      !store?.registrationTokenHash ||
+      !this.hashesEqual(store.registrationTokenHash, tokenHash) ||
+      !store.registrationTokenExpiresAt ||
+      store.registrationTokenExpiresAt <= now ||
+      store.registrationTokenConsumedAt
+    ) {
+      throw new BadRequestException(INVALID_REGISTRATION_MESSAGE);
+    }
+
+    const connection = await new WooCommerceClient({
+      storeUrl: store.baseUrl,
+      consumerKey: this.encryption.decrypt(store.consumerKeyEncrypted),
+      consumerSecret: this.encryption.decrypt(store.consumerSecretEncrypted),
+      resilience: this.configuration.woocommerce.rest,
+    }).testConnection();
+
+    if (!connection.success) {
+      if (
+        connection.category &&
+        TRANSIENT_CATEGORIES.has(connection.category)
+      ) {
+        throw new ServiceUnavailableException(REGISTRATION_UNAVAILABLE_MESSAGE);
+      }
+
+      throw new BadRequestException(VERIFICATION_FAILED_MESSAGE);
+    }
+
+    const finalizedAt = new Date();
+    const pluginCredential = `plg_${randomBytes(32).toString('base64url')}`;
+    const updated = await transaction.store.updateMany({
+      where: {
+        id: store.id,
+        registrationTokenHash: tokenHash,
+        registrationTokenConsumedAt: null,
+        registrationTokenExpiresAt: { gt: finalizedAt },
+        deletedAt: null,
+      },
+      data: {
+        pluginSecretHash: this.hash(pluginCredential),
+        pluginRegisteredAt: finalizedAt,
+        registrationTokenConsumedAt: finalizedAt,
+        lastSeenAt: finalizedAt,
+        lastHealthyAt: finalizedAt,
+        status: StoreStatus.ACTIVE,
+      },
+    });
+
+    if (updated.count !== 1) {
+      throw new BadRequestException(INVALID_REGISTRATION_MESSAGE);
+    }
+
+    await transaction.auditLog.create({
+      data: {
+        id: `aud_${randomUUID()}`,
+        tenantId: store.tenantId,
+        userId: null,
+        action: 'store.plugin_registered',
+        entityType: 'Store',
+        entityId: store.id,
+        metadata: { status: StoreStatus.ACTIVE },
+      },
+      select: { id: true },
+    });
+
+    return { pluginCredential, storeId: store.id };
+  }
+
+  private hash(value: string): string {
+    return createHash('sha256').update(value).digest('hex');
+  }
+
+  private hashesEqual(left: string, right: string): boolean {
+    const leftBuffer = Buffer.from(left, 'hex');
+    const rightBuffer = Buffer.from(right, 'hex');
+
+    return (
+      leftBuffer.length === rightBuffer.length &&
+      timingSafeEqual(leftBuffer, rightBuffer)
+    );
+  }
+}

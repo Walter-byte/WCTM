@@ -20,6 +20,9 @@ export interface ValidatedEnvironment {
   WOOCOMMERCE_REST_BACKOFF_BASE_MS: number;
   WOOCOMMERCE_REST_BACKOFF_FACTOR: number;
   WOOCOMMERCE_REST_JITTER_RATIO: number;
+  PLUGIN_REGISTRATION_TOKEN_TTL_SECONDS: number;
+  PLUGIN_REGISTRATION_RATE_LIMIT: number;
+  PLUGIN_REGISTRATION_RATE_WINDOW_SECONDS: number;
   POSTGRES_DB?: string;
   POSTGRES_USER?: string;
   POSTGRES_PASSWORD?: string;
@@ -43,6 +46,9 @@ export const CONFIG_ENV_KEYS = [
   'WOOCOMMERCE_REST_BACKOFF_BASE_MS',
   'WOOCOMMERCE_REST_BACKOFF_FACTOR',
   'WOOCOMMERCE_REST_JITTER_RATIO',
+  'PLUGIN_REGISTRATION_TOKEN_TTL_SECONDS',
+  'PLUGIN_REGISTRATION_RATE_LIMIT',
+  'PLUGIN_REGISTRATION_RATE_WINDOW_SECONDS',
   'POSTGRES_DB',
   'POSTGRES_USER',
   'POSTGRES_PASSWORD',
@@ -88,4 +94,10 @@ export interface WooCommerceRestSettings {
   backoffBaseMs: number;
   backoffFactor: number;
   jitterRatio: number;
+}
+
+export interface PluginRegistrationSettings {
+  tokenTtlSeconds: number;
+  rateLimit: number;
+  rateWindowSeconds: number;
 }

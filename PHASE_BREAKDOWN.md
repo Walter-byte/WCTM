@@ -120,8 +120,7 @@ Acceptance checklist:
 - [x] Queue and worker connections close through Nest shutdown hooks
 - [x] No schema migration is required
 
-Phase 2 is complete. No current milestone is assigned, and Phase 3 has not
-started.
+Phase 2 is complete.
 
 ## Phase 3 — WooCommerce Integration 🟨 Active
 
@@ -145,6 +144,30 @@ Acceptance checklist:
 - [x] Successful validation precedes persistence
 - [x] Retry, timeout, hard-cap, error mapping, and secret safety are tested
 - [x] No schema migration or new dependency is required
+
+### M7 — Plugin Communication & Store Registration (MVP) ✅ Complete
+
+- Existing tenant Stores receive OWNER/ADMIN-issued, 15-minute, single-use
+  registration tokens stored only as SHA-256 hashes.
+- Public plugin registration derives Store identity only from the token, applies
+  an endpoint-scoped Redis fixed-window limit, and verifies the Store through
+  the M6 WooCommerce REST client.
+- Successful finalization atomically consumes the token, stores a hashed
+  plugin→SaaS credential, records registration/health timestamps, and promotes
+  the Store from `PENDING` to `ACTIVE`.
+- Authentication and transient verification failures preserve the token,
+  WooCommerce credentials, plugin credential, status, and health state.
+- OWNER, ADMIN, and MEMBER may read tenant-scoped connection health without
+  secret fields.
+
+Acceptance checklist:
+
+- [x] Token issuance is tenant-scoped, role-protected, expiring, and single-use
+- [x] Replay, expiry, auth failure, and transient failure return generic errors
+- [x] Concurrent duplicate finalization produces one credential and one commit
+- [x] Registration is rate-limited only at `POST /plugin/register`
+- [x] Credential/channel boundaries and secret-safe responses are tested
+- [x] Migration `20260722142357_store_registration_handshake` is applied cleanly
 
 Phase 3 remains active. No next milestone is assigned.
 

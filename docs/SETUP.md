@@ -43,6 +43,14 @@ a 300ms exponential base, factor 2, and jitter ratio `0.2` (±20%). These values
 are exposed through the typed `WOOCOMMERCE_REST_*` settings in `.env.example`.
 Only timeouts, transport failures, HTTP 429, and HTTP 5xx are retried.
 
+Plugin registration tokens default to a 900-second lifetime. Public
+`POST /api/plugin/register` requests use a Redis fixed window of 10 attempts per
+60 seconds, scoped by client IP and registration-token hash prefix. Configure
+these limits with `PLUGIN_REGISTRATION_TOKEN_TTL_SECONDS`,
+`PLUGIN_REGISTRATION_RATE_LIMIT`, and
+`PLUGIN_REGISTRATION_RATE_WINDOW_SECONDS`. This limiter is endpoint-scoped and
+does not install a global throttling guard.
+
 The Telegram bot scaffold does not call the Telegram API, so the placeholder
 token is sufficient for local startup.
 

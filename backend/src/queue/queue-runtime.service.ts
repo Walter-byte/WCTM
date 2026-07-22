@@ -29,6 +29,7 @@ type ReferenceJob = Job<
 export class QueueRuntimeService
   implements OnModuleInit, OnApplicationShutdown
 {
+  private readonly fixedWindowClients = new WeakSet<object>();
   private queue?: Queue<
     ReferenceJobData,
     ReferenceJobResult,
@@ -100,6 +101,38 @@ export class QueueRuntimeService
     if (response.trim() === '') {
       throw new Error('Redis readiness check failed');
     }
+  }
+
+  async incrementFixedWindow(
+    key: string,
+    windowSeconds: number
+  ): Promise<number> {
+    const client = await this.requiredQueue().client;
+    const commandName = 'm7IncrementFixedWindow';
+
+    if (!this.fixedWindowClients.has(client)) {
+      client.defineCommand(commandName, {
+        numberOfKeys: 1,
+        lua: [
+          "local current = redis.call('INCR', KEYS[1])",
+          "if current == 1 then redis.call('EXPIRE', KEYS[1], ARGV[1]) end",
+          'return current',
+        ].join('\n'),
+      });
+      this.fixedWindowClients.add(client);
+    }
+
+    const result = await client.runCommand(commandName, [
+      key,
+      String(windowSeconds),
+    ]);
+    const count = Number(result);
+
+    if (!Number.isInteger(count) || count < 1) {
+      throw new Error('Redis fixed-window counter failed');
+    }
+
+    return count;
   }
 
   handleFailed(job: ReferenceJob | undefined, error: Error): void {

@@ -69,6 +69,11 @@ test('valid environment loads typed configuration values', () => {
     backoffFactor: 2,
     jitterRatio: 0.2,
   });
+  assert.deepEqual(configuration.pluginRegistration, {
+    tokenTtlSeconds: 900,
+    rateLimit: 10,
+    rateWindowSeconds: 60,
+  });
 });
 
 test('test environment supplies isolated safe defaults', () => {
@@ -102,6 +107,22 @@ test('WooCommerce REST resilience limits accept typed configuration overrides', 
     backoffBaseMs: 250,
     backoffFactor: 3,
     jitterRatio: 0.1,
+  });
+});
+
+test('plugin registration limits accept typed configuration overrides', () => {
+  const configuration = createConfiguration(
+    validEnvironment({
+      PLUGIN_REGISTRATION_TOKEN_TTL_SECONDS: '600',
+      PLUGIN_REGISTRATION_RATE_LIMIT: '8',
+      PLUGIN_REGISTRATION_RATE_WINDOW_SECONDS: '45',
+    })
+  );
+
+  assert.deepEqual(configuration.pluginRegistration, {
+    tokenTtlSeconds: 600,
+    rateLimit: 8,
+    rateWindowSeconds: 45,
   });
 });
 

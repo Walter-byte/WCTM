@@ -6,6 +6,7 @@ import {
   type ApplicationSettings,
   type EncryptionSettings,
   type JwtSettings,
+  type PluginRegistrationSettings,
   type PostgreSqlSettings,
   type RedisSettings,
   type TelegramSettings,
@@ -23,6 +24,7 @@ export class ApplicationConfigService {
   readonly encryption: Readonly<EncryptionSettings>;
   readonly telegram: Readonly<TelegramSettings>;
   readonly woocommerce: Readonly<WooCommerceSettings>;
+  readonly pluginRegistration: Readonly<PluginRegistrationSettings>;
 
   constructor(
     private readonly configService: ConfigService<ValidatedEnvironment, true>
@@ -77,6 +79,19 @@ export class ApplicationConfigService {
         }),
       },
     });
+    this.pluginRegistration = Object.freeze({
+      tokenTtlSeconds: this.configService.get(
+        'PLUGIN_REGISTRATION_TOKEN_TTL_SECONDS',
+        { infer: true }
+      ),
+      rateLimit: this.configService.get('PLUGIN_REGISTRATION_RATE_LIMIT', {
+        infer: true,
+      }),
+      rateWindowSeconds: this.configService.get(
+        'PLUGIN_REGISTRATION_RATE_WINDOW_SECONDS',
+        { infer: true }
+      ),
+    });
   }
 
   toJSON(): unknown {
@@ -88,6 +103,7 @@ export class ApplicationConfigService {
       encryption: this.encryption,
       telegram: this.telegram,
       woocommerce: this.woocommerce,
+      pluginRegistration: this.pluginRegistration,
     });
   }
 

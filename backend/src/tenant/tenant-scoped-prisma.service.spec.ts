@@ -13,6 +13,12 @@ interface FakeStore {
   baseUrl: string;
   status: StoreStatus;
   deletedAt: Date | null;
+  registrationTokenHash?: string | null;
+  registrationTokenExpiresAt?: Date | null;
+  registrationTokenConsumedAt?: Date | null;
+  pluginRegisteredAt?: Date | null;
+  lastSeenAt?: Date | null;
+  lastHealthyAt?: Date | null;
 }
 
 function tenantScopedService(stores: FakeStore[]): {
@@ -32,13 +38,7 @@ function tenantScopedService(stores: FakeStore[]): {
         return null;
       }
 
-      return {
-        id: store.id,
-        tenantId: store.tenantId,
-        name: store.name,
-        baseUrl: store.baseUrl,
-        status: store.status,
-      };
+      return { ...store };
     }
   );
   const updateMany = jest.fn(
@@ -47,7 +47,7 @@ function tenantScopedService(stores: FakeStore[]): {
       data,
     }: {
       where: Partial<FakeStore>;
-      data: { name: string };
+      data: Partial<FakeStore>;
     }) => {
       const store = stores.find(
         (candidate) =>
@@ -60,7 +60,7 @@ function tenantScopedService(stores: FakeStore[]): {
         return { count: 0 };
       }
 
-      store.name = data.name;
+      Object.assign(store, data);
       return { count: 1 };
     }
   );
@@ -124,6 +124,63 @@ describe('TenantScopedPrismaService', () => {
     expect(() => service.findStoreById('sto_a')).toThrow(
       'Tenant context is not available'
     );
+  });
+
+  it('tenant-scopes registration-token issuance and connection health', async () => {
+    const stores: FakeStore[] = [
+      {
+        id: 'sto_a',
+        tenantId: 'ten_a',
+        name: 'Tenant A Store',
+        baseUrl: 'https://a.example',
+        status: 'PENDING',
+        deletedAt: null,
+        registrationTokenHash: null,
+        registrationTokenExpiresAt: null,
+        registrationTokenConsumedAt: null,
+        pluginRegisteredAt: null,
+        lastSeenAt: null,
+        lastHealthyAt: null,
+      },
+      {
+        id: 'sto_b',
+        tenantId: 'ten_b',
+        name: 'Tenant B Store',
+        baseUrl: 'https://b.example',
+        status: 'ACTIVE',
+        deletedAt: null,
+      },
+    ];
+    const { requestContext, service } = tenantScopedService(stores);
+
+    await requestContext.run('req-registration-tenant-a', async () => {
+      requestContext.setTenant({
+        tenantId: 'ten_a',
+        userId: 'usr_a',
+        membershipRole: 'OWNER',
+      });
+
+      await expect(
+        service.issueStoreRegistrationToken(
+          'sto_b',
+          'b'.repeat(64),
+          new Date(Date.now() + 60_000)
+        )
+      ).resolves.toBe(false);
+      await expect(
+        service.findStoreConnectionHealth('sto_b')
+      ).resolves.toBeNull();
+      await expect(
+        service.issueStoreRegistrationToken(
+          'sto_a',
+          'a'.repeat(64),
+          new Date(Date.now() + 60_000)
+        )
+      ).resolves.toBe(true);
+    });
+
+    expect(stores[0]?.registrationTokenHash).toBe('a'.repeat(64));
+    expect(stores[1]?.registrationTokenHash).toBeUndefined();
   });
 
   it('excludes soft-deleted tenants and their memberships from active queries', async () => {

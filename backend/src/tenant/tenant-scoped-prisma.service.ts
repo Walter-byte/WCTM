@@ -22,6 +22,13 @@ const STORE_CREDENTIALS_SELECT = {
   consumerSecretEncrypted: true,
 } satisfies Prisma.StoreSelect;
 
+const STORE_CONNECTION_HEALTH_SELECT = {
+  status: true,
+  lastSeenAt: true,
+  lastHealthyAt: true,
+  pluginRegisteredAt: true,
+} satisfies Prisma.StoreSelect;
+
 const TENANT_SUMMARY_SELECT = {
   id: true,
   name: true,
@@ -60,6 +67,10 @@ export type TenantScopedStore = Prisma.StoreGetPayload<{
 
 export type TenantScopedStoreCredentials = Prisma.StoreGetPayload<{
   select: typeof STORE_CREDENTIALS_SELECT;
+}>;
+
+export type TenantScopedStoreConnectionHealth = Prisma.StoreGetPayload<{
+  select: typeof STORE_CONNECTION_HEALTH_SELECT;
 }>;
 
 export interface TenantScopedStoreCreate {
@@ -275,6 +286,40 @@ export class TenantScopedPrismaService {
         deletedAt: null,
       },
       select: STORE_CREDENTIALS_SELECT,
+    });
+  }
+
+  async issueStoreRegistrationToken(
+    storeId: string,
+    tokenHash: string,
+    expiresAt: Date
+  ): Promise<boolean> {
+    const result = await this.prisma.store.updateMany({
+      where: {
+        id: storeId,
+        tenantId: this.tenantContext.active.tenantId,
+        deletedAt: null,
+      },
+      data: {
+        registrationTokenHash: tokenHash,
+        registrationTokenExpiresAt: expiresAt,
+        registrationTokenConsumedAt: null,
+      },
+    });
+
+    return result.count === 1;
+  }
+
+  findStoreConnectionHealth(
+    storeId: string
+  ): Promise<TenantScopedStoreConnectionHealth | null> {
+    return this.prisma.store.findFirst({
+      where: {
+        id: storeId,
+        tenantId: this.tenantContext.active.tenantId,
+        deletedAt: null,
+      },
+      select: STORE_CONNECTION_HEALTH_SELECT,
     });
   }
 

@@ -303,4 +303,41 @@ Accepted.
 
 ---
 
+## D-016
+
+Date
+
+2026-07-22
+
+Decision
+
+MVP plugin registration verifies Store reachability and authentication only
+through the existing SaaS→WooCommerce REST client. There is no SaaS→plugin
+probe, plugin endpoint URL, or plugin-channel verification.
+
+Registration tokens are one-time, TTL-bounded handshake credentials stored as
+SHA-256 hashes. Successful registration returns a separate persistent
+plugin→SaaS credential exactly once and stores only its SHA-256 hash. If the
+success response is lost, an OWNER or ADMIN must issue a new registration token;
+successful re-registration generates a new plugin credential and replaces the
+prior hash. Replaying the consumed token never reproduces or rotates a
+credential.
+
+`POST /plugin/register` alone uses a minimal Redis fixed-window rate limiter
+keyed by a hash of client IP plus the registration-token hash prefix. The limit
+and window are typed configuration values; no global throttling guard is added.
+
+Reason
+
+These boundaries keep WooCommerce REST authentication, one-time registration,
+and persistent plugin authentication independent; preserve recoverable,
+single-use plaintext handling; and bound public registration abuse without
+expanding application-wide rate-limiting scope.
+
+Status
+
+Accepted.
+
+---
+
 Future decisions continue below.

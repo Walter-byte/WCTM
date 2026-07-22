@@ -8,6 +8,10 @@ import { redactSensitiveData } from './common/utils/redact-sensitive-data';
 import { ApplicationConfigService } from './config/application-config.service';
 import { ConfigurationValidationError } from './config/environment.validation';
 
+interface ExpressApplication {
+  set(setting: string, value: unknown): void;
+}
+
 async function bootstrap(): Promise<void> {
   const application = await NestFactory.create(AppModule, { bufferLogs: true });
   const configuration = application.get(ApplicationConfigService);
@@ -16,6 +20,11 @@ async function bootstrap(): Promise<void> {
 
   application.useLogger(logger);
   application.flushLogs();
+  const httpApplication = application
+    .getHttpAdapter()
+    .getInstance() as ExpressApplication;
+
+  httpApplication.set('trust proxy', 1);
   application.setGlobalPrefix('api');
   application.enableShutdownHooks();
 
