@@ -18,6 +18,11 @@ import type { WooCommerceConnectionResult } from '../woocommerce/client/woocomme
 import { type CreateStoreDto, createStoreSchema } from './dto/create-store.dto';
 import { type UpdateStoreDto, updateStoreSchema } from './dto/update-store.dto';
 import { StoreService } from './store.service';
+import {
+  type RegistrationTokenResult,
+  type StoreConnectionHealthResult,
+  StoreRegistrationService,
+} from './store-registration.service';
 
 const ALL_MEMBERSHIP_ROLES = [
   MembershipRole.OWNER,
@@ -27,7 +32,10 @@ const ALL_MEMBERSHIP_ROLES = [
 
 @Controller('stores')
 export class StoreController {
-  constructor(private readonly stores: StoreService) {}
+  constructor(
+    private readonly stores: StoreService,
+    private readonly registration: StoreRegistrationService
+  ) {}
 
   @Post()
   @RequireMembership(MembershipRole.OWNER, MembershipRole.ADMIN)
@@ -71,5 +79,21 @@ export class StoreController {
     @Param('id') storeId: string
   ): Promise<WooCommerceConnectionResult> {
     return this.stores.testConnection(storeId);
+  }
+
+  @Post(':id/registration-token')
+  @RequireMembership(MembershipRole.OWNER, MembershipRole.ADMIN)
+  issueRegistrationToken(
+    @Param('id') storeId: string
+  ): Promise<RegistrationTokenResult> {
+    return this.registration.issueToken(storeId);
+  }
+
+  @Get(':id/connection-health')
+  @RequireMembership(...ALL_MEMBERSHIP_ROLES)
+  connectionHealth(
+    @Param('id') storeId: string
+  ): Promise<StoreConnectionHealthResult> {
+    return this.registration.connectionHealth(storeId);
   }
 }

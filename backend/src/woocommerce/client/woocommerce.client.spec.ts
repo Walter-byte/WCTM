@@ -203,6 +203,7 @@ describe('WooCommerceClient', () => {
     await expect(client().testConnection()).resolves.toEqual({
       success: false,
       error: 'WooCommerce authentication failed',
+      category: 'auth',
     });
   });
 });

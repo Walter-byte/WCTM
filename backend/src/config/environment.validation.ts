@@ -172,6 +172,15 @@ function createEnvironmentSchema(
       .default(300),
     WOOCOMMERCE_REST_BACKOFF_FACTOR: Joi.number().min(1).default(2),
     WOOCOMMERCE_REST_JITTER_RATIO: Joi.number().min(0).max(1).default(0.2),
+    PLUGIN_REGISTRATION_TOKEN_TTL_SECONDS: Joi.number()
+      .integer()
+      .min(1)
+      .default(900),
+    PLUGIN_REGISTRATION_RATE_LIMIT: Joi.number().integer().min(1).default(10),
+    PLUGIN_REGISTRATION_RATE_WINDOW_SECONDS: Joi.number()
+      .integer()
+      .min(1)
+      .default(60),
     POSTGRES_DB: Joi.string().trim().min(1).optional(),
     POSTGRES_USER: Joi.string().trim().min(1).optional(),
     POSTGRES_PASSWORD: postgresPassword,

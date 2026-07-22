@@ -39,7 +39,7 @@ export class StoreService {
       id: `sto_${randomUUID()}`,
       name: input.name,
       baseUrl: input.storeUrl,
-      status: StoreStatus.ACTIVE,
+      status: StoreStatus.PENDING,
       consumerKeyEncrypted: this.encryption.encrypt(input.consumerKey),
       consumerSecretEncrypted: this.encryption.encrypt(input.consumerSecret),
       webhookSecretEncrypted: '',
@@ -172,7 +172,11 @@ export class StoreService {
       metadata: { success: result.success },
     });
 
-    return result;
+    return {
+      success: result.success,
+      ...(result.storeName ? { storeName: result.storeName } : {}),
+      ...(result.error ? { error: result.error } : {}),
+    };
   }
 
   private createWooCommerceClient(options: {

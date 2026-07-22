@@ -13,6 +13,7 @@ export interface WooCommerceConnectionResult {
   success: boolean;
   storeName?: string;
   error?: string;
+  category?: WooCommerceErrorCategory;
 }
 
 export interface WooCommerceValidationResult {
@@ -93,7 +94,11 @@ export class WooCommerceClient {
           ? error
           : new WooCommerceClientError('unexpected');
 
-      return { success: false, error: normalized.message };
+      return {
+        success: false,
+        error: normalized.message,
+        category: normalized.category,
+      };
     }
   }
 

@@ -214,7 +214,7 @@ describe('StoreService', () => {
 
     expect(fixture.stores[0]).toMatchObject({
       tenantId: 'ten_a',
-      status: StoreStatus.ACTIVE,
+      status: StoreStatus.PENDING,
       webhookSecretEncrypted: '',
     });
     expect(fixture.stores[0]?.consumerKeyEncrypted).not.toBe('ck_plain');
@@ -224,7 +224,7 @@ describe('StoreService', () => {
       action: 'store.created',
       entity: 'Store',
       entityId: created.id,
-      metadata: { status: StoreStatus.ACTIVE },
+      metadata: { status: StoreStatus.PENDING },
     });
   });
 
@@ -400,7 +400,11 @@ describe('StoreService', () => {
     );
     const testConnection = jest
       .spyOn(WooCommerceClient.prototype, 'testConnection')
-      .mockResolvedValue({ success: false, error: 'Connection refused' });
+      .mockResolvedValue({
+        success: false,
+        error: 'Connection refused',
+        category: 'transport',
+      });
 
     await expect(
       fixture.runAsTenant('ten_a', () =>

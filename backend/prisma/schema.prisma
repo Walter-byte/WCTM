@@ -76,19 +76,26 @@ model Membership {
 }
 
 model Store {
-  id                      String         @id @map("id") @db.VarChar(64)
-  tenantId                String         @map("tenant_id") @db.VarChar(64)
-  name                    String         @map("name") @db.VarChar(255)
-  baseUrl                 String         @map("base_url") @db.Text
-  status                  StoreStatus    @default(PENDING) @map("status")
-  consumerKeyEncrypted    String         @map("consumer_key_encrypted") @db.Text
-  consumerSecretEncrypted String         @map("consumer_secret_encrypted") @db.Text
-  webhookSecretEncrypted  String         @map("webhook_secret_encrypted") @db.Text
-  createdAt               DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt               DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt               DateTime?      @map("deleted_at") @db.Timestamptz(3)
-  tenant                  Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  webhookEvents           WebhookEvent[]
+  id                          String         @id @map("id") @db.VarChar(64)
+  tenantId                    String         @map("tenant_id") @db.VarChar(64)
+  name                        String         @map("name") @db.VarChar(255)
+  baseUrl                     String         @map("base_url") @db.Text
+  status                      StoreStatus    @default(PENDING) @map("status")
+  consumerKeyEncrypted        String         @map("consumer_key_encrypted") @db.Text
+  consumerSecretEncrypted     String         @map("consumer_secret_encrypted") @db.Text
+  webhookSecretEncrypted      String         @map("webhook_secret_encrypted") @db.Text
+  registrationTokenHash       String?        @unique @map("registration_token_hash") @db.VarChar(64)
+  registrationTokenExpiresAt  DateTime?      @map("registration_token_expires_at") @db.Timestamptz(3)
+  registrationTokenConsumedAt DateTime?      @map("registration_token_consumed_at") @db.Timestamptz(3)
+  pluginSecretHash            String?        @map("plugin_secret_hash") @db.VarChar(64)
+  pluginRegisteredAt          DateTime?      @map("plugin_registered_at") @db.Timestamptz(3)
+  lastSeenAt                  DateTime?      @map("last_seen_at") @db.Timestamptz(3)
+  lastHealthyAt               DateTime?      @map("last_healthy_at") @db.Timestamptz(3)
+  createdAt                   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt                   DateTime?      @map("deleted_at") @db.Timestamptz(3)
+  tenant                      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  webhookEvents               WebhookEvent[]
 
   @@unique([tenantId, baseUrl])
   @@index([tenantId])

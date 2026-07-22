@@ -94,14 +94,15 @@ Deliverables
 
 - REST client — M6 complete
 - Webhook verification
-- Plugin communication
+- Plugin communication — M7 registration handshake complete
 - Credential validation — M6 complete
-- Store registration
+- Store registration — M7 complete
 - Sync service
 
 Exit Criteria
 
-Store can connect successfully.
+✅ Met on 2026-07-22: a pre-existing Store can complete the single-use plugin
+registration handshake after WooCommerce REST verification.
 
 ---
 

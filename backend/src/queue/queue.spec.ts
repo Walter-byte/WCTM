@@ -144,4 +144,34 @@ describe('M5 operations queue', () => {
       closeQueue.mock.invocationCallOrder[0] ?? Number.MAX_SAFE_INTEGER
     );
   });
+
+  it('increments a Redis fixed window atomically through a named Lua command', async () => {
+    const defineCommand = jest.fn();
+    const runCommand = jest.fn().mockResolvedValue(3 as never);
+    const client = { defineCommand, runCommand };
+    const runtime = new QueueRuntimeService(
+      {
+        app: { nodeEnv: 'test' },
+        redis: { url: 'redis://localhost:6379' },
+      } as ApplicationConfigService,
+      new ReferenceProcessor(),
+      { error: jest.fn() } as unknown as StructuredLoggerService
+    );
+
+    Object.assign(runtime, {
+      queue: { client: Promise.resolve(client) },
+    });
+
+    await expect(runtime.incrementFixedWindow('fixed:key', 60)).resolves.toBe(
+      3
+    );
+    expect(defineCommand).toHaveBeenCalledWith(
+      'm7IncrementFixedWindow',
+      expect.objectContaining({ numberOfKeys: 1 })
+    );
+    expect(runCommand).toHaveBeenCalledWith('m7IncrementFixedWindow', [
+      'fixed:key',
+      '60',
+    ]);
+  });
 });

@@ -43,7 +43,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-015)
+## 3. Architectural Decisions (D-001–D-016)
 
 | ID    | Decision                                                                                                                                                    | Status   |
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -62,8 +62,9 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-013 | Global typed configuration uses `@nestjs/config` with Joi validation                                                                                        | Accepted |
 | D-014 | One in-process BullMQ operations worker with three exponential-backoff attempts                                                                             | Accepted |
 | D-015 | Fail-closed WooCommerce credential validation with bounded REST retries, timeouts, and secret-safe normalized errors                                        | Accepted |
+| D-016 | WooCommerce-REST-only plugin registration verification, reissue-and-rotate recovery, and endpoint-scoped Redis limiting                                     | Accepted |
 
-Next decision number: **D-016**, if a future task produces a genuine
+Next decision number: **D-017**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -358,8 +359,51 @@ Operational runbook:
 - The existing `/:id/test-connection` result shape remains unchanged
 - M6 adds no dependency, schema migration, webhook, plugin registration,
   WooCommerce resource endpoint, or synchronization behavior
-- M6 is complete on `feature/m6-rest-client-hardening` and awaits review and
-  merge
+- M6 was merged into `main` in commit `288caf9`
+
+#### M7 — Plugin Communication & Store Registration (MVP) (complete)
+
+Schema and migration:
+
+- Migration: `20260722142357_store_registration_handshake`
+- `StoreStatus` literals remain `PENDING`, `ACTIVE`, `DISCONNECTED`, and
+  `DISABLED`
+- Store fields: nullable `registration_token_hash`,
+  `registration_token_expires_at`, `registration_token_consumed_at`,
+  `plugin_secret_hash`, `plugin_registered_at`, `last_seen_at`, and
+  `last_healthy_at`
+- Registration-token hashes are unique when non-null; WooCommerce credential
+  fields are unchanged
+
+Endpoints:
+
+- `POST /api/stores/:storeId/registration-token` — OWNER/ADMIN; requires an
+  existing active-tenant Store; returns `{ token, expiresAt }` once
+- `POST /api/plugin/register` — public behind Caddy HTTPS; accepts only
+  `{ token }`; returns `{ pluginCredential, storeId }` once after atomic success
+- `GET /api/stores/:storeId/connection-health` — OWNER/ADMIN/MEMBER; returns
+  `{ status, lastSeenAt, lastHealthyAt, registered }`
+
+Credential and verification boundaries:
+
+- WooCommerce REST credentials remain encrypted and are used only for
+  SaaS→WooCommerce calls and M6 verification
+- Registration tokens are one-time handshake values, stored only as SHA-256
+  hashes with a 15-minute TTL
+- Persistent plugin credentials authenticate plugin→SaaS only; plaintext is
+  returned once and only its SHA-256 hash is stored
+- Registration verification is the M6 WooCommerce REST connection test. M7 has
+  no SaaS→plugin probe, plugin endpoint URL, or plugin-channel verification
+- Lost-response recovery is OWNER/ADMIN token reissue followed by successful
+  credential replacement; consumed-token replay returns no credential and does
+  not rotate
+- Public registration alone uses a configurable Redis fixed-window limiter
+
+Atomic success consumes the token, stores the plugin credential hash, records
+registration/health timestamps and audit state, and changes the Store from
+`PENDING` to `ACTIVE`. Auth or transient failures preserve all credentials,
+token state, Store status, and health timestamps. Concurrent duplicate
+finalization commits exactly one credential.
 
 ---
 
@@ -380,9 +424,10 @@ None.
 
 ## 7. Current Task
 
-No milestone is currently assigned. M6 — REST Client Hardening & Credential
-Validation is complete on its feature branch and awaits review. Phase 3 is
-active; do not begin another milestone without explicit approval from A.
+No milestone is currently assigned. M7 — Plugin Communication & Store
+Registration (MVP) is complete on `feature/m7-store-registration` and awaits
+review. Phase 3 remains active; do not begin another milestone without explicit
+approval from A.
 
 ---
 
