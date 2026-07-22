@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { NotFoundException } from '@nestjs/common';
 import { StoreStatus } from '@prisma/client';
 
@@ -9,7 +9,10 @@ import type { ApplicationConfigService } from '../config/application-config.serv
 import type { PrismaService } from '../prisma/prisma.service';
 import { TenantContextService } from '../tenant/tenant-context.service';
 import { TenantScopedPrismaService } from '../tenant/tenant-scoped-prisma.service';
-import { WooCommerceClient } from '../woocommerce/client/woocommerce.client';
+import {
+  WooCommerceClient,
+  WooCommerceClientError,
+} from '../woocommerce/client/woocommerce.client';
 import { StoreService } from './store.service';
 
 interface StoredStore {
@@ -74,6 +77,9 @@ function setup(initialStores: StoredStore[] = []): {
   auditRecord: ReturnType<typeof jest.fn>;
   stores: StoredStore[];
   encryption: EncryptionService;
+  validateCredentials: jest.SpiedFunction<
+    WooCommerceClient['validateCredentials']
+  >;
   runAsTenant: <T>(tenantId: string, callback: () => Promise<T>) => Promise<T>;
   service: StoreService;
 } {
@@ -149,12 +155,34 @@ function setup(initialStores: StoredStore[] = []): {
   const audit = {
     record: auditRecord,
   } as unknown as AuditService;
-  const service = new StoreService(tenantPrisma, encryption, audit);
+  const configuration = {
+    woocommerce: {
+      rest: {
+        maxAttempts: 3,
+        attemptTimeoutMs: 5000,
+        totalTimeoutMs: 15000,
+        backoffBaseMs: 300,
+        backoffFactor: 2,
+        jitterRatio: 0.2,
+      },
+    },
+  } as ApplicationConfigService;
+  const validateCredentials = jest
+    .spyOn(WooCommerceClient.prototype, 'validateCredentials')
+    .mockResolvedValue({});
+  const service = new StoreService(
+    tenantPrisma,
+    encryption,
+    audit,
+    configuration,
+    tenantContext
+  );
 
   return {
     auditRecord,
     stores,
     encryption,
+    validateCredentials,
     service,
     runAsTenant: (tenantId, callback) =>
       requestContext.run(`req-${tenantId}`, () => {
@@ -169,6 +197,10 @@ function setup(initialStores: StoredStore[] = []): {
 }
 
 describe('StoreService', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('stores encrypted credentials and omits all credentials from create responses', async () => {
     const fixture = setup();
     const created = await fixture.runAsTenant('ten_a', () =>
@@ -245,6 +277,77 @@ describe('StoreService', () => {
     ).toBe('cs_updated');
     expect(JSON.stringify(updated)).not.toContain('cs_updated');
     expect(JSON.stringify(updated)).not.toContain('consumerSecretEncrypted');
+  });
+
+  it('does not persist a store when live credential validation fails', async () => {
+    const fixture = setup();
+    fixture.validateCredentials.mockRejectedValue(
+      new WooCommerceClientError('auth')
+    );
+
+    await expect(
+      fixture.runAsTenant('ten_a', () =>
+        fixture.service.create({
+          name: 'Invalid Shop',
+          storeUrl: 'https://invalid.example',
+          consumerKey: 'ck_invalid',
+          consumerSecret: 'cs_invalid',
+        })
+      )
+    ).rejects.toMatchObject({ category: 'auth' });
+    expect(fixture.stores).toHaveLength(0);
+    expect(fixture.auditRecord).not.toHaveBeenCalled();
+  });
+
+  it('persists a new store only after live credential validation succeeds', async () => {
+    const fixture = setup();
+    let confirmValidation!: (result: { storeName?: string }) => void;
+    fixture.validateCredentials.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          confirmValidation = resolve;
+        })
+    );
+
+    const creation = fixture.runAsTenant('ten_a', () =>
+      fixture.service.create({
+        name: 'Verified Shop',
+        storeUrl: 'https://verified.example',
+        consumerKey: 'ck_verified',
+        consumerSecret: 'cs_verified',
+      })
+    );
+    await Promise.resolve();
+
+    expect(fixture.stores).toHaveLength(0);
+    confirmValidation({ storeName: 'Verified Shop' });
+    await expect(creation).resolves.toMatchObject({ name: 'Verified Shop' });
+    expect(fixture.stores).toHaveLength(1);
+  });
+
+  it('preserves existing credentials and other fields when credential validation fails', async () => {
+    const fixture = setup([
+      storedStore({
+        consumerKeyEncrypted: 'existing-encrypted-key',
+        consumerSecretEncrypted: 'existing-encrypted-secret',
+      }),
+    ]);
+    const before = { ...fixture.stores[0] };
+    fixture.validateCredentials.mockRejectedValue(
+      new WooCommerceClientError('transport')
+    );
+
+    await expect(
+      fixture.runAsTenant('ten_a', () =>
+        fixture.service.update('sto_a', {
+          name: 'Must Not Persist',
+          consumerKey: 'ck_invalid',
+          consumerSecret: 'cs_invalid',
+        })
+      )
+    ).rejects.toMatchObject({ category: 'transport' });
+    expect(fixture.stores[0]).toEqual(before);
+    expect(fixture.auditRecord).not.toHaveBeenCalled();
   });
 
   it('soft-deletes once and returns 404 on a second delete', async () => {

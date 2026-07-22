@@ -37,6 +37,12 @@ canonical application value and rejects the documented development placeholders.
 Configuration validation reports all invalid variable names together without
 including their values.
 
+WooCommerce REST credential validation defaults to three total attempts, a
+5,000ms timeout per attempt, and a 15,000ms hard operation cap. Retry delays use
+a 300ms exponential base, factor 2, and jitter ratio `0.2` (±20%). These values
+are exposed through the typed `WOOCOMMERCE_REST_*` settings in `.env.example`.
+Only timeouts, transport failures, HTTP 429, and HTTP 5xx are retried.
+
 The Telegram bot scaffold does not call the Telegram API, so the placeholder
 token is sufficient for local startup.
 

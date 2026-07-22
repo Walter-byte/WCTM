@@ -43,7 +43,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-014)
+## 3. Architectural Decisions (D-001–D-015)
 
 | ID    | Decision                                                                                                                                                    | Status   |
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -61,8 +61,9 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-012 | PrismaService uses Prisma's official PostgreSQL driver adapter                                                                                              | Accepted |
 | D-013 | Global typed configuration uses `@nestjs/config` with Joi validation                                                                                        | Accepted |
 | D-014 | One in-process BullMQ operations worker with three exponential-backoff attempts                                                                             | Accepted |
+| D-015 | Fail-closed WooCommerce credential validation with bounded REST retries, timeouts, and secret-safe normalized errors                                        | Accepted |
 
-Next decision number: **D-015**, if a future task produces a genuine
+Next decision number: **D-016**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -339,6 +340,27 @@ Operational runbook:
    and queue connection shutdown. Do not force-kill during active work unless
    recovery procedures require it.
 
+### Phase 3 — WooCommerce Integration (active)
+
+#### M6 — REST Client Hardening & Credential Validation (complete)
+
+- `WooCommerceClient` uses configuration-backed limits: three total attempts,
+  5,000ms per-attempt timeouts, and a 15,000ms hard operation cap
+- Retry delays use a 300ms exponential base, factor two, and ±20% jitter; only
+  transport failures, timeouts, HTTP 429, and HTTP 5xx are retried
+- Errors normalize to `auth`, `not-found`, `transport`, `rate-limited`,
+  `timeout`, or `unexpected` without retaining credentials, tokens, full
+  authorization headers, or raw Axios/WooCommerce failure details
+- Store creation validates live reachability and authentication before
+  persistence
+- Credential-changing updates validate the proposed credential set before any
+  Store mutation; failed validation preserves all existing Store fields
+- The existing `/:id/test-connection` result shape remains unchanged
+- M6 adds no dependency, schema migration, webhook, plugin registration,
+  WooCommerce resource endpoint, or synchronization behavior
+- M6 is complete on `feature/m6-rest-client-hardening` and awaits review and
+  merge
+
 ---
 
 ## 5. Current Repository Structure
@@ -352,18 +374,15 @@ the lightweight connector. The larger `apps/`, `packages/`, and
 
 ## 6. Current Blockers
 
-None. The initial migration is applied and the clean-environment verification is
-complete.
+None.
 
 ---
 
 ## 7. Current Task
 
-No milestone is currently assigned. M5 — Production Operations Foundation is
-complete and merged into `main`. Phase 2 is complete, and Phase 3 has not
-started.
-
-**Do not begin Phase 3 without explicit approval from A.**
+No milestone is currently assigned. M6 — REST Client Hardening & Credential
+Validation is complete on its feature branch and awaits review. Phase 3 is
+active; do not begin another milestone without explicit approval from A.
 
 ---
 

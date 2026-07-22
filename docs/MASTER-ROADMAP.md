@@ -88,14 +88,14 @@ Exit Criteria
 ## Phase 3 — WooCommerce Integration
 
 Status:
-⬜ Pending
+🟨 In Progress
 
 Deliverables
 
-- REST client
+- REST client — M6 complete
 - Webhook verification
 - Plugin communication
-- Credential validation
+- Credential validation — M6 complete
 - Store registration
 - Sync service
 

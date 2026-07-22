@@ -4,11 +4,13 @@ import { randomUUID } from 'node:crypto';
 
 import { AuditService } from '../common/audit/audit.service';
 import { EncryptionService } from '../common/encryption/encryption.service';
+import { ApplicationConfigService } from '../config/application-config.service';
 import {
   type TenantScopedStore,
   TenantScopedPrismaService,
   type TenantScopedStoreUpdate,
 } from '../tenant/tenant-scoped-prisma.service';
+import { TenantContextService } from '../tenant/tenant-context.service';
 import {
   type WooCommerceConnectionResult,
   WooCommerceClient,
@@ -21,10 +23,18 @@ export class StoreService {
   constructor(
     private readonly tenantPrisma: TenantScopedPrismaService,
     private readonly encryption: EncryptionService,
-    private readonly audit: AuditService
+    private readonly audit: AuditService,
+    private readonly configuration: ApplicationConfigService,
+    private readonly tenantContext: TenantContextService
   ) {}
 
   async create(input: CreateStoreDto): Promise<TenantScopedStore> {
+    await this.createWooCommerceClient({
+      storeUrl: input.storeUrl,
+      consumerKey: input.consumerKey,
+      consumerSecret: input.consumerSecret,
+    }).validateCredentials();
+
     const store = await this.tenantPrisma.createStore({
       id: `sto_${randomUUID()}`,
       name: input.name,
@@ -63,6 +73,27 @@ export class StoreService {
     storeId: string,
     input: UpdateStoreDto
   ): Promise<TenantScopedStore> {
+    const credentialsChanged =
+      input.consumerKey !== undefined || input.consumerSecret !== undefined;
+
+    if (credentialsChanged) {
+      const current = await this.tenantPrisma.findStoreCredentialsById(storeId);
+
+      if (!current) {
+        throw new NotFoundException('Store was not found');
+      }
+
+      await this.createWooCommerceClient({
+        storeUrl: input.storeUrl ?? current.baseUrl,
+        consumerKey:
+          input.consumerKey ??
+          this.encryption.decrypt(current.consumerKeyEncrypted),
+        consumerSecret:
+          input.consumerSecret ??
+          this.encryption.decrypt(current.consumerSecretEncrypted),
+      }).validateCredentials();
+    }
+
     const update: TenantScopedStoreUpdate = {
       ...(input.name === undefined ? {} : { name: input.name }),
       ...(input.storeUrl === undefined ? {} : { baseUrl: input.storeUrl }),
@@ -95,8 +126,7 @@ export class StoreService {
         changedFields: Object.keys(input).filter(
           (field) => field === 'name' || field === 'storeUrl'
         ),
-        credentialsChanged:
-          input.consumerKey !== undefined || input.consumerSecret !== undefined,
+        credentialsChanged,
       },
     });
 
@@ -127,7 +157,7 @@ export class StoreService {
       throw new NotFoundException('Store was not found');
     }
 
-    const client = new WooCommerceClient({
+    const client = this.createWooCommerceClient({
       storeUrl: store.baseUrl,
       consumerKey: this.encryption.decrypt(store.consumerKeyEncrypted),
       consumerSecret: this.encryption.decrypt(store.consumerSecretEncrypted),
@@ -143,5 +173,18 @@ export class StoreService {
     });
 
     return result;
+  }
+
+  private createWooCommerceClient(options: {
+    storeUrl: string;
+    consumerKey: string;
+    consumerSecret: string;
+  }): WooCommerceClient {
+    void this.tenantContext.active;
+
+    return new WooCommerceClient({
+      ...options,
+      resilience: this.configuration.woocommerce.rest,
+    });
   }
 }

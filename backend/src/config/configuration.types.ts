@@ -14,6 +14,12 @@ export interface ValidatedEnvironment {
   APP_ENCRYPTION_KEY: string;
   TELEGRAM_BOT_TOKEN: string;
   WOOCOMMERCE_WEBHOOK_SECRET: string;
+  WOOCOMMERCE_REST_MAX_ATTEMPTS: number;
+  WOOCOMMERCE_REST_ATTEMPT_TIMEOUT_MS: number;
+  WOOCOMMERCE_REST_TOTAL_TIMEOUT_MS: number;
+  WOOCOMMERCE_REST_BACKOFF_BASE_MS: number;
+  WOOCOMMERCE_REST_BACKOFF_FACTOR: number;
+  WOOCOMMERCE_REST_JITTER_RATIO: number;
   POSTGRES_DB?: string;
   POSTGRES_USER?: string;
   POSTGRES_PASSWORD?: string;
@@ -31,6 +37,12 @@ export const CONFIG_ENV_KEYS = [
   'APP_ENCRYPTION_KEY',
   'TELEGRAM_BOT_TOKEN',
   'WOOCOMMERCE_WEBHOOK_SECRET',
+  'WOOCOMMERCE_REST_MAX_ATTEMPTS',
+  'WOOCOMMERCE_REST_ATTEMPT_TIMEOUT_MS',
+  'WOOCOMMERCE_REST_TOTAL_TIMEOUT_MS',
+  'WOOCOMMERCE_REST_BACKOFF_BASE_MS',
+  'WOOCOMMERCE_REST_BACKOFF_FACTOR',
+  'WOOCOMMERCE_REST_JITTER_RATIO',
   'POSTGRES_DB',
   'POSTGRES_USER',
   'POSTGRES_PASSWORD',
@@ -66,4 +78,14 @@ export interface TelegramSettings {
 
 export interface WooCommerceSettings {
   webhookSecret: string;
+  rest: WooCommerceRestSettings;
+}
+
+export interface WooCommerceRestSettings {
+  maxAttempts: number;
+  attemptTimeoutMs: number;
+  totalTimeoutMs: number;
+  backoffBaseMs: number;
+  backoffFactor: number;
+  jitterRatio: number;
 }
