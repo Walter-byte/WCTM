@@ -122,7 +122,7 @@ Acceptance checklist:
 
 Phase 2 is complete.
 
-## Phase 3 — WooCommerce Integration 🟨 Active
+## Phase 3 — WooCommerce Integration ✅ Complete
 
 ### M6 — REST Client Hardening & Credential Validation ✅ Complete
 
@@ -250,7 +250,8 @@ once into Store-scoped Order snapshots, ambiguous state reconciles through one
 bounded M6 order fetch, and stalled or failed processing remains recoverable and
 diagnosable within the existing operations queue.
 
-Phase 3 remains active. No next milestone is assigned.
+Phase 3 closed on 2026-07-23 with M6–M9 complete and its exit criterion
+satisfied. No next milestone is assigned.
 
 ## Phase 4 — Telegram Platform ⬜ Planned
 
