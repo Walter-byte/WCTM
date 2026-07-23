@@ -10,9 +10,7 @@ import { TenantContextGuard } from '../tenant/guards/tenant-context.guard';
 import { TenantContextService } from '../tenant/tenant-context.service';
 import { StoreController } from './store.controller';
 
-const STORE_ROLE_CASES: Array<
-  [(storeId: string) => Promise<unknown>, MembershipRole, boolean]
-> = [
+const STORE_ROLE_CASES: Array<[unknown, MembershipRole, boolean]> = [
   [
     StoreController.prototype.issueRegistrationToken,
     MembershipRole.MEMBER,
@@ -25,6 +23,21 @@ const STORE_ROLE_CASES: Array<
   ],
   [
     StoreController.prototype.issueRegistrationToken,
+    MembershipRole.OWNER,
+    true,
+  ],
+  [
+    StoreController.prototype.provisionWebhookCredentials,
+    MembershipRole.MEMBER,
+    false,
+  ],
+  [
+    StoreController.prototype.provisionWebhookCredentials,
+    MembershipRole.ADMIN,
+    true,
+  ],
+  [
+    StoreController.prototype.provisionWebhookCredentials,
     MembershipRole.OWNER,
     true,
   ],

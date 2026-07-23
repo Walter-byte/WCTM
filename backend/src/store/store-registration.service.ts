@@ -17,6 +17,7 @@ import { EncryptionService } from '../common/encryption/encryption.service';
 import { ApplicationConfigService } from '../config/application-config.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantScopedPrismaService } from '../tenant/tenant-scoped-prisma.service';
+import { TenantContextService } from '../tenant/tenant-context.service';
 import {
   type WooCommerceErrorCategory,
   WooCommerceClient,
@@ -42,6 +43,15 @@ export interface RegistrationTokenResult {
 export interface PluginRegistrationResult {
   pluginCredential: string;
   storeId: string;
+  webhookSecret?: string;
+  webhookEndpointKey?: string;
+}
+
+export interface WebhookCredentialsResult {
+  provisioned: true;
+  rotated: boolean;
+  webhookEndpointKey: string;
+  webhookSecret?: string;
 }
 
 export interface StoreConnectionHealthResult {
@@ -59,7 +69,8 @@ export class StoreRegistrationService {
     private readonly encryption: EncryptionService,
     private readonly audit: AuditService,
     private readonly configuration: ApplicationConfigService,
-    private readonly rateLimiter: PluginRegistrationRateLimiter
+    private readonly rateLimiter: PluginRegistrationRateLimiter,
+    private readonly tenantContext: TenantContextService
   ) {}
 
   async issueToken(storeId: string): Promise<RegistrationTokenResult> {
@@ -119,6 +130,107 @@ export class StoreRegistrationService {
     };
   }
 
+  provisionWebhookCredentials(
+    storeId: string,
+    rotate: boolean
+  ): Promise<WebhookCredentialsResult> {
+    const { tenantId, userId } = this.tenantContext.active;
+
+    return this.prisma.$transaction(async (transaction) => {
+      const store = await transaction.store.findFirst({
+        where: {
+          id: storeId,
+          tenantId,
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          webhookSecretEncrypted: true,
+          webhookEndpointKey: true,
+        },
+      });
+
+      if (!store) {
+        throw new NotFoundException('Store was not found');
+      }
+
+      if (!rotate && store.webhookSecretEncrypted && store.webhookEndpointKey) {
+        return {
+          provisioned: true,
+          rotated: false,
+          webhookEndpointKey: store.webhookEndpointKey,
+        };
+      }
+
+      const credentials = this.generateWebhookCredentials();
+      const updated = await transaction.store.updateMany({
+        where: {
+          id: storeId,
+          tenantId,
+          deletedAt: null,
+          ...(rotate
+            ? {}
+            : {
+                OR: [
+                  { webhookSecretEncrypted: null },
+                  { webhookSecretEncrypted: '' },
+                  { webhookEndpointKey: null },
+                ],
+              }),
+        },
+        data: {
+          webhookSecretEncrypted: this.encryption.encrypt(
+            credentials.webhookSecret
+          ),
+          webhookEndpointKey: credentials.webhookEndpointKey,
+        },
+      });
+
+      if (updated.count !== 1) {
+        const current = await transaction.store.findFirst({
+          where: {
+            id: storeId,
+            tenantId,
+            deletedAt: null,
+          },
+          select: { webhookEndpointKey: true },
+        });
+
+        if (!current?.webhookEndpointKey) {
+          throw new ServiceUnavailableException(
+            'Webhook credentials are temporarily unavailable'
+          );
+        }
+
+        return {
+          provisioned: true,
+          rotated: false,
+          webhookEndpointKey: current.webhookEndpointKey,
+        };
+      }
+
+      await transaction.auditLog.create({
+        data: {
+          id: `aud_${randomUUID()}`,
+          tenantId,
+          userId,
+          action: 'store.webhook_credentials_provisioned',
+          entityType: 'Store',
+          entityId: storeId,
+          metadata: { rotated: rotate },
+        },
+        select: { id: true },
+      });
+
+      return {
+        provisioned: true,
+        rotated: rotate,
+        webhookEndpointKey: credentials.webhookEndpointKey,
+        webhookSecret: credentials.webhookSecret,
+      };
+    });
+  }
+
   private async finalize(
     transaction: Prisma.TransactionClient,
     tokenHash: string
@@ -138,6 +250,8 @@ export class StoreRegistrationService {
         registrationTokenHash: true,
         registrationTokenExpiresAt: true,
         registrationTokenConsumedAt: true,
+        webhookSecretEncrypted: true,
+        webhookEndpointKey: true,
       },
     });
 
@@ -171,6 +285,11 @@ export class StoreRegistrationService {
 
     const finalizedAt = new Date();
     const pluginCredential = `plg_${randomBytes(32).toString('base64url')}`;
+    const needsWebhookCredentials =
+      !store.webhookSecretEncrypted || !store.webhookEndpointKey;
+    const webhookCredentials = needsWebhookCredentials
+      ? this.generateWebhookCredentials()
+      : undefined;
     const updated = await transaction.store.updateMany({
       where: {
         id: store.id,
@@ -186,6 +305,14 @@ export class StoreRegistrationService {
         lastSeenAt: finalizedAt,
         lastHealthyAt: finalizedAt,
         status: StoreStatus.ACTIVE,
+        ...(webhookCredentials
+          ? {
+              webhookSecretEncrypted: this.encryption.encrypt(
+                webhookCredentials.webhookSecret
+              ),
+              webhookEndpointKey: webhookCredentials.webhookEndpointKey,
+            }
+          : {}),
       },
     });
 
@@ -206,7 +333,26 @@ export class StoreRegistrationService {
       select: { id: true },
     });
 
-    return { pluginCredential, storeId: store.id };
+    return {
+      pluginCredential,
+      storeId: store.id,
+      ...(webhookCredentials
+        ? {
+            webhookSecret: webhookCredentials.webhookSecret,
+            webhookEndpointKey: webhookCredentials.webhookEndpointKey,
+          }
+        : {}),
+    };
+  }
+
+  private generateWebhookCredentials(): {
+    webhookSecret: string;
+    webhookEndpointKey: string;
+  } {
+    return {
+      webhookSecret: randomBytes(32).toString('base64url'),
+      webhookEndpointKey: `whk_${randomBytes(32).toString('base64url')}`,
+    };
   }
 
   private hash(value: string): string {

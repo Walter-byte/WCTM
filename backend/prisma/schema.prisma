@@ -31,6 +31,16 @@ enum MembershipRole {
   @@map("membership_role")
 }
 
+enum WebhookEventStatus {
+  RECEIVED
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+
+  @@map("webhook_event_status")
+}
+
 model Tenant {
   id            String         @id @map("id") @db.VarChar(64)
   name          String         @map("name") @db.VarChar(255)
@@ -83,7 +93,8 @@ model Store {
   status                      StoreStatus    @default(PENDING) @map("status")
   consumerKeyEncrypted        String         @map("consumer_key_encrypted") @db.Text
   consumerSecretEncrypted     String         @map("consumer_secret_encrypted") @db.Text
-  webhookSecretEncrypted      String         @map("webhook_secret_encrypted") @db.Text
+  webhookSecretEncrypted      String?        @map("webhook_secret_encrypted") @db.Text
+  webhookEndpointKey          String?        @unique @map("webhook_endpoint_key") @db.VarChar(64)
   registrationTokenHash       String?        @unique @map("registration_token_hash") @db.VarChar(64)
   registrationTokenExpiresAt  DateTime?      @map("registration_token_expires_at") @db.Timestamptz(3)
   registrationTokenConsumedAt DateTime?      @map("registration_token_consumed_at") @db.Timestamptz(3)
@@ -103,16 +114,24 @@ model Store {
 }
 
 model WebhookEvent {
-  id        String   @id @map("id") @db.VarChar(64)
-  tenantId  String   @map("tenant_id") @db.VarChar(64)
-  storeId   String   @map("store_id") @db.VarChar(64)
-  dedupeKey String   @map("dedupe_key") @db.VarChar(255)
-  topic     String   @map("topic") @db.VarChar(191)
-  payload   Json     @map("payload") @db.JsonB
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  store     Store    @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  id           String             @id @map("id") @db.VarChar(64)
+  tenantId     String             @map("tenant_id") @db.VarChar(64)
+  storeId      String             @map("store_id") @db.VarChar(64)
+  webhookId    String             @map("webhook_id") @db.VarChar(191)
+  deliveryId   String             @map("delivery_id") @db.VarChar(191)
+  dedupeKey    String             @map("dedupe_key") @db.VarChar(255)
+  topic        String             @map("topic") @db.VarChar(191)
+  payload      Json               @map("payload") @db.JsonB
+  status       WebhookEventStatus @default(RECEIVED) @map("status")
+  receivedAt   DateTime           @default(now()) @map("received_at") @db.Timestamptz(3)
+  queuedAt     DateTime?          @map("queued_at") @db.Timestamptz(3)
+  processingAt DateTime?          @map("processing_at") @db.Timestamptz(3)
+  completedAt  DateTime?          @map("completed_at") @db.Timestamptz(3)
+  failedAt     DateTime?          @map("failed_at") @db.Timestamptz(3)
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant       Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  store        Store              @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([storeId, dedupeKey])
   @@index([tenantId])

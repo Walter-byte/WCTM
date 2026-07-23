@@ -340,4 +340,57 @@ Accepted.
 
 ---
 
+## D-017
+
+Date
+
+2026-07-23
+
+Decision
+
+WooCommerce webhook authentication uses a dedicated server-generated secret of
+at least 32 random bytes, encrypted at rest with the existing AES-256-GCM
+application encryption service. It is never derived from or shared with the
+persistent plugin credential.
+
+Each Store receives a separate unique, indexed, URL-safe
+`webhook_endpoint_key`. The endpoint key is opaque routing information only; it
+is not an authentication factor. Authentication is exclusively
+`base64(HMAC-SHA256(rawBody, webhookSecret))`, verified over the exact request
+bytes with a length guard and constant-time comparison.
+
+Verified events are deduplicated by the database constraint on Store ID and
+WooCommerce delivery ID. Publication uses a deterministic BullMQ job ID derived
+from the persisted WebhookEvent ID. Persistence and enqueueing are a recoverable
+two-step operation: persist `RECEIVED`, enqueue on the existing `operations`
+queue, then mark `QUEUED`. Enqueue failure leaves `RECEIVED` for an idempotent
+WooCommerce redelivery.
+
+OWNER and ADMIN memberships may provision missing webhook credentials or rotate
+both the secret and endpoint key. Rotation replaces both values atomically and
+the prior secret stops authenticating immediately. Newly generated plaintext
+secrets are returned once; existing secrets are never re-exposed.
+
+Reason
+
+Separating routing from authentication and separating webhook credentials from
+plugin credentials limits credential reuse and makes rotation explicit. The
+database uniqueness constraint plus deterministic queue identity handles
+at-least-once delivery without requiring a distributed transaction between
+PostgreSQL and Redis.
+
+Boundary
+
+M8 persists and schedules verified envelopes only. Its worker advances
+operational lifecycle state with the existing bounded retry/dead-letter policy
+and performs no order, product, customer, inventory, or other domain
+synchronization. Monitoring remains existing correlation-aware structured logs;
+no metrics platform, metrics endpoint, or readiness dead-letter count is added.
+
+Status
+
+Accepted.
+
+---
+
 Future decisions continue below.

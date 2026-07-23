@@ -16,12 +16,17 @@ import { RequireMembership } from '../tenant/decorators/require-membership.decor
 import type { TenantScopedStore } from '../tenant/tenant-scoped-prisma.service';
 import type { WooCommerceConnectionResult } from '../woocommerce/client/woocommerce.client';
 import { type CreateStoreDto, createStoreSchema } from './dto/create-store.dto';
+import {
+  type ProvisionWebhookCredentialsDto,
+  provisionWebhookCredentialsSchema,
+} from './dto/provision-webhook-credentials.dto';
 import { type UpdateStoreDto, updateStoreSchema } from './dto/update-store.dto';
 import { StoreService } from './store.service';
 import {
   type RegistrationTokenResult,
   type StoreConnectionHealthResult,
   StoreRegistrationService,
+  type WebhookCredentialsResult,
 } from './store-registration.service';
 
 const ALL_MEMBERSHIP_ROLES = [
@@ -87,6 +92,16 @@ export class StoreController {
     @Param('id') storeId: string
   ): Promise<RegistrationTokenResult> {
     return this.registration.issueToken(storeId);
+  }
+
+  @Post(':id/webhook-credentials')
+  @RequireMembership(MembershipRole.OWNER, MembershipRole.ADMIN)
+  provisionWebhookCredentials(
+    @Param('id') storeId: string,
+    @Body(new JoiValidationPipe(provisionWebhookCredentialsSchema))
+    input: ProvisionWebhookCredentialsDto
+  ): Promise<WebhookCredentialsResult> {
+    return this.registration.provisionWebhookCredentials(storeId, input.rotate);
   }
 
   @Get(':id/connection-health')

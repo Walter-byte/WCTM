@@ -1,19 +1,21 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { StoreStatus } from '@prisma/client';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 
 import type { AuditService } from '../common/audit/audit.service';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import type { ApplicationConfigService } from '../config/application-config.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { TenantScopedPrismaService } from '../tenant/tenant-scoped-prisma.service';
+import type { TenantContextService } from '../tenant/tenant-context.service';
 import {
   type WooCommerceConnectionResult,
   WooCommerceClient,
 } from '../woocommerce/client/woocommerce.client';
 import type { PluginRegistrationRateLimiter } from './plugin-registration-rate-limiter.service';
 import { StoreRegistrationService } from './store-registration.service';
+import { signaturesMatch } from '../webhooks/woocommerce-webhook-ingestion.service';
 
 interface RegistrationStore {
   id: string;
@@ -29,6 +31,8 @@ interface RegistrationStore {
   pluginRegisteredAt: Date | null;
   lastSeenAt: Date | null;
   lastHealthyAt: Date | null;
+  webhookSecretEncrypted: string | null;
+  webhookEndpointKey: string | null;
   deletedAt: Date | null;
 }
 
@@ -44,6 +48,8 @@ function setup(
     consumedAt?: Date | null;
     pluginSecretHash?: string | null;
     pluginRegisteredAt?: Date | null;
+    webhookSecretEncrypted?: string | null;
+    webhookEndpointKey?: string | null;
   } = {}
 ) {
   const token = options.token ?? `reg_${'t'.repeat(43)}`;
@@ -81,10 +87,22 @@ function setup(
     pluginRegisteredAt: options.pluginRegisteredAt ?? null,
     lastSeenAt: null,
     lastHealthyAt: null,
+    webhookSecretEncrypted: options.webhookSecretEncrypted ?? null,
+    webhookEndpointKey: options.webhookEndpointKey ?? null,
     deletedAt: null,
   };
-  const findFirst = jest.fn(async () =>
-    store.deletedAt === null ? { ...store } : null
+  const findFirst = jest.fn(
+    async ({ where }: { where: Record<string, unknown> }) => {
+      const matches =
+        store.deletedAt === null &&
+        (where['id'] === undefined || store.id === where['id']) &&
+        (where['tenantId'] === undefined ||
+          store.tenantId === where['tenantId']) &&
+        (where['registrationTokenHash'] === undefined ||
+          store.registrationTokenHash === where['registrationTokenHash']);
+
+      return matches ? { ...store } : null;
+    }
   );
   const updateMany = jest.fn(
     async ({
@@ -96,14 +114,33 @@ function setup(
     }) => {
       const expirationFilter = where['registrationTokenExpiresAt'] as
         { gt?: Date } | undefined;
+      const webhookFilters = where['OR'] as
+        Array<Record<string, unknown>> | undefined;
+      const registrationMatches =
+        where['registrationTokenHash'] === undefined ||
+        (store.registrationTokenHash === where['registrationTokenHash'] &&
+          store.registrationTokenConsumedAt === null &&
+          (!expirationFilter?.gt ||
+            (store.registrationTokenExpiresAt !== null &&
+              store.registrationTokenExpiresAt > expirationFilter.gt)));
+      const webhookMatches =
+        !webhookFilters ||
+        webhookFilters.some(
+          (filter) =>
+            (filter['webhookSecretEncrypted'] === null &&
+              store.webhookSecretEncrypted === null) ||
+            (filter['webhookSecretEncrypted'] === '' &&
+              store.webhookSecretEncrypted === '') ||
+            (filter['webhookEndpointKey'] === null &&
+              store.webhookEndpointKey === null)
+        );
       const matches =
         store.id === where['id'] &&
-        store.registrationTokenHash === where['registrationTokenHash'] &&
-        store.registrationTokenConsumedAt === null &&
-        store.deletedAt === null &&
-        (!expirationFilter?.gt ||
-          (store.registrationTokenExpiresAt !== null &&
-            store.registrationTokenExpiresAt > expirationFilter.gt));
+        (where['tenantId'] === undefined ||
+          store.tenantId === where['tenantId']) &&
+        registrationMatches &&
+        webhookMatches &&
+        store.deletedAt === null;
 
       if (matches) {
         Object.assign(store, data);
@@ -154,6 +191,13 @@ function setup(
   const rateLimiter = {
     assertAllowed,
   } as unknown as PluginRegistrationRateLimiter;
+  const tenantContext = {
+    active: {
+      tenantId: 'ten_a',
+      userId: 'usr_owner',
+      membershipRole: 'OWNER',
+    },
+  } as TenantContextService;
   const testConnection = jest
     .spyOn(WooCommerceClient.prototype, 'testConnection')
     .mockResolvedValue({ success: true });
@@ -163,7 +207,8 @@ function setup(
     encryption,
     audit,
     configuration,
-    rateLimiter
+    rateLimiter,
+    tenantContext
   );
 
   return {
@@ -176,6 +221,7 @@ function setup(
     store,
     testConnection,
     token,
+    tenantContext,
     transaction,
     updateMany,
   };
@@ -243,6 +289,15 @@ describe('StoreRegistrationService', () => {
     expect(fixture.store.lastSeenAt).toBeInstanceOf(Date);
     expect(fixture.store.lastHealthyAt).toBeInstanceOf(Date);
     expect(fixture.store.status).toBe(StoreStatus.ACTIVE);
+    expect(result.webhookSecret).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(result.webhookEndpointKey).toMatch(/^whk_[A-Za-z0-9_-]{43}$/);
+    expect(
+      new EncryptionService({
+        encryption: { key: Buffer.alloc(32, 7).toString('base64') },
+      } as ApplicationConfigService).decrypt(
+        String(fixture.store.webhookSecretEncrypted)
+      )
+    ).toBe(result.webhookSecret);
     expect(fixture.createAudit).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(result)).not.toMatch(
       /registrationToken|pluginSecretHash|consumer|woocommerce/i
@@ -262,6 +317,23 @@ describe('StoreRegistrationService', () => {
     expect(fixture.store.pluginSecretHash).toBe(pluginHash);
     expect(fixture.testConnection).toHaveBeenCalledTimes(1);
     expect(first.pluginCredential).not.toBe(fixture.store.pluginSecretHash);
+  });
+
+  it('does not re-expose existing webhook credentials during re-registration', async () => {
+    const configuration = {
+      encryption: { key: Buffer.alloc(32, 7).toString('base64') },
+    } as ApplicationConfigService;
+    const encryption = new EncryptionService(configuration);
+    const fixture = setup({
+      webhookSecretEncrypted: encryption.encrypt('existing-webhook-secret'),
+      webhookEndpointKey: `whk_${'e'.repeat(43)}`,
+    });
+
+    const result = await fixture.service.register(fixture.token, '203.0.113.5');
+
+    expect(result).not.toHaveProperty('webhookSecret');
+    expect(result).not.toHaveProperty('webhookEndpointKey');
+    expect(fixture.store.webhookEndpointKey).toBe(`whk_${'e'.repeat(43)}`);
   });
 
   it('rejects an expired token with the same generic failure', async () => {
@@ -382,6 +454,71 @@ describe('StoreRegistrationService', () => {
     await expect(fixture.service.connectionHealth('sto_other')).rejects.toThrow(
       NotFoundException
     );
+  });
+
+  it('provisions missing webhook credentials once without re-exposing the secret', async () => {
+    const fixture = setup();
+
+    const first = await fixture.service.provisionWebhookCredentials(
+      'sto_a',
+      false
+    );
+    const second = await fixture.service.provisionWebhookCredentials(
+      'sto_a',
+      false
+    );
+
+    expect(first).toMatchObject({
+      provisioned: true,
+      rotated: false,
+      webhookEndpointKey: expect.stringMatching(/^whk_[A-Za-z0-9_-]{43}$/),
+      webhookSecret: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+    });
+    expect(second).toEqual({
+      provisioned: true,
+      rotated: false,
+      webhookEndpointKey: first.webhookEndpointKey,
+    });
+    expect(second).not.toHaveProperty('webhookSecret');
+    expect(fixture.createAudit).toHaveBeenCalledTimes(1);
+  });
+
+  it('rotates both webhook values and invalidates the old secret immediately', async () => {
+    const encryption = new EncryptionService({
+      encryption: { key: Buffer.alloc(32, 7).toString('base64') },
+    } as ApplicationConfigService);
+    const oldSecret = 'old-webhook-secret';
+    const oldEndpointKey = `whk_${'o'.repeat(43)}`;
+    const fixture = setup({
+      webhookSecretEncrypted: encryption.encrypt(oldSecret),
+      webhookEndpointKey: oldEndpointKey,
+    });
+
+    const rotated = await fixture.service.provisionWebhookCredentials(
+      'sto_a',
+      true
+    );
+    const currentSecret = encryption.decrypt(
+      String(fixture.store.webhookSecretEncrypted)
+    );
+
+    expect(rotated.rotated).toBe(true);
+    expect(rotated.webhookEndpointKey).not.toBe(oldEndpointKey);
+    expect(rotated.webhookSecret).toBe(currentSecret);
+    expect(currentSecret).not.toBe(oldSecret);
+    const body = Buffer.from('{"id":1}');
+    const oldSignature = createHmac('sha256', oldSecret).update(body).digest();
+    expect(signaturesMatch(body, currentSecret, oldSignature)).toBe(false);
+  });
+
+  it('does not provision webhook credentials across tenant boundaries', async () => {
+    const fixture = setup();
+    Object.assign(fixture.tenantContext.active, { tenantId: 'ten_other' });
+
+    await expect(
+      fixture.service.provisionWebhookCredentials('sto_a', false)
+    ).rejects.toThrow(NotFoundException);
+    expect(fixture.createAudit).not.toHaveBeenCalled();
   });
 
   it('uses only the token-derived Store mapping during finalization', async () => {
