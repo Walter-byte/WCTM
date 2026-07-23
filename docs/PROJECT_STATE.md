@@ -6,15 +6,16 @@ Version: 1.0
 
 Current Phase
 
-Phase 4 — Telegram Platform active. M12 implementation is complete and awaiting
-review.
+Phase 4 — Telegram Platform active. M12 is complete and merged to main;
+awaiting A's real-store validation before Phase 4 closure review.
 
 ---
 
 Current Task
 
-M12 — Telegram Order Status Update. Do not begin another milestone until M12
-is merged, validated against a real WooCommerce store, and approved by A.
+M12 — Telegram Order Status Update is merged. No next milestone is assigned;
+the only active gate is A's validation against a real WooCommerce store before
+Phase 4 closure review.
 
 ---
 
@@ -301,7 +302,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-feat/m12-telegram-order-status-write
+main
 
 ---
 
@@ -325,20 +326,21 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-None
+A's validation of M12 against a real WooCommerce store is the only active gate
+before Phase 4 closure review.
 
 ---
 
 Next Milestone
 
-None assigned. Phase 4 remains open until M12 is merged, validated against a
-real WooCommerce store, and accepted by A.
+None assigned. M12 is merged; the only outstanding gate before Phase 4 closure
+review is real-WooCommerce-store validation and A's acceptance.
 
 ---
 
 Last Completed
 
-M11 — Telegram Order Listing & Detail (read-only).
+M12 — Telegram Order Status Update.
 
 ---
 

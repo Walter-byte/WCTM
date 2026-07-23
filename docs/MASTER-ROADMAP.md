@@ -114,8 +114,7 @@ Status:
 
 Current Milestone:
 
-M12 — Telegram Order Status Update (implementation
-complete; awaiting review)
+M12 — Telegram Order Status Update (merged; awaiting real-store validation)
 
 Deliverables
 
@@ -156,8 +155,8 @@ M12 scope:
   authoritative M9 projection updates
 - Stateless grammY rendering/forwarding with no Prisma or database access
 
-Phase 4 remains open until M12 is merged, validated against a real
-WooCommerce store, and accepted by A.
+M12 is merged; the sole remaining gate before Phase 4 closure review is A's
+validation against a real WooCommerce store.
 
 Exit Criteria
 
