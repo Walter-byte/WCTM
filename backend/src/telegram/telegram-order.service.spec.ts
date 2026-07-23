@@ -1,9 +1,19 @@
-import { describe, expect, it, jest } from '@jest/globals';
+import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { MembershipRole, TelegramCallbackPurpose } from '@prisma/client';
 
 import type { ApplicationConfigService } from '../config/application-config.service';
+import type { EncryptionService } from '../common/encryption/encryption.service';
+import type { OrderProjectionService } from '../orders/order-projection.service';
+import {
+  WooCommerceClient,
+  WooCommerceClientError,
+} from '../woocommerce/client/woocommerce.client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { TelegramOrderService } from './telegram-order.service';
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
 
 interface TestOrder {
   tenantId: string;
@@ -40,7 +50,16 @@ interface TestReference {
   targetWcOrderId?: string | null;
   reachableOffset?: number | null;
   backReferenceId?: string | null;
+  allowedTargetStatuses?: string[];
+  claimedTargetStatus?: string | null;
   expiresAt: Date;
+}
+
+interface TestStatusWrite {
+  id: string;
+  callbackReferenceId: string;
+  targetStatus: string;
+  result?: unknown;
 }
 
 function makeOrder(
@@ -73,6 +92,8 @@ function makeOrder(
 
 function createFixture(orderCount = 18) {
   const references: TestReference[] = [];
+  const statusWrites: TestStatusWrite[] = [];
+  const auditLogs: unknown[] = [];
   const orders = Array.from({ length: orderCount }, (_, index) =>
     makeOrder(index + 1)
   );
@@ -131,6 +152,13 @@ function createFixture(orderCount = 18) {
           id: index === 0 ? state.activeStoreId : `sto_${index + 1}`,
         }))
       ),
+      findFirst: jest.fn(async () => ({
+        id: 'sto_a',
+        tenantId: 'ten_a',
+        baseUrl: 'https://shop.example',
+        consumerKeyEncrypted: 'encrypted-key',
+        consumerSecretEncrypted: 'encrypted-secret',
+      })),
     },
     order: {
       findMany: jest.fn(
@@ -218,7 +246,84 @@ function createFixture(orderCount = 18) {
         async ({ where }: { where: { id: string } }) =>
           references.find((reference) => reference.id === where.id) ?? null
       ),
+      create: jest.fn(async ({ data }: { data: TestReference }) => {
+        references.push(data);
+        return { id: data.id };
+      }),
+      updateMany: jest.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: { claimedTargetStatus: string };
+        }) => {
+          const reference = references.find(
+            (candidate) => candidate.id === where.id
+          );
+
+          if (
+            !reference ||
+            (reference.claimedTargetStatus &&
+              reference.claimedTargetStatus !== data.claimedTargetStatus)
+          ) {
+            return { count: 0 };
+          }
+
+          reference.claimedTargetStatus = data.claimedTargetStatus;
+          return { count: 1 };
+        }
+      ),
     },
+    telegramOrderStatusWrite: {
+      findUnique: jest.fn(
+        async ({
+          where,
+        }: {
+          where: {
+            callbackReferenceId_targetStatus: {
+              callbackReferenceId: string;
+              targetStatus: string;
+            };
+          };
+        }) =>
+          statusWrites.find(
+            (write) =>
+              write.callbackReferenceId ===
+                where.callbackReferenceId_targetStatus.callbackReferenceId &&
+              write.targetStatus ===
+                where.callbackReferenceId_targetStatus.targetStatus
+          ) ?? null
+      ),
+      create: jest.fn(async ({ data }: { data: TestStatusWrite }) => {
+        statusWrites.push(data);
+        return { id: data.id };
+      }),
+      update: jest.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: { result: unknown };
+        }) => {
+          const write = statusWrites.find(
+            (candidate) => candidate.id === where.id
+          )!;
+          write.result = data.result;
+          return { id: write.id };
+        }
+      ),
+    },
+    auditLog: {
+      create: jest.fn(async ({ data }: { data: unknown }) => {
+        auditLogs.push(data);
+        return { id: 'aud_test' };
+      }),
+    },
+    $transaction: jest.fn(async (operations: Array<Promise<unknown>>) =>
+      Promise.all(operations)
+    ),
   };
   const configuration = {
     telegram: {
@@ -226,10 +331,39 @@ function createFixture(orderCount = 18) {
       callbackRefTtlSeconds: 900,
       orderFreshnessThresholdSeconds: 300,
     },
+    woocommerce: {
+      rest: {
+        maxAttempts: 3,
+        attemptTimeoutMs: 5000,
+        totalTimeoutMs: 15000,
+        backoffBaseMs: 300,
+        backoffFactor: 2,
+        jitterRatio: 0.2,
+      },
+    },
   } as ApplicationConfigService;
+  const projection = {
+    reconcileAuthoritativeOrder: jest.fn(
+      async (
+        _store: unknown,
+        payload: { status: string },
+        wcOrderId: string
+      ) => {
+        const order = orders.find(
+          (candidate) => candidate.wcOrderId === wcOrderId
+        );
+        if (order) {
+          order.status = payload.status;
+          order.lastSyncedAt = new Date();
+        }
+      }
+    ),
+  };
   const service = new TelegramOrderService(
     prisma as unknown as PrismaService,
-    configuration
+    configuration,
+    { decrypt: (value: string) => value } as EncryptionService,
+    projection as unknown as OrderProjectionService
   );
   const identity = { userId: '1001', chatId: '1001' };
 
@@ -240,7 +374,32 @@ function createFixture(orderCount = 18) {
     state,
     orders,
     references,
+    statusWrites,
+    auditLogs,
+    projection,
     identity,
+  };
+}
+
+function wooPayload(status: string) {
+  return {
+    id: 1001,
+    number: '1001',
+    status,
+    currency: 'IRR',
+    discount_total: '0',
+    discount_tax: '0',
+    shipping_total: '0',
+    shipping_tax: '0',
+    cart_tax: '0',
+    total: '1.00',
+    total_tax: '0',
+    customer_id: 1,
+    billing: { first_name: 'Customer1', last_name: 'Test' },
+    shipping: {},
+    line_items: [{ name: 'Item 1', quantity: 1, total: '1.00' }],
+    date_created_gmt: '2026-07-23T12:00:00Z',
+    date_modified_gmt: '2026-07-23T12:20:00Z',
   };
 }
 
@@ -483,5 +642,271 @@ describe('TelegramOrderService detail and freshness', () => {
     });
     expect(detail.state).toBe('NOT_FOUND');
     jest.useRealTimers();
+  });
+});
+
+describe('TelegramOrderService status writes', () => {
+  async function writeReference(
+    fixture: ReturnType<typeof createFixture>
+  ): Promise<string> {
+    fixture.state.membershipRole = MembershipRole.OWNER;
+    const list = await fixture.service.list({ telegram: fixture.identity });
+    const transitions = await fixture.service.transitions({
+      telegram: fixture.identity,
+      ref: list.orders[0]!.ref,
+    });
+
+    expect(transitions).toMatchObject({
+      state: 'OK',
+      currentStatus: 'processing',
+      targets: expect.arrayContaining(['completed']),
+    });
+
+    return transitions.ref!;
+  }
+
+  it('updates WooCommerce once, reconciles the projection, audits, and replays the prior result', async () => {
+    const fixture = createFixture(1);
+    const ref = await writeReference(fixture);
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValue(wooPayload('processing'));
+    const update = jest
+      .spyOn(WooCommerceClient.prototype, 'updateOrderStatus')
+      .mockResolvedValue(wooPayload('completed'));
+
+    const first = await fixture.service.updateStatus({
+      telegram: fixture.identity,
+      ref,
+      target: 'completed',
+    });
+    const replay = await fixture.service.updateStatus({
+      telegram: fixture.identity,
+      ref,
+      target: 'completed',
+    });
+
+    expect(first).toMatchObject({
+      state: 'OK',
+      order: { status: 'completed' },
+    });
+    expect(replay).toEqual(first);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(fixture.orders[0]!.status).toBe('completed');
+    expect(fixture.auditLogs).toHaveLength(1);
+  });
+
+  it('denies MEMBER writes and revalidates authorization and active context', async () => {
+    const fixture = createFixture(1);
+    const list = await fixture.service.list({ telegram: fixture.identity });
+
+    expect(
+      await fixture.service.transitions({
+        telegram: fixture.identity,
+        ref: list.orders[0]!.ref,
+      })
+    ).toEqual({ state: 'FORBIDDEN_ROLE' });
+
+    fixture.state.membershipDeleted = true;
+    expect(
+      await fixture.service.transitions({
+        telegram: fixture.identity,
+        ref: list.orders[0]!.ref,
+      })
+    ).toEqual({ state: 'UNAUTHORIZED' });
+
+    fixture.state.membershipDeleted = false;
+    fixture.state.storeCount = 0;
+    expect(
+      await fixture.service.transitions({
+        telegram: fixture.identity,
+        ref: list.orders[0]!.ref,
+      })
+    ).toEqual({ state: 'NO_ACTIVE_STORE' });
+
+    const demoted = createFixture(1);
+    const writeRef = await writeReference(demoted);
+    demoted.state.membershipRole = MembershipRole.MEMBER;
+    expect(
+      await demoted.service.updateStatus({
+        telegram: demoted.identity,
+        ref: writeRef,
+        target: 'completed',
+      })
+    ).toEqual({ state: 'FORBIDDEN_ROLE' });
+  });
+
+  it('rejects invalid, expired, wrong-purpose, and context-changed references', async () => {
+    const fixture = createFixture(1);
+    const ref = await writeReference(fixture);
+    const tampered = `${ref.slice(0, -1)}${ref.endsWith('A') ? 'B' : 'A'}`;
+
+    expect(
+      await fixture.service.updateStatus({
+        telegram: fixture.identity,
+        ref: tampered,
+        target: 'completed',
+      })
+    ).toEqual({ state: 'CONTEXT_CHANGED' });
+
+    expect(
+      await fixture.service.updateStatus({
+        telegram: fixture.identity,
+        ref,
+        target: 'made-up',
+      })
+    ).toEqual({ state: 'INVALID_TARGET' });
+
+    const statusReference = fixture.references.find(
+      (candidate) => candidate.id === `tcr_${ref.split('.')[1]}`
+    )!;
+    statusReference.expiresAt = new Date(0);
+    expect(
+      await fixture.service.updateStatus({
+        telegram: fixture.identity,
+        ref,
+        target: 'completed',
+      })
+    ).toMatchObject({
+      state: 'EXPIRED_REF',
+      order: { status: 'processing' },
+    });
+
+    const list = await fixture.service.list({ telegram: fixture.identity });
+    expect(
+      await fixture.service.updateStatus({
+        telegram: fixture.identity,
+        ref: list.orders[0]!.ref,
+        target: 'completed',
+      })
+    ).toEqual({ state: 'CONTEXT_CHANGED' });
+
+    const freshRef = await writeReference(fixture);
+    fixture.state.activeStoreId = 'sto_changed';
+    expect(
+      await fixture.service.updateStatus({
+        telegram: fixture.identity,
+        ref: freshRef,
+        target: 'completed',
+      })
+    ).toEqual({ state: 'CONTEXT_CHANGED' });
+  });
+
+  it('returns NOT_FOUND and DELETED without issuing status references', async () => {
+    const missing = createFixture(1);
+    missing.state.membershipRole = MembershipRole.OWNER;
+    const missingList = await missing.service.list({
+      telegram: missing.identity,
+    });
+    missing.orders.length = 0;
+    expect(
+      await missing.service.transitions({
+        telegram: missing.identity,
+        ref: missingList.orders[0]!.ref,
+      })
+    ).toEqual({ state: 'NOT_FOUND' });
+
+    const deleted = createFixture(1);
+    deleted.state.membershipRole = MembershipRole.ADMIN;
+    const deletedList = await deleted.service.list({
+      telegram: deleted.identity,
+    });
+    deleted.orders[0]!.remoteDeletedAt = new Date();
+    expect(
+      await deleted.service.transitions({
+        telegram: deleted.identity,
+        ref: deletedList.orders[0]!.ref,
+      })
+    ).toEqual({ state: 'DELETED' });
+  });
+
+  it('returns NO_OP without issuing a WooCommerce write', async () => {
+    const fixture = createFixture(1);
+    const ref = await writeReference(fixture);
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValue(wooPayload('completed'));
+    const update = jest.spyOn(WooCommerceClient.prototype, 'updateOrderStatus');
+
+    const result = await fixture.service.updateStatus({
+      telegram: fixture.identity,
+      ref,
+      target: 'completed',
+    });
+
+    expect(result).toMatchObject({
+      state: 'NO_OP',
+      order: { status: 'completed' },
+    });
+    expect(update).not.toHaveBeenCalled();
+    expect(fixture.auditLogs).toHaveLength(0);
+  });
+
+  it('returns RETRYABLE without a false local status change when WooCommerce cannot be reconciled', async () => {
+    const fixture = createFixture(1);
+    const ref = await writeReference(fixture);
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValueOnce(wooPayload('processing'))
+      .mockRejectedValueOnce(new WooCommerceClientError('timeout'));
+    jest
+      .spyOn(WooCommerceClient.prototype, 'updateOrderStatus')
+      .mockRejectedValue(new WooCommerceClientError('timeout'));
+
+    const result = await fixture.service.updateStatus({
+      telegram: fixture.identity,
+      ref,
+      target: 'completed',
+    });
+
+    expect(result).toEqual({ state: 'RETRYABLE' });
+    expect(fixture.orders[0]!.status).toBe('processing');
+    expect(fixture.auditLogs).toHaveLength(0);
+  });
+
+  it('reconciles a lost write response before reporting success', async () => {
+    const fixture = createFixture(1);
+    const ref = await writeReference(fixture);
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValueOnce(wooPayload('processing'))
+      .mockResolvedValueOnce(wooPayload('completed'));
+    const update = jest
+      .spyOn(WooCommerceClient.prototype, 'updateOrderStatus')
+      .mockRejectedValue(new WooCommerceClientError('transport'));
+
+    const result = await fixture.service.updateStatus({
+      telegram: fixture.identity,
+      ref,
+      target: 'completed',
+    });
+
+    expect(result).toMatchObject({
+      state: 'OK',
+      order: { status: 'completed' },
+    });
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(fixture.orders[0]!.status).toBe('completed');
+  });
+
+  it('returns FAILED and preserves local status when WooCommerce rejects the write', async () => {
+    const fixture = createFixture(1);
+    const ref = await writeReference(fixture);
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValue(wooPayload('processing'));
+    jest
+      .spyOn(WooCommerceClient.prototype, 'updateOrderStatus')
+      .mockRejectedValue(new WooCommerceClientError('auth'));
+
+    const result = await fixture.service.updateStatus({
+      telegram: fixture.identity,
+      ref,
+      target: 'completed',
+    });
+
+    expect(result).toEqual({ state: 'FAILED' });
+    expect(fixture.orders[0]!.status).toBe('processing');
+    expect(fixture.auditLogs).toHaveLength(0);
   });
 });

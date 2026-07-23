@@ -6,15 +6,15 @@ Version: 1.0
 
 Current Phase
 
-Phase 4 — Telegram Platform active. M11 implementation is complete and awaiting
+Phase 4 — Telegram Platform active. M12 implementation is complete and awaiting
 review.
 
 ---
 
 Current Task
 
-M11 — Telegram Order Listing & Detail (read-only). Do not begin another
-milestone until M11 is reviewed and approved.
+M12 — Telegram Order Status Update. Do not begin another milestone until M12
+is merged, validated against a real WooCommerce store, and approved by A.
 
 ---
 
@@ -238,6 +238,32 @@ timestamp with a configured delayed threshold. The bot adds `/orders`, inline
 pagination, detail selection, and back navigation while remaining a stateless
 transport adapter with no Prisma, database, or WooCommerce access.
 
+M12 adds bot-key-authenticated order-transition and status-write endpoints.
+OWNER and ADMIN may write; MEMBER remains read-only. The backend re-resolves
+the linked account, authorized private chat, active Membership and tenant, and
+exactly one active Store for every request.
+
+Order details expose a status action only when the backend role and current
+projected status have available transitions. The transition endpoint issues a
+short-lived `STATUS_WRITE` callback reference that binds the account, chat,
+tenant, Store, WooCommerce order key, conservative core target set, and first
+claimed target.
+
+Migration `20260724090000_telegram_order_status_write` extends callback
+references with bound/claimed target state and adds durable status-write
+records unique by reference and target. Replays return the persisted result,
+and a different target cannot reuse a claimed reference. The complete
+eight-migration chain applied cleanly to an isolated PostgreSQL database and
+Prisma reported it up to date.
+
+The backend reads live WooCommerce state before dispatch, sends one status
+write without automatic write retry, and projects the authoritative
+WooCommerce response through M9. A missing response triggers one live
+single-order reconciliation before success can be reported. Confirmed writes
+emit secret-safe audit records. The grammY bot only renders backend targets and
+forwards callbacks; it remains free of Prisma, database, WooCommerce, and
+transition-policy logic.
+
 ---
 
 Infrastructure
@@ -275,7 +301,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-feat/m11-telegram-order-listing
+feat/m12-telegram-order-status-write
 
 ---
 
@@ -305,14 +331,14 @@ None
 
 Next Milestone
 
-None assigned. Await M11 review and A's approval before starting another
-milestone.
+None assigned. Phase 4 remains open until M12 is merged, validated against a
+real WooCommerce store, and accepted by A.
 
 ---
 
 Last Completed
 
-M10 — Telegram Account Linking & Private-Chat Authorization.
+M11 — Telegram Order Listing & Detail (read-only).
 
 ---
 

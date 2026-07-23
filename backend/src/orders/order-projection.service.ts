@@ -39,7 +39,7 @@ const RETRYABLE_WOOCOMMERCE_CATEGORIES = new Set<WooCommerceErrorCategory>([
 type RemoteDeletionMode = 'clear' | 'preserve';
 type ProjectionDecision = 'apply' | 'noop' | 'reconcile';
 
-interface ProjectableStore {
+export interface ProjectableStore {
   id: string;
   tenantId: string;
   baseUrl: string;
@@ -150,6 +150,34 @@ export class OrderProjectionService {
     }
   }
 
+  async reconcileAuthoritativeOrder(
+    store: ProjectableStore,
+    payload: unknown,
+    expectedWcOrderId: string
+  ): Promise<void> {
+    let authoritative: OrderProjection;
+
+    try {
+      authoritative = mapWooCommerceOrder(payload);
+    } catch {
+      throw new OrderProjectionFailure(
+        'unexpected',
+        'malformed-reconciliation-payload',
+        false
+      );
+    }
+
+    if (authoritative.wcOrderId !== expectedWcOrderId) {
+      throw new OrderProjectionFailure(
+        'unexpected',
+        'reconciliation-order-identity-mismatch',
+        false
+      );
+    }
+
+    await this.applyProjection(store, authoritative, true, 'clear');
+  }
+
   private async reconcileMappingFailure(
     event: ProjectableWebhookEvent,
     error: unknown
@@ -191,27 +219,7 @@ export class OrderProjectionService {
       );
     }
 
-    let authoritative: OrderProjection;
-
-    try {
-      authoritative = mapWooCommerceOrder(payload);
-    } catch {
-      throw new OrderProjectionFailure(
-        'unexpected',
-        'malformed-reconciliation-payload',
-        false
-      );
-    }
-
-    if (authoritative.wcOrderId !== wcOrderId) {
-      throw new OrderProjectionFailure(
-        'unexpected',
-        'reconciliation-order-identity-mismatch',
-        false
-      );
-    }
-
-    await this.applyProjection(store, authoritative, true, 'clear');
+    await this.reconcileAuthoritativeOrder(store, payload, wcOrderId);
   }
 
   private projectDeletion(event: ProjectableWebhookEvent): Promise<void> {

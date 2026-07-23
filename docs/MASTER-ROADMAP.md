@@ -114,7 +114,7 @@ Status:
 
 Current Milestone:
 
-M11 — Telegram Order Listing & Detail (read-only; implementation
+M12 — Telegram Order Status Update (implementation
 complete; awaiting review)
 
 Deliverables
@@ -143,6 +143,21 @@ M11 scope:
 - `/orders`, inline pagination, detail selection, and back navigation
 - `Order.lastSyncedAt` freshness with configurable delayed signaling
 - No WooCommerce calls, writes, direct `/order` lookup, or Store switching
+
+M12 scope:
+
+- OWNER/ADMIN status writes from the M11 private-chat detail view; MEMBER is
+  read-only
+- Server-derived WooCommerce core transition targets with live status
+  revalidation
+- Single-effect HMAC callback references and durable reference-plus-target
+  idempotency
+- One WooCommerce write dispatch, lost-response live reconciliation, and
+  authoritative M9 projection updates
+- Stateless grammY rendering/forwarding with no Prisma or database access
+
+Phase 4 remains open until M12 is merged, validated against a real
+WooCommerce store, and accepted by A.
 
 Exit Criteria
 
