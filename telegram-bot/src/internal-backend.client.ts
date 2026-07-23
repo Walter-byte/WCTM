@@ -78,7 +78,41 @@ export interface OrderDetailResult {
     | 'UNAUTHORIZED';
   order?: OrderDetailPayload;
   backCursor?: string;
+  transitionsRef?: string;
   freshness: OrderFreshness;
+}
+
+export interface OrderTransitionsResult {
+  state:
+    | 'OK'
+    | 'NOT_FOUND'
+    | 'DELETED'
+    | 'NO_ACTIVE_STORE'
+    | 'UNAUTHORIZED'
+    | 'CONTEXT_CHANGED'
+    | 'FORBIDDEN_ROLE';
+  ref?: string;
+  currentStatus?: string;
+  targets?: string[];
+}
+
+export interface OrderStatusUpdateResult {
+  state:
+    | 'OK'
+    | 'NO_OP'
+    | 'RETRYABLE'
+    | 'FAILED'
+    | 'NOT_FOUND'
+    | 'DELETED'
+    | 'NO_ACTIVE_STORE'
+    | 'UNAUTHORIZED'
+    | 'CONTEXT_CHANGED'
+    | 'FORBIDDEN_ROLE'
+    | 'INVALID_TARGET'
+    | 'EXPIRED_REF';
+  order?: OrderDetailPayload;
+  backCursor?: string;
+  freshness?: OrderFreshness;
 }
 
 export class BackendUnavailableError extends Error {
@@ -157,6 +191,38 @@ export class InternalBackendClient {
     });
 
     return parseOrderDetailResult(value);
+  }
+
+  async orderTransitions(
+    identity: TelegramIdentity,
+    ref: string
+  ): Promise<OrderTransitionsResult> {
+    const value = await this.post<unknown>('orders/transitions', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+      ref,
+    });
+
+    return parseOrderTransitionsResult(value);
+  }
+
+  async updateOrderStatus(
+    identity: TelegramIdentity,
+    ref: string,
+    target: string
+  ): Promise<OrderStatusUpdateResult> {
+    const value = await this.post<unknown>('orders/status', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+      ref,
+      target,
+    });
+
+    return parseOrderStatusUpdateResult(value);
   }
 
   private async post<T>(
@@ -249,7 +315,9 @@ function parseOrderDetailResult(value: unknown): OrderDetailResult {
     !allowedStates.has(String(record['state'])) ||
     !isFreshness(record['freshness']) ||
     (record['backCursor'] !== undefined &&
-      !isCallbackReference(record['backCursor']))
+      !isCallbackReference(record['backCursor'])) ||
+    (record['transitionsRef'] !== undefined &&
+      !isCallbackReference(record['transitionsRef'], 'd'))
   ) {
     throw new MalformedBackendResponseError();
   }
@@ -274,7 +342,90 @@ function parseOrderDetailResult(value: unknown): OrderDetailResult {
     ...(typeof record['backCursor'] === 'string'
       ? { backCursor: record['backCursor'] }
       : {}),
+    ...(typeof record['transitionsRef'] === 'string'
+      ? { transitionsRef: record['transitionsRef'] }
+      : {}),
     freshness: record['freshness'],
+  };
+}
+
+function parseOrderTransitionsResult(value: unknown): OrderTransitionsResult {
+  const record = requireRecord(value);
+  const allowedStates = new Set([
+    'OK',
+    'NOT_FOUND',
+    'DELETED',
+    'NO_ACTIVE_STORE',
+    'UNAUTHORIZED',
+    'CONTEXT_CHANGED',
+    'FORBIDDEN_ROLE',
+  ]);
+
+  if (!allowedStates.has(String(record['state']))) {
+    throw new MalformedBackendResponseError();
+  }
+
+  if (
+    record['state'] === 'OK' &&
+    (!isCallbackReference(record['ref'], 's') ||
+      !isString(record['currentStatus']) ||
+      !Array.isArray(record['targets']) ||
+      !record['targets'].every(isStatus))
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return record as unknown as OrderTransitionsResult;
+}
+
+function parseOrderStatusUpdateResult(value: unknown): OrderStatusUpdateResult {
+  const record = requireRecord(value);
+  const allowedStates = new Set([
+    'OK',
+    'NO_OP',
+    'RETRYABLE',
+    'FAILED',
+    'NOT_FOUND',
+    'DELETED',
+    'NO_ACTIVE_STORE',
+    'UNAUTHORIZED',
+    'CONTEXT_CHANGED',
+    'FORBIDDEN_ROLE',
+    'INVALID_TARGET',
+    'EXPIRED_REF',
+  ]);
+
+  if (
+    !allowedStates.has(String(record['state'])) ||
+    (record['backCursor'] !== undefined &&
+      !isCallbackReference(record['backCursor'])) ||
+    (record['freshness'] !== undefined && !isFreshness(record['freshness']))
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  const state = record['state'] as OrderStatusUpdateResult['state'];
+  const order =
+    record['order'] === undefined
+      ? undefined
+      : parseOrderDetailPayload(record['order']);
+
+  if (
+    (state === 'OK' || state === 'NO_OP') &&
+    (!order || !record['freshness'])
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return {
+    state,
+    ...(order ? { order } : {}),
+    ...(typeof record['backCursor'] === 'string'
+      ? { backCursor: record['backCursor'] }
+      : {}),
+    ...(record['freshness']
+      ? { freshness: record['freshness'] as OrderFreshness }
+      : {}),
   };
 }
 
@@ -364,7 +515,7 @@ function isNullableCallbackReference(value: unknown): boolean {
 
 function isCallbackReference(
   value: unknown,
-  prefix: 'p' | 'd' = 'p'
+  prefix: 'p' | 'd' | 's' = 'p'
 ): value is string {
   return (
     typeof value === 'string' &&
@@ -373,6 +524,10 @@ function isCallbackReference(
     ) &&
     value.length <= 64
   );
+}
+
+function isStatus(value: unknown): boolean {
+  return typeof value === 'string' && /^[a-z0-9-]{1,64}$/.test(value);
 }
 
 function isIsoDate(value: unknown): value is string {

@@ -73,6 +73,13 @@ export class WooCommerceClient {
     );
   }
 
+  updateOrderStatus(wcOrderId: string, status: string): Promise<unknown> {
+    return this.writeWithTotalTimeout<unknown>(
+      `${this.ordersUrl}/${encodeURIComponent(wcOrderId)}`,
+      { status }
+    );
+  }
+
   private async requestWithTotalTimeout<T>(url: string): Promise<T> {
     const controller = new AbortController();
     let totalTimeout: NodeJS.Timeout | undefined;
@@ -114,6 +121,38 @@ export class WooCommerceClient {
         error: normalized.message,
         category: normalized.category,
       };
+    }
+  }
+
+  private async writeWithTotalTimeout<T>(
+    url: string,
+    body: Readonly<Record<string, string>>
+  ): Promise<T> {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      this.options.resilience.totalTimeoutMs
+    );
+
+    try {
+      const response = await axios.put<T>(url, body, {
+        auth: {
+          username: this.options.consumerKey,
+          password: this.options.consumerSecret,
+        },
+        signal: controller.signal,
+        timeout: this.options.resilience.attemptTimeoutMs,
+      });
+
+      return response.data;
+    } catch (error: unknown) {
+      if (controller.signal.aborted) {
+        throw new WooCommerceClientError('timeout');
+      }
+
+      throw this.classifyFailure(error).error;
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

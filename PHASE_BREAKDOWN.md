@@ -271,7 +271,7 @@ satisfied. No next milestone is assigned.
 - No order-management logic, Store selection/switching, group support, or
   webhook transport
 
-### M11 — Telegram Order Listing & Detail (read-only) 🚧 In Review
+### M11 — Telegram Order Listing & Detail (read-only) ✅ Complete
 
 - Bot-only internal list and detail endpoints read M9 projections after
   backend-owned Telegram account, private-chat, active Membership, tenant, and
@@ -288,6 +288,26 @@ satisfied. No next milestone is assigned.
 - Freshness uses `Order.lastSyncedAt` and a configurable delayed threshold
 - No WooCommerce calls, writes, reconciliation, `/order` direct lookup, Store
   switching, group support, or next-milestone behavior
+
+### M12 — Telegram Order Status Update 🚧 Implemented / In Review
+
+- OWNER and ADMIN can open a server-derived status menu from an M11 order
+  detail; MEMBER remains read-only
+- Backend-owned conservative WooCommerce core transition mapping with a live
+  status recheck before every write
+- Dedicated short-lived `STATUS_WRITE` callback references bind account,
+  private chat, tenant, Store, order, allowed targets, and the first claimed
+  target
+- Durable reference-plus-target idempotency returns prior results and prevents
+  duplicate or delayed callbacks from issuing another WooCommerce write
+- One WooCommerce write dispatch followed by authoritative M9 projection
+  reconciliation; ambiguous responses reconcile through a live single-order
+  read before reporting
+- Stateless grammY target rendering and forwarding with edit-to-reply fallback
+- Migration `20260724090000_telegram_order_status_write`
+
+Phase 4 remains open until M12 is merged, validated against a real
+WooCommerce store, and accepted by A.
 
 ## Phase 5 — Core Store Management (MVP) ⬜ Planned
 

@@ -548,4 +548,65 @@ Accepted.
 
 ---
 
-Next decision number: D-021.
+## D-021
+
+Date
+
+2026-07-23
+
+Decision
+
+Telegram order-status writes use server-issued, short-lived
+HMAC-authenticated callback references with a dedicated `STATUS_WRITE`
+purpose. Each reference binds the Telegram account and private chat, tenant,
+Store, WooCommerce order key, server-derived allowed target set, issuance
+lifetime, and the first claimed target. OWNER and ADMIN memberships may write;
+MEMBER remains read-only. Full account, chat, Membership, tenant, and
+exactly-one-active-Store context is re-resolved for every request.
+
+The backend offers a conservative mapping of WooCommerce core status
+transitions and revalidates the selected target against live WooCommerce state
+before dispatch. Telegram only renders the targets returned by the backend and
+contains no status policy. The current mapping is:
+
+- `pending` → `processing`, `on-hold`, `cancelled`
+- `processing` → `on-hold`, `completed`, `cancelled`, `refunded`
+- `on-hold` → `processing`, `completed`, `cancelled`, `refunded`
+- `completed` → `processing`, `refunded`
+- `cancelled` → `pending`
+- `failed` → `pending`, `on-hold`, `cancelled`
+- `refunded` → no target
+
+Each reference is single-effect: its first target claim is durable, and a
+separate write record is unique by callback reference and target. Replays
+return the persisted result without another WooCommerce write. The
+WooCommerce update uses one dispatch without automatic write retry. If the
+response is lost, the backend reads the live order and reports success only
+when WooCommerce confirms the target.
+
+WooCommerce is authoritative. Successful update responses, no-op live reads,
+and lost-response reconciliation reads pass through the M9 authoritative
+projection path. The local projection never drives a WooCommerce write result.
+Successful status changes create a secret-safe audit record.
+
+Reason
+
+Server-owned transition policy and context-bound references prevent the bot or
+stale keyboards from selecting unauthorized state. Durable target claiming
+and result persistence prevent duplicate callbacks from repeating an external
+write, while live reconciliation prevents false success after an ambiguous
+network outcome.
+
+Boundary
+
+M12 adds only Telegram-initiated order status changes. It adds no notes,
+refund execution, direct order lookup, Store switching, custom-status
+discovery, notification delivery, or other order mutation.
+
+Status
+
+Accepted.
+
+---
+
+Next decision number: D-022.

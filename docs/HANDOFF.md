@@ -43,32 +43,33 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-020)
+## 3. Architectural Decisions (D-001–D-021)
 
-| ID    | Decision                                                                                                                                                                  | Status   |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| D-001 | Develop as production SaaS                                                                                                                                                | Accepted |
-| D-002 | NestJS for backend (alt: Fastify standalone)                                                                                                                              | Accepted |
-| D-003 | PostgreSQL as database                                                                                                                                                    | Accepted |
-| D-004 | Redis mandatory (cache, queues, sessions, rate-limiting)                                                                                                                  | Accepted |
-| D-005 | BullMQ for async jobs                                                                                                                                                     | Accepted |
-| D-006 | WooCommerce via REST API + Webhooks                                                                                                                                       | Accepted |
-| D-007 | Telegram is primary management UI                                                                                                                                         | Accepted |
-| D-008 | n8n excluded from production                                                                                                                                              | Accepted |
-| D-009 | WordPress plugin stays lightweight                                                                                                                                        | Accepted |
-| D-010 | Simplicity-first; no overengineering, no premature optimization                                                                                                           | Accepted |
-| D-011 | Prisma ORM + Prisma Migrate; `schema.prisma` is single source of truth; all models have `created_at`/`updated_at`; soft-delete on Tenant, Store, Membership               | Accepted |
-| D-012 | PrismaService uses Prisma's official PostgreSQL driver adapter                                                                                                            | Accepted |
-| D-013 | Global typed configuration uses `@nestjs/config` with Joi validation                                                                                                      | Accepted |
-| D-014 | One in-process BullMQ operations worker with three exponential-backoff attempts                                                                                           | Accepted |
-| D-015 | Fail-closed WooCommerce credential validation with bounded REST retries, timeouts, and secret-safe normalized errors                                                      | Accepted |
-| D-016 | WooCommerce-REST-only plugin registration verification, reissue-and-rotate recovery, and endpoint-scoped Redis limiting                                                   | Accepted |
-| D-017 | Dedicated encrypted webhook secrets, routing-only endpoint keys, raw-body HMAC authentication, recoverable idempotent persist/enqueue, and OWNER/ADMIN rotation           | Accepted |
-| D-018 | Store-scoped Order projection with timestamp/fingerprint ordering, processing-lease recovery, bounded single-order reconciliation, and verified delete/restore handling   | Accepted |
-| D-019 | Backend-owned one-time Telegram linking, bot-key internal API, private-chat-only authorization, update idempotency, exact-one context resolution, and soft unlinking      | Accepted |
-| D-020 | Read-only M9 Order access with bounded keyset pagination, `lastSyncedAt` freshness, and expiring HMAC-authenticated callback references bound to current Telegram context | Accepted |
+| ID    | Decision                                                                                                                                                                                            | Status   |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| D-001 | Develop as production SaaS                                                                                                                                                                          | Accepted |
+| D-002 | NestJS for backend (alt: Fastify standalone)                                                                                                                                                        | Accepted |
+| D-003 | PostgreSQL as database                                                                                                                                                                              | Accepted |
+| D-004 | Redis mandatory (cache, queues, sessions, rate-limiting)                                                                                                                                            | Accepted |
+| D-005 | BullMQ for async jobs                                                                                                                                                                               | Accepted |
+| D-006 | WooCommerce via REST API + Webhooks                                                                                                                                                                 | Accepted |
+| D-007 | Telegram is primary management UI                                                                                                                                                                   | Accepted |
+| D-008 | n8n excluded from production                                                                                                                                                                        | Accepted |
+| D-009 | WordPress plugin stays lightweight                                                                                                                                                                  | Accepted |
+| D-010 | Simplicity-first; no overengineering, no premature optimization                                                                                                                                     | Accepted |
+| D-011 | Prisma ORM + Prisma Migrate; `schema.prisma` is single source of truth; all models have `created_at`/`updated_at`; soft-delete on Tenant, Store, Membership                                         | Accepted |
+| D-012 | PrismaService uses Prisma's official PostgreSQL driver adapter                                                                                                                                      | Accepted |
+| D-013 | Global typed configuration uses `@nestjs/config` with Joi validation                                                                                                                                | Accepted |
+| D-014 | One in-process BullMQ operations worker with three exponential-backoff attempts                                                                                                                     | Accepted |
+| D-015 | Fail-closed WooCommerce credential validation with bounded REST retries, timeouts, and secret-safe normalized errors                                                                                | Accepted |
+| D-016 | WooCommerce-REST-only plugin registration verification, reissue-and-rotate recovery, and endpoint-scoped Redis limiting                                                                             | Accepted |
+| D-017 | Dedicated encrypted webhook secrets, routing-only endpoint keys, raw-body HMAC authentication, recoverable idempotent persist/enqueue, and OWNER/ADMIN rotation                                     | Accepted |
+| D-018 | Store-scoped Order projection with timestamp/fingerprint ordering, processing-lease recovery, bounded single-order reconciliation, and verified delete/restore handling                             | Accepted |
+| D-019 | Backend-owned one-time Telegram linking, bot-key internal API, private-chat-only authorization, update idempotency, exact-one context resolution, and soft unlinking                                | Accepted |
+| D-020 | Read-only M9 Order access with bounded keyset pagination, `lastSyncedAt` freshness, and expiring HMAC-authenticated callback references bound to current Telegram context                           | Accepted |
+| D-021 | OWNER/ADMIN Telegram order-status writes using server-derived targets, single-effect HMAC references, durable idempotency, one WooCommerce dispatch, and authoritative/lost-response reconciliation | Accepted |
 
-Next decision number: **D-021**, if a future task produces a genuine
+Next decision number: **D-022**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -512,7 +513,7 @@ Migration: `20260723120000_woocommerce_webhook_ingestion`.
 - Groups, supergroups, and channels receive a safe rejection. Order management,
   Store switching, and webhook transport remain excluded.
 
-#### M11 — Telegram Order Listing & Detail (read-only) (in review)
+#### M11 — Telegram Order Listing & Detail (read-only) (complete)
 
 Internal endpoint contracts:
 
@@ -564,6 +565,35 @@ Bot transport:
 - The bot has no Prisma import, database connection, WooCommerce call, filtering,
   ownership parsing, or domain mutation.
 
+#### M12 — Telegram Order Status Update (implemented; in review)
+
+- `POST /api/internal/telegram/orders/transitions` accepts an M11 detail
+  reference, revalidates current context and OWNER/ADMIN role, derives a
+  conservative WooCommerce core target set, and returns a new `STATUS_WRITE`
+  reference.
+- `POST /api/internal/telegram/orders/status` verifies signature, purpose,
+  expiry, target binding, first-target claim, live context, role, Store, and
+  Order before any external write.
+- Migration `20260724090000_telegram_order_status_write` extends the existing
+  callback-reference model with allowed/claimed targets and adds durable
+  reference-plus-target write records. The complete eight-migration chain
+  applied cleanly to an isolated PostgreSQL database and Prisma reported it up
+  to date.
+- Duplicate and delayed callbacks return the persisted result without a second
+  WooCommerce write; a write reference cannot be reused for a different
+  target.
+- The backend reads live WooCommerce state, revalidates the transition, and
+  dispatches one status update without automatic write retry. A missing
+  response is resolved through a live single-order read before success is
+  reported.
+- WooCommerce update/read payloads reconcile through the authoritative M9
+  projection path. Successful writes create secret-safe audit records.
+- The grammY bot renders only backend-provided targets, forwards the selected
+  target, and retains M11 edit-to-reply fallback. It has no Prisma, database,
+  WooCommerce, or status-policy logic.
+- Phase 4 stays open until M12 is merged, validated against a real WooCommerce
+  store, and accepted by A.
+
 ---
 
 ## 5. Current Repository Structure
@@ -583,9 +613,9 @@ None.
 
 ## 7. Current Task
 
-M11 — Telegram Order Listing & Detail (read-only) is implemented and
-awaiting review. Do not begin another milestone without explicit approval from
-A.
+M12 — Telegram Order Status Update is implemented and awaiting review. Do not
+begin another milestone until M12 is merged, validated against a real
+WooCommerce store, and accepted by A.
 
 ---
 

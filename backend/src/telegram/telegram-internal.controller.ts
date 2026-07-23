@@ -18,10 +18,14 @@ import {
   type TelegramRedeemDto,
   type TelegramOrderDetailDto,
   type TelegramOrderListDto,
+  type TelegramOrderStatusUpdateDto,
+  type TelegramOrderTransitionsDto,
   type TelegramStatusDto,
   type TelegramUnlinkDto,
   telegramOrderDetailSchema,
   telegramOrderListSchema,
+  telegramOrderStatusUpdateSchema,
+  telegramOrderTransitionsSchema,
   telegramRedeemSchema,
   telegramStatusSchema,
   telegramUnlinkSchema,
@@ -38,6 +42,8 @@ import {
 import {
   type TelegramOrderDetailResult,
   type TelegramOrderListResult,
+  type TelegramOrderStatusUpdateResult,
+  type TelegramOrderTransitionsResult,
   TelegramOrderService,
 } from './telegram-order.service';
 
@@ -116,6 +122,32 @@ export class TelegramInternalController {
   ): Promise<TelegramOrderDetailResult> {
     this.assertUpdateIdHeader(headerUpdateId);
     return this.orders.detail(input);
+  }
+
+  @Post('orders/transitions')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  orderTransitions(
+    @Body(new JoiValidationPipe(telegramOrderTransitionsSchema))
+    input: TelegramOrderTransitionsDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramOrderTransitionsResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.orders.transitions(input);
+  }
+
+  @Post('orders/status')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  updateOrderStatus(
+    @Body(new JoiValidationPipe(telegramOrderStatusUpdateSchema))
+    input: TelegramOrderStatusUpdateDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramOrderStatusUpdateResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.orders.updateStatus(input);
   }
 
   private assertUpdateId(bodyUpdateId: string, headerUpdateId?: string): void {

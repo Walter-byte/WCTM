@@ -8,12 +8,25 @@ import {
 } from '@prisma/client';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
+import { EncryptionService } from '../common/encryption/encryption.service';
 import { ApplicationConfigService } from '../config/application-config.service';
+import {
+  OrderProjectionService,
+  type ProjectableStore,
+} from '../orders/order-projection.service';
+import { mapWooCommerceOrder } from '../orders/order-payload.mapper';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  type WooCommerceErrorCategory,
+  WooCommerceClient,
+  WooCommerceClientError,
+} from '../woocommerce/client/woocommerce.client';
 import type {
   TelegramOrderDetailDto,
   TelegramOrderIdentityDto,
   TelegramOrderListDto,
+  TelegramOrderStatusUpdateDto,
+  TelegramOrderTransitionsDto,
 } from './dto/telegram-internal.dto';
 
 const PAGE_SIZE = 8;
@@ -21,6 +34,20 @@ const REACHABLE_ORDER_CAP = 200;
 const CALLBACK_ID_BYTES = 12;
 const CALLBACK_SIGNATURE_BYTES = 12;
 const EMPTY_FRESHNESS_DATE = new Date(0);
+const RETRYABLE_WOOCOMMERCE_CATEGORIES = new Set<WooCommerceErrorCategory>([
+  'transport',
+  'rate-limited',
+  'timeout',
+]);
+const CORE_STATUS_TRANSITIONS: Readonly<Record<string, readonly string[]>> = {
+  pending: ['processing', 'on-hold', 'cancelled'],
+  processing: ['on-hold', 'completed', 'cancelled', 'refunded'],
+  'on-hold': ['processing', 'completed', 'cancelled', 'refunded'],
+  completed: ['processing', 'refunded'],
+  cancelled: ['pending'],
+  refunded: [],
+  failed: ['pending', 'on-hold', 'cancelled'],
+};
 
 const ORDER_LIST_SELECT = {
   wcOrderId: true,
@@ -61,6 +88,8 @@ const CALLBACK_REFERENCE_SELECT = {
   targetWcOrderId: true,
   reachableOffset: true,
   backReferenceId: true,
+  allowedTargetStatuses: true,
+  claimedTargetStatus: true,
   expiresAt: true,
 } satisfies Prisma.TelegramCallbackReferenceSelect;
 
@@ -138,7 +167,45 @@ export interface TelegramOrderDetailResult {
   state: TelegramOrderDetailState;
   order?: TelegramOrderDetail | TelegramDeletedOrderMarker;
   backCursor?: string;
+  transitionsRef?: string;
   freshness: TelegramOrderFreshness;
+}
+
+export type TelegramOrderTransitionsState =
+  | 'OK'
+  | 'NOT_FOUND'
+  | 'DELETED'
+  | 'NO_ACTIVE_STORE'
+  | 'UNAUTHORIZED'
+  | 'CONTEXT_CHANGED'
+  | 'FORBIDDEN_ROLE';
+
+export interface TelegramOrderTransitionsResult {
+  state: TelegramOrderTransitionsState;
+  ref?: string;
+  currentStatus?: string;
+  targets?: string[];
+}
+
+export type TelegramOrderStatusUpdateState =
+  | 'OK'
+  | 'NO_OP'
+  | 'RETRYABLE'
+  | 'FAILED'
+  | 'NOT_FOUND'
+  | 'DELETED'
+  | 'NO_ACTIVE_STORE'
+  | 'UNAUTHORIZED'
+  | 'CONTEXT_CHANGED'
+  | 'FORBIDDEN_ROLE'
+  | 'INVALID_TARGET'
+  | 'EXPIRED_REF';
+
+export interface TelegramOrderStatusUpdateResult {
+  state: TelegramOrderStatusUpdateState;
+  order?: TelegramOrderDetail;
+  backCursor?: string;
+  freshness?: TelegramOrderFreshness;
 }
 
 interface TelegramOrderContext {
@@ -163,7 +230,9 @@ interface NewReference {
 export class TelegramOrderService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly configuration: ApplicationConfigService
+    private readonly configuration: ApplicationConfigService,
+    private readonly encryption: EncryptionService,
+    private readonly orderProjection: OrderProjectionService
   ) {}
 
   async list(input: TelegramOrderListDto): Promise<TelegramOrderListResult> {
@@ -370,8 +439,308 @@ export class TelegramOrderService {
       state: 'OK',
       order: this.toDetail(order),
       backCursor,
+      ...(context.role !== MembershipRole.MEMBER &&
+      (CORE_STATUS_TRANSITIONS[order.status]?.length ?? 0) > 0
+        ? { transitionsRef: input.ref }
+        : {}),
       freshness,
     };
+  }
+
+  async transitions(
+    input: TelegramOrderTransitionsDto
+  ): Promise<TelegramOrderTransitionsResult> {
+    const resolution = await this.resolveContext(input.telegram);
+
+    if (resolution.state !== 'OK') {
+      return { state: resolution.state };
+    }
+
+    const context = resolution.context;
+    const reference = await this.validateReference(
+      input.ref,
+      TelegramCallbackPurpose.ORDER_DETAIL,
+      context
+    );
+
+    if (!reference?.targetWcOrderId || !reference.backReferenceId) {
+      return { state: 'CONTEXT_CHANGED' };
+    }
+
+    if (context.role === MembershipRole.MEMBER) {
+      return { state: 'FORBIDDEN_ROLE' };
+    }
+
+    const order = await this.prisma.order.findFirst({
+      where: {
+        tenantId: context.tenantId,
+        storeId: context.storeId,
+        wcOrderId: reference.targetWcOrderId,
+        tenant: { deletedAt: null },
+        store: { deletedAt: null, status: StoreStatus.ACTIVE },
+      },
+      select: { status: true, remoteDeletedAt: true },
+    });
+
+    if (!order) {
+      return { state: 'NOT_FOUND' };
+    }
+
+    if (order.remoteDeletedAt) {
+      return { state: 'DELETED' };
+    }
+
+    const targets = [...(CORE_STATUS_TRANSITIONS[order.status] ?? [])];
+    const writeReference = this.newReference(
+      's',
+      context,
+      {
+        purpose: TelegramCallbackPurpose.STATUS_WRITE,
+        targetWcOrderId: reference.targetWcOrderId,
+        backReferenceId: reference.backReferenceId,
+        allowedTargetStatuses: targets,
+      },
+      new Date(
+        Date.now() + this.configuration.telegram.callbackRefTtlSeconds * 1000
+      )
+    );
+
+    await this.prisma.telegramCallbackReference.create({
+      data: writeReference.data,
+      select: { id: true },
+    });
+
+    return {
+      state: 'OK',
+      ref: writeReference.token,
+      currentStatus: order.status,
+      targets,
+    };
+  }
+
+  async updateStatus(
+    input: TelegramOrderStatusUpdateDto
+  ): Promise<TelegramOrderStatusUpdateResult> {
+    const resolution = await this.resolveContext(input.telegram);
+
+    if (resolution.state !== 'OK') {
+      return { state: resolution.state };
+    }
+
+    const context = resolution.context;
+
+    if (context.role === MembershipRole.MEMBER) {
+      return { state: 'FORBIDDEN_ROLE' };
+    }
+
+    const parsed = this.parseAndVerifyToken(input.ref, 's');
+
+    if (!parsed) {
+      return { state: 'CONTEXT_CHANGED' };
+    }
+
+    const reference = await this.prisma.telegramCallbackReference.findUnique({
+      where: { id: parsed.referenceId },
+      select: CALLBACK_REFERENCE_SELECT,
+    });
+
+    if (
+      !reference ||
+      reference.purpose !== TelegramCallbackPurpose.STATUS_WRITE
+    ) {
+      return { state: 'CONTEXT_CHANGED' };
+    }
+
+    if (reference.expiresAt <= new Date()) {
+      return this.referenceStatusDetail('EXPIRED_REF', reference, context);
+    }
+
+    if (!this.referenceMatchesContext(reference, context)) {
+      return { state: 'CONTEXT_CHANGED' };
+    }
+
+    if (
+      !reference.targetWcOrderId ||
+      !reference.backReferenceId ||
+      !reference.allowedTargetStatuses.includes(input.target)
+    ) {
+      return { state: 'INVALID_TARGET' };
+    }
+
+    const order = await this.prisma.order.findFirst({
+      where: {
+        tenantId: context.tenantId,
+        storeId: context.storeId,
+        wcOrderId: reference.targetWcOrderId,
+        tenant: { deletedAt: null },
+        store: { deletedAt: null, status: StoreStatus.ACTIVE },
+      },
+      select: { remoteDeletedAt: true },
+    });
+
+    if (!order) {
+      return { state: 'NOT_FOUND' };
+    }
+
+    if (order.remoteDeletedAt) {
+      return { state: 'DELETED' };
+    }
+
+    const store = await this.loadWritableStore(context);
+
+    if (!store) {
+      return { state: 'NO_ACTIVE_STORE' };
+    }
+
+    const existing = await this.prisma.telegramOrderStatusWrite.findUnique({
+      where: {
+        callbackReferenceId_targetStatus: {
+          callbackReferenceId: reference.id,
+          targetStatus: input.target,
+        },
+      },
+      select: { id: true, result: true },
+    });
+
+    if (existing?.result) {
+      return existing.result as unknown as TelegramOrderStatusUpdateResult;
+    }
+
+    if (existing) {
+      return { state: 'RETRYABLE' };
+    }
+
+    let livePayload: unknown;
+
+    try {
+      livePayload = await this.createWooCommerceClient(store).fetchOrder(
+        reference.targetWcOrderId
+      );
+      await this.orderProjection.reconcileAuthoritativeOrder(
+        store,
+        livePayload,
+        reference.targetWcOrderId
+      );
+    } catch (error: unknown) {
+      return { state: this.failureState(error) };
+    }
+
+    const liveStatus = this.readMappedStatus(
+      livePayload,
+      reference.targetWcOrderId
+    );
+
+    if (!liveStatus) {
+      return { state: 'FAILED' };
+    }
+
+    if (
+      liveStatus !== input.target &&
+      !(CORE_STATUS_TRANSITIONS[liveStatus] ?? []).includes(input.target)
+    ) {
+      return { state: 'INVALID_TARGET' };
+    }
+
+    const claim = await this.prisma.telegramCallbackReference.updateMany({
+      where: {
+        id: reference.id,
+        OR: [
+          { claimedTargetStatus: null },
+          { claimedTargetStatus: input.target },
+        ],
+      },
+      data: { claimedTargetStatus: input.target },
+    });
+
+    if (claim.count !== 1) {
+      return { state: 'INVALID_TARGET' };
+    }
+
+    let writeId: string;
+
+    try {
+      const write = await this.prisma.telegramOrderStatusWrite.create({
+        data: {
+          id: `tosw_${randomBytes(16).toString('hex')}`,
+          callbackReferenceId: reference.id,
+          telegramAccountId: context.accountId,
+          tenantId: context.tenantId,
+          storeId: context.storeId,
+          wcOrderId: reference.targetWcOrderId,
+          targetStatus: input.target,
+        },
+        select: { id: true },
+      });
+      writeId = write.id;
+    } catch (error: unknown) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      const concurrent = await this.prisma.telegramOrderStatusWrite.findUnique({
+        where: {
+          callbackReferenceId_targetStatus: {
+            callbackReferenceId: reference.id,
+            targetStatus: input.target,
+          },
+        },
+        select: { result: true },
+      });
+
+      return concurrent?.result
+        ? (concurrent.result as unknown as TelegramOrderStatusUpdateResult)
+        : { state: 'RETRYABLE' };
+    }
+
+    if (liveStatus === input.target) {
+      return this.completeStatusWrite(
+        writeId,
+        'NO_OP',
+        context,
+        reference.targetWcOrderId,
+        input.target,
+        reference.backReferenceId
+      );
+    }
+
+    try {
+      const updatedPayload = await this.createWooCommerceClient(
+        store
+      ).updateOrderStatus(reference.targetWcOrderId, input.target);
+      const updatedStatus = this.readMappedStatus(
+        updatedPayload,
+        reference.targetWcOrderId
+      );
+
+      await this.orderProjection.reconcileAuthoritativeOrder(
+        store,
+        updatedPayload,
+        reference.targetWcOrderId
+      );
+
+      if (updatedStatus !== input.target) {
+        return this.completeFailure(writeId, 'FAILED');
+      }
+
+      return this.completeStatusWrite(
+        writeId,
+        'OK',
+        context,
+        reference.targetWcOrderId,
+        input.target,
+        reference.backReferenceId
+      );
+    } catch (error: unknown) {
+      return this.reconcileLostWrite(
+        writeId,
+        error,
+        context,
+        store,
+        reference.targetWcOrderId,
+        input.target,
+        reference.backReferenceId
+      );
+    }
   }
 
   private async resolveContext(
@@ -464,6 +833,220 @@ export class TelegramOrderService {
     };
   }
 
+  private loadWritableStore(
+    context: TelegramOrderContext
+  ): Promise<ProjectableStore | null> {
+    return this.prisma.store.findFirst({
+      where: {
+        id: context.storeId,
+        tenantId: context.tenantId,
+        status: StoreStatus.ACTIVE,
+        deletedAt: null,
+        tenant: { deletedAt: null },
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        baseUrl: true,
+        consumerKeyEncrypted: true,
+        consumerSecretEncrypted: true,
+      },
+    });
+  }
+
+  private createWooCommerceClient(store: ProjectableStore): WooCommerceClient {
+    return new WooCommerceClient({
+      storeUrl: store.baseUrl,
+      consumerKey: this.encryption.decrypt(store.consumerKeyEncrypted),
+      consumerSecret: this.encryption.decrypt(store.consumerSecretEncrypted),
+      resilience: this.configuration.woocommerce.rest,
+    });
+  }
+
+  private readMappedStatus(
+    payload: unknown,
+    expectedWcOrderId: string
+  ): string | undefined {
+    try {
+      const mapped = mapWooCommerceOrder(payload);
+
+      return mapped.wcOrderId === expectedWcOrderId ? mapped.status : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private failureState(error: unknown): 'RETRYABLE' | 'FAILED' | 'NOT_FOUND' {
+    if (error instanceof WooCommerceClientError) {
+      if (error.category === 'not-found') {
+        return 'NOT_FOUND';
+      }
+
+      return RETRYABLE_WOOCOMMERCE_CATEGORIES.has(error.category)
+        ? 'RETRYABLE'
+        : 'FAILED';
+    }
+
+    return 'FAILED';
+  }
+
+  private async reconcileLostWrite(
+    writeId: string,
+    writeError: unknown,
+    context: TelegramOrderContext,
+    store: ProjectableStore,
+    wcOrderId: string,
+    target: string,
+    backReferenceId: string
+  ): Promise<TelegramOrderStatusUpdateResult> {
+    try {
+      const livePayload =
+        await this.createWooCommerceClient(store).fetchOrder(wcOrderId);
+      await this.orderProjection.reconcileAuthoritativeOrder(
+        store,
+        livePayload,
+        wcOrderId
+      );
+
+      if (this.readMappedStatus(livePayload, wcOrderId) === target) {
+        return this.completeStatusWrite(
+          writeId,
+          'OK',
+          context,
+          wcOrderId,
+          target,
+          backReferenceId
+        );
+      }
+
+      return this.completeFailure(writeId, this.failureState(writeError));
+    } catch (reconciliationError: unknown) {
+      return this.completeFailure(
+        writeId,
+        this.failureState(reconciliationError)
+      );
+    }
+  }
+
+  private async completeStatusWrite(
+    writeId: string,
+    state: 'OK' | 'NO_OP',
+    context: TelegramOrderContext,
+    wcOrderId: string,
+    target: string,
+    backReferenceId: string
+  ): Promise<TelegramOrderStatusUpdateResult> {
+    const order = await this.prisma.order.findFirst({
+      where: {
+        tenantId: context.tenantId,
+        storeId: context.storeId,
+        wcOrderId,
+        tenant: { deletedAt: null },
+        store: { deletedAt: null, status: StoreStatus.ACTIVE },
+      },
+      select: ORDER_DETAIL_SELECT,
+    });
+
+    if (!order || order.remoteDeletedAt) {
+      return this.completeFailure(writeId, !order ? 'NOT_FOUND' : 'DELETED');
+    }
+
+    const result: TelegramOrderStatusUpdateResult = {
+      state,
+      order: this.toDetail(order),
+      backCursor: this.tokenForReferenceId('p', backReferenceId),
+      freshness: this.freshness(order.lastSyncedAt),
+    };
+    const completedAt = new Date();
+
+    await this.prisma.$transaction([
+      this.prisma.telegramOrderStatusWrite.update({
+        where: { id: writeId },
+        data: {
+          outcome: state,
+          result: result as unknown as Prisma.InputJsonObject,
+          completedAt,
+        },
+        select: { id: true },
+      }),
+      ...(state === 'OK'
+        ? [
+            this.prisma.auditLog.create({
+              data: {
+                id: `aud_${randomBytes(16).toString('hex')}`,
+                tenantId: context.tenantId,
+                userId: context.userId,
+                action: 'telegram.order.status.updated',
+                entityType: 'Order',
+                entityId: wcOrderId,
+                metadata: {
+                  storeId: context.storeId,
+                  targetStatus: target,
+                },
+              },
+              select: { id: true },
+            }),
+          ]
+        : []),
+    ]);
+
+    return result;
+  }
+
+  private async referenceStatusDetail(
+    state: 'EXPIRED_REF',
+    reference: CallbackReference,
+    context: TelegramOrderContext
+  ): Promise<TelegramOrderStatusUpdateResult> {
+    if (!reference.targetWcOrderId || !reference.backReferenceId) {
+      return { state };
+    }
+
+    const order = await this.prisma.order.findFirst({
+      where: {
+        tenantId: context.tenantId,
+        storeId: context.storeId,
+        wcOrderId: reference.targetWcOrderId,
+        tenant: { deletedAt: null },
+        store: { deletedAt: null, status: StoreStatus.ACTIVE },
+      },
+      select: ORDER_DETAIL_SELECT,
+    });
+
+    if (!order || order.remoteDeletedAt) {
+      return { state };
+    }
+
+    return {
+      state,
+      order: this.toDetail(order),
+      backCursor: this.tokenForReferenceId('p', reference.backReferenceId),
+      freshness: this.freshness(order.lastSyncedAt),
+    };
+  }
+
+  private async completeFailure(
+    writeId: string,
+    state: Exclude<
+      TelegramOrderStatusUpdateState,
+      'OK' | 'NO_OP' | 'UNAUTHORIZED' | 'NO_ACTIVE_STORE' | 'CONTEXT_CHANGED'
+    >
+  ): Promise<TelegramOrderStatusUpdateResult> {
+    const result: TelegramOrderStatusUpdateResult = { state };
+
+    await this.prisma.telegramOrderStatusWrite.update({
+      where: { id: writeId },
+      data: {
+        outcome: state,
+        result: result as unknown as Prisma.InputJsonObject,
+        completedAt: new Date(),
+      },
+      select: { id: true },
+    });
+
+    return result;
+  }
+
   private queryPage(
     context: TelegramOrderContext,
     direction: TelegramCallbackDirection,
@@ -542,8 +1125,20 @@ export class TelegramOrderService {
     return reference;
   }
 
+  private referenceMatchesContext(
+    reference: CallbackReference,
+    context: TelegramOrderContext
+  ): boolean {
+    return (
+      reference.telegramAccountId === context.accountId &&
+      reference.telegramChatId === context.telegramChatId &&
+      reference.tenantId === context.tenantId &&
+      reference.storeId === context.storeId
+    );
+  }
+
   private newReference(
-    prefix: 'p' | 'd',
+    prefix: 'p' | 'd' | 's',
     context: TelegramOrderContext,
     values: Pick<
       Prisma.TelegramCallbackReferenceCreateManyInput,
@@ -554,6 +1149,7 @@ export class TelegramOrderService {
       | 'targetWcOrderId'
       | 'reachableOffset'
       | 'backReferenceId'
+      | 'allowedTargetStatuses'
     >,
     expiresAt: Date
   ): NewReference {
@@ -574,7 +1170,10 @@ export class TelegramOrderService {
     };
   }
 
-  private tokenForReferenceId(prefix: 'p' | 'd', referenceId: string): string {
+  private tokenForReferenceId(
+    prefix: 'p' | 'd' | 's',
+    referenceId: string
+  ): string {
     const shortId = referenceId.replace(/^tcr_/, '');
     const signedValue = `${prefix}.${shortId}`;
     const signature = createHmac(
@@ -591,7 +1190,7 @@ export class TelegramOrderService {
 
   private parseAndVerifyToken(
     token: string,
-    expectedPrefix: 'p' | 'd'
+    expectedPrefix: 'p' | 'd' | 's'
   ): { referenceId: string } | undefined {
     const parts = token.split('.');
 
@@ -761,4 +1360,13 @@ function jsonRecord(
   return value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, Prisma.JsonValue>)
     : undefined;
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'code' in error &&
+    error.code === 'P2002'
+  );
 }

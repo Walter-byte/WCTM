@@ -5,7 +5,9 @@ import type {
   OrderDetailPayload,
   OrderDetailResult,
   OrderListResult,
+  OrderStatusUpdateResult,
   OrderSummary,
+  OrderTransitionsResult,
 } from './internal-backend.client';
 import { UpdateDeduplicator } from './update-deduplicator';
 
@@ -218,6 +220,66 @@ export function createBot(
     }
   );
 
+  bot.callbackQuery(
+    /^t:d\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/,
+    async (context) => {
+      const identity = privateIdentity(context);
+
+      if (!identity) {
+        await safeAnswerCallback(context);
+        return;
+      }
+
+      try {
+        const detailRef = context.callbackQuery.data.slice(2);
+        const result = await dependencies.backend.orderTransitions(
+          identity,
+          detailRef
+        );
+        const rendered = renderOrderTransitions(result, detailRef);
+
+        await safeAnswerCallback(context);
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      } catch (error: unknown) {
+        logTransportFailure(log, identity.updateId, error);
+        await safeAnswerCallback(context);
+        await context.reply(transportFailureMessage(error));
+      }
+    }
+  );
+
+  bot.callbackQuery(
+    /^s\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}:[a-z0-9-]{1,25}$/,
+    async (context) => {
+      const identity = privateIdentity(context);
+
+      if (!identity) {
+        await safeAnswerCallback(context);
+        return;
+      }
+
+      const separator = context.callbackQuery.data.lastIndexOf(':');
+      const ref = context.callbackQuery.data.slice(0, separator);
+      const target = context.callbackQuery.data.slice(separator + 1);
+
+      try {
+        const result = await dependencies.backend.updateOrderStatus(
+          identity,
+          ref,
+          target
+        );
+        const rendered = renderOrderStatusUpdate(result);
+
+        await safeAnswerCallback(context);
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      } catch (error: unknown) {
+        logTransportFailure(log, identity.updateId, error);
+        await safeAnswerCallback(context);
+        await context.reply(transportFailureMessage(error));
+      }
+    }
+  );
+
   return bot;
 }
 
@@ -325,6 +387,10 @@ export function renderOrderDetail(result: OrderDetailResult): {
     keyboard.text('Back to orders', result.backCursor);
   }
 
+  if (result.transitionsRef) {
+    keyboard.row().text('Change status', `t:${result.transitionsRef}`);
+  }
+
   if (result.state === 'CONTEXT_CHANGED') {
     return { text: EXPIRED_LIST_MESSAGE, keyboard: new InlineKeyboard() };
   }
@@ -361,6 +427,96 @@ export function renderOrderDetail(result: OrderDetailResult): {
     text: renderActiveOrderDetail(result.order, result.freshness),
     keyboard,
   };
+}
+
+export function renderOrderTransitions(
+  result: OrderTransitionsResult,
+  detailRef: string
+): { text: string; keyboard: InlineKeyboard } {
+  const keyboard = new InlineKeyboard();
+
+  if (result.state !== 'OK' || !result.ref || !result.targets) {
+    return {
+      text: orderWriteStateMessage(result.state),
+      keyboard: new InlineKeyboard().text('Back to order', detailRef),
+    };
+  }
+
+  for (const target of result.targets) {
+    keyboard.text(target, `${result.ref}:${target}`).row();
+  }
+
+  keyboard.text('Back to order', detailRef);
+
+  return {
+    text:
+      result.targets.length === 0
+        ? `No supported transitions are available from ${result.currentStatus ?? 'the current status'}.`
+        : `Change status from ${result.currentStatus ?? 'the current status'}:`,
+    keyboard,
+  };
+}
+
+export function renderOrderStatusUpdate(result: OrderStatusUpdateResult): {
+  text: string;
+  keyboard: InlineKeyboard;
+} {
+  if (result.order && result.freshness) {
+    const rendered = renderOrderDetail({
+      state: 'OK',
+      order: result.order,
+      ...(result.backCursor ? { backCursor: result.backCursor } : {}),
+      freshness: result.freshness,
+    });
+
+    return {
+      text: `${
+        result.state === 'OK'
+          ? 'Status updated.'
+          : result.state === 'NO_OP'
+            ? 'The order already has that status.'
+            : orderWriteStateMessage(result.state)
+      }\n\n${rendered.text}`,
+      keyboard: rendered.keyboard,
+    };
+  }
+
+  const keyboard = new InlineKeyboard();
+
+  if (result.backCursor) {
+    keyboard.text('Back to orders', result.backCursor);
+  }
+
+  return { text: orderWriteStateMessage(result.state), keyboard };
+}
+
+function orderWriteStateMessage(
+  state: OrderTransitionsResult['state'] | OrderStatusUpdateResult['state']
+): string {
+  switch (state) {
+    case 'FORBIDDEN_ROLE':
+      return 'Your membership can view orders but cannot change their status.';
+    case 'UNAUTHORIZED':
+      return UNAUTHORIZED_ORDERS_MESSAGE;
+    case 'NO_ACTIVE_STORE':
+      return NO_ACTIVE_STORE_MESSAGE;
+    case 'CONTEXT_CHANGED':
+      return EXPIRED_LIST_MESSAGE;
+    case 'EXPIRED_REF':
+      return 'This status action expired. Open the order again to retry.';
+    case 'INVALID_TARGET':
+      return 'That status is not available for this order.';
+    case 'RETRYABLE':
+      return 'WooCommerce could not confirm the change. Please check the order and try again.';
+    case 'FAILED':
+      return 'WooCommerce did not accept the status change.';
+    case 'DELETED':
+      return 'This order was deleted in WooCommerce.';
+    case 'NOT_FOUND':
+      return 'This order is no longer available.';
+    default:
+      return 'No status change is available.';
+  }
 }
 
 async function editOrReply(

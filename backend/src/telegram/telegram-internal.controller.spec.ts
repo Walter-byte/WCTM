@@ -24,6 +24,12 @@ describe('TelegramInternalController authentication boundaries', () => {
     expect(Reflect.getMetadata(IS_PUBLIC_KEY, prototype.orderDetail)).toBe(
       true
     );
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, prototype.orderTransitions)).toBe(
+      true
+    );
+    expect(
+      Reflect.getMetadata(IS_PUBLIC_KEY, prototype.updateOrderStatus)
+    ).toBe(true);
   });
 
   it('rejects a body/header update identity mismatch before service access', () => {

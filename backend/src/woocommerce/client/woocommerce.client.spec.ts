@@ -166,6 +166,29 @@ describe('WooCommerceClient', () => {
     );
   });
 
+  it('dispatches one status write without automatically retrying it', async () => {
+    const payload = { id: 101, status: 'completed' };
+    const request = jest
+      .spyOn(axios, 'put')
+      .mockResolvedValue({ data: payload });
+
+    await expect(
+      client().updateOrderStatus('101', 'completed')
+    ).resolves.toEqual(payload);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledWith(
+      'https://shop.example/wp-json/wc/v3/orders/101',
+      { status: 'completed' },
+      expect.objectContaining({
+        timeout: 5000,
+        auth: {
+          username: 'ck_sensitive_value',
+          password: 'cs_sensitive_value',
+        },
+      })
+    );
+  });
+
   it('enforces the total operation hard cap and aborts the active request', async () => {
     jest.useFakeTimers();
     const request = jest
