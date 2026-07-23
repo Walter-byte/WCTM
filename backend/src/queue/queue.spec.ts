@@ -12,6 +12,7 @@ import {
   type ReferenceJobResult,
   ReferenceProcessor,
 } from './reference.processor';
+import type { WooCommerceWebhookProcessor } from './woocommerce-webhook.processor';
 
 type ReferenceJob = Job<
   ReferenceJobData,
@@ -28,6 +29,11 @@ function job(data: Partial<ReferenceJobData>, attemptsMade = 0): ReferenceJob {
     opts: { attempts: REFERENCE_JOB_ATTEMPTS },
   } as ReferenceJob;
 }
+
+const webhookProcessor = (): WooCommerceWebhookProcessor =>
+  ({
+    markFailed: jest.fn().mockResolvedValue(undefined as never),
+  }) as unknown as WooCommerceWebhookProcessor;
 
 describe('M5 operations queue', () => {
   it('enqueues a reference job with tenant identity from server context', async () => {
@@ -77,7 +83,7 @@ describe('M5 operations queue', () => {
     });
   });
 
-  it('logs a structured error only after retry exhaustion', () => {
+  it('logs a structured error only after retry exhaustion', async () => {
     const error = jest.fn();
     const logger = { error } as unknown as StructuredLoggerService;
     const configuration = {
@@ -87,16 +93,17 @@ describe('M5 operations queue', () => {
     const runtime = new QueueRuntimeService(
       configuration,
       new ReferenceProcessor(),
+      webhookProcessor(),
       logger
     );
 
-    runtime.handleFailed(
+    await runtime.handleFailed(
       job({ tenantId: 'ten_a' }, REFERENCE_JOB_ATTEMPTS - 1),
       new Error('transient')
     );
     expect(error).not.toHaveBeenCalled();
 
-    runtime.handleFailed(
+    await runtime.handleFailed(
       job({ tenantId: 'ten_a' }, REFERENCE_JOB_ATTEMPTS),
       new Error('terminal secret-safe failure')
     );
@@ -128,6 +135,7 @@ describe('M5 operations queue', () => {
         redis: { url: 'redis://localhost:6379' },
       } as ApplicationConfigService,
       new ReferenceProcessor(),
+      webhookProcessor(),
       { error: jest.fn() } as unknown as StructuredLoggerService
     );
 
@@ -155,6 +163,7 @@ describe('M5 operations queue', () => {
         redis: { url: 'redis://localhost:6379' },
       } as ApplicationConfigService,
       new ReferenceProcessor(),
+      webhookProcessor(),
       { error: jest.fn() } as unknown as StructuredLoggerService
     );
 

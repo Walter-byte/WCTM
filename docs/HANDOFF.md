@@ -2,7 +2,7 @@
 
 **Generated:** 2026-07-19
 
-**Updated:** 2026-07-22
+**Updated:** 2026-07-23
 
 **Reason:** Transitioning implementation agent from GapCode to Codex GPT
 
@@ -43,28 +43,29 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-016)
+## 3. Architectural Decisions (D-001–D-017)
 
-| ID    | Decision                                                                                                                                                    | Status   |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| D-001 | Develop as production SaaS                                                                                                                                  | Accepted |
-| D-002 | NestJS for backend (alt: Fastify standalone)                                                                                                                | Accepted |
-| D-003 | PostgreSQL as database                                                                                                                                      | Accepted |
-| D-004 | Redis mandatory (cache, queues, sessions, rate-limiting)                                                                                                    | Accepted |
-| D-005 | BullMQ for async jobs                                                                                                                                       | Accepted |
-| D-006 | WooCommerce via REST API + Webhooks                                                                                                                         | Accepted |
-| D-007 | Telegram is primary management UI                                                                                                                           | Accepted |
-| D-008 | n8n excluded from production                                                                                                                                | Accepted |
-| D-009 | WordPress plugin stays lightweight                                                                                                                          | Accepted |
-| D-010 | Simplicity-first; no overengineering, no premature optimization                                                                                             | Accepted |
-| D-011 | Prisma ORM + Prisma Migrate; `schema.prisma` is single source of truth; all models have `created_at`/`updated_at`; soft-delete on Tenant, Store, Membership | Accepted |
-| D-012 | PrismaService uses Prisma's official PostgreSQL driver adapter                                                                                              | Accepted |
-| D-013 | Global typed configuration uses `@nestjs/config` with Joi validation                                                                                        | Accepted |
-| D-014 | One in-process BullMQ operations worker with three exponential-backoff attempts                                                                             | Accepted |
-| D-015 | Fail-closed WooCommerce credential validation with bounded REST retries, timeouts, and secret-safe normalized errors                                        | Accepted |
-| D-016 | WooCommerce-REST-only plugin registration verification, reissue-and-rotate recovery, and endpoint-scoped Redis limiting                                     | Accepted |
+| ID    | Decision                                                                                                                                                        | Status   |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| D-001 | Develop as production SaaS                                                                                                                                      | Accepted |
+| D-002 | NestJS for backend (alt: Fastify standalone)                                                                                                                    | Accepted |
+| D-003 | PostgreSQL as database                                                                                                                                          | Accepted |
+| D-004 | Redis mandatory (cache, queues, sessions, rate-limiting)                                                                                                        | Accepted |
+| D-005 | BullMQ for async jobs                                                                                                                                           | Accepted |
+| D-006 | WooCommerce via REST API + Webhooks                                                                                                                             | Accepted |
+| D-007 | Telegram is primary management UI                                                                                                                               | Accepted |
+| D-008 | n8n excluded from production                                                                                                                                    | Accepted |
+| D-009 | WordPress plugin stays lightweight                                                                                                                              | Accepted |
+| D-010 | Simplicity-first; no overengineering, no premature optimization                                                                                                 | Accepted |
+| D-011 | Prisma ORM + Prisma Migrate; `schema.prisma` is single source of truth; all models have `created_at`/`updated_at`; soft-delete on Tenant, Store, Membership     | Accepted |
+| D-012 | PrismaService uses Prisma's official PostgreSQL driver adapter                                                                                                  | Accepted |
+| D-013 | Global typed configuration uses `@nestjs/config` with Joi validation                                                                                            | Accepted |
+| D-014 | One in-process BullMQ operations worker with three exponential-backoff attempts                                                                                 | Accepted |
+| D-015 | Fail-closed WooCommerce credential validation with bounded REST retries, timeouts, and secret-safe normalized errors                                            | Accepted |
+| D-016 | WooCommerce-REST-only plugin registration verification, reissue-and-rotate recovery, and endpoint-scoped Redis limiting                                         | Accepted |
+| D-017 | Dedicated encrypted webhook secrets, routing-only endpoint keys, raw-body HMAC authentication, recoverable idempotent persist/enqueue, and OWNER/ADMIN rotation | Accepted |
 
-Next decision number: **D-017**, if a future task produces a genuine
+Next decision number: **D-018**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -405,6 +406,59 @@ registration/health timestamps and audit state, and changes the Store from
 token state, Store status, and health timestamps. Concurrent duplicate
 finalization commits exactly one credential.
 
+#### M8 — WooCommerce Webhook Verification & Idempotent Ingestion (complete)
+
+Store webhook credentials:
+
+- `Store.webhook_endpoint_key` is a nullable, unique, indexed, URL-safe opaque
+  routing value. It is not an authentication mechanism.
+- The dedicated webhook secret remains in `webhook_secret_encrypted` using the
+  existing AES-256-GCM `iv:authTag:ciphertext` representation and is never the
+  `plugin_secret_hash`.
+- Existing M7 registration finalization generates both values atomically when
+  absent and returns them to the plugin only in that successful response.
+- `POST /api/stores/:id/webhook-credentials` is tenant-scoped and restricted to
+  OWNER/ADMIN. It provisions missing values or rotates both when `{ "rotate":
+true }` is supplied. A generated secret is returned once; an existing secret
+  is never re-exposed. Rotation invalidates the prior secret and endpoint key
+  immediately.
+
+Ingress contract:
+
+- `POST /api/webhooks/woocommerce/:endpointKey` is explicitly public because
+  WooCommerce cannot present a SaaS JWT. Security is HMAC verification; the
+  endpoint key provides routing only.
+- The route resolves an `ACTIVE`, non-deleted Store and active tenant before
+  validating `X-WC-Webhook-Signature`, `X-WC-Webhook-ID`,
+  `X-WC-Webhook-Delivery-ID`, and `X-WC-Webhook-Topic`.
+- Only this route receives an Express raw `Buffer`. HMAC-SHA256 is verified over
+  those exact bytes with a length-guarded `timingSafeEqual`; JSON parsing occurs
+  only after authentication. The normal global JSON and URL-encoded parsers
+  remain enabled for all other routes.
+- Unknown endpoint keys return one generic 404 without tenant or Store detail.
+  Invalid signatures return 401 and malformed authenticated envelopes return 400.
+
+Persistence and queue lifecycle:
+
+- `WebhookEvent` stores the immutable server-derived tenant/Store identity,
+  WooCommerce webhook ID, delivery ID, topic, dedupe key, JSON payload, and
+  receipt time.
+- The existing unique `(store_id, dedupe_key)` constraint represents
+  `{storeId, deliveryId}`. Lifecycle values are `RECEIVED`, `QUEUED`,
+  `PROCESSING`, `COMPLETED`, and terminal `FAILED`.
+- Ingestion first persists `RECEIVED`, then enqueues
+  `woocommerce.webhook.process` on the M5 `operations` queue with a
+  deterministic job ID derived from the WebhookEvent ID, then marks `QUEUED`.
+- If enqueueing fails, the row remains `RECEIVED` and ingress returns 5xx.
+  Redelivery retries the same deterministic publication. Duplicate events in
+  any later lifecycle state return 200 without another row or job.
+- The worker reuses M5's three exponential-backoff attempts and advances
+  lifecycle state only. Exhaustion records `FAILED` and emits secret-safe
+  correlation-aware structured logs. M8 adds no domain synchronization and no
+  readiness or metrics surface.
+
+Migration: `20260723120000_woocommerce_webhook_ingestion`.
+
 ---
 
 ## 5. Current Repository Structure
@@ -424,8 +478,8 @@ None.
 
 ## 7. Current Task
 
-No milestone is currently assigned. M7 — Plugin Communication & Store
-Registration (MVP) is complete on `feature/m7-store-registration` and awaits
+No milestone is currently assigned. M8 — WooCommerce Webhook Verification &
+Idempotent Ingestion is complete on `feat/m8-webhook-ingestion` and awaits
 review. Phase 3 remains active; do not begin another milestone without explicit
 approval from A.
 

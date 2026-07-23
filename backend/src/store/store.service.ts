@@ -42,7 +42,7 @@ export class StoreService {
       status: StoreStatus.PENDING,
       consumerKeyEncrypted: this.encryption.encrypt(input.consumerKey),
       consumerSecretEncrypted: this.encryption.encrypt(input.consumerSecret),
-      webhookSecretEncrypted: '',
+      webhookSecretEncrypted: null,
     });
 
     await this.audit.record({

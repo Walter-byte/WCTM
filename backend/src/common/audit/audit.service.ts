@@ -31,6 +31,7 @@ function safeAuditMetadata(
   const status = metadata['status'];
   const success = metadata['success'];
   const credentialsChanged = metadata['credentialsChanged'];
+  const rotated = metadata['rotated'];
   const changedFields = metadata['changedFields'];
 
   if (typeof role === 'string' && SAFE_ROLES.has(role as MembershipRole)) {
@@ -68,6 +69,10 @@ function safeAuditMetadata(
 
   if (typeof credentialsChanged === 'boolean') {
     safe['credentialsChanged'] = credentialsChanged;
+  }
+
+  if (typeof rotated === 'boolean') {
+    safe['rotated'] = rotated;
   }
 
   if (Array.isArray(changedFields)) {

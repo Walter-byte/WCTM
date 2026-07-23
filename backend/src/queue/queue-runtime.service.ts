@@ -12,18 +12,34 @@ import {
   REFERENCE_JOB_ATTEMPTS,
   REFERENCE_JOB_BACKOFF_MS,
   REFERENCE_JOB_NAME,
+  WOOCOMMERCE_WEBHOOK_JOB_NAME,
 } from './queue.constants';
 import {
   type ReferenceJobData,
   type ReferenceJobResult,
   ReferenceProcessor,
 } from './reference.processor';
+import {
+  type WooCommerceWebhookJobData,
+  type WooCommerceWebhookJobResult,
+  WooCommerceWebhookProcessor,
+} from './woocommerce-webhook.processor';
 
 type ReferenceJob = Job<
   ReferenceJobData,
   ReferenceJobResult,
   typeof REFERENCE_JOB_NAME
 >;
+type WooCommerceWebhookJob = Job<
+  WooCommerceWebhookJobData,
+  WooCommerceWebhookJobResult,
+  typeof WOOCOMMERCE_WEBHOOK_JOB_NAME
+>;
+type OperationsJob = ReferenceJob | WooCommerceWebhookJob;
+type OperationsJobData = ReferenceJobData | WooCommerceWebhookJobData;
+type OperationsJobResult = ReferenceJobResult | WooCommerceWebhookJobResult;
+type OperationsJobName =
+  typeof REFERENCE_JOB_NAME | typeof WOOCOMMERCE_WEBHOOK_JOB_NAME;
 
 @Injectable()
 export class QueueRuntimeService
@@ -31,19 +47,20 @@ export class QueueRuntimeService
 {
   private readonly fixedWindowClients = new WeakSet<object>();
   private queue?: Queue<
-    ReferenceJobData,
-    ReferenceJobResult,
-    typeof REFERENCE_JOB_NAME
+    OperationsJobData,
+    OperationsJobResult,
+    OperationsJobName
   >;
   private worker?: Worker<
-    ReferenceJobData,
-    ReferenceJobResult,
-    typeof REFERENCE_JOB_NAME
+    OperationsJobData,
+    OperationsJobResult,
+    OperationsJobName
   >;
 
   constructor(
     private readonly configuration: ApplicationConfigService,
     private readonly processor: ReferenceProcessor,
+    private readonly webhookProcessor: WooCommerceWebhookProcessor,
     private readonly logger: StructuredLoggerService
   ) {}
 
@@ -69,7 +86,7 @@ export class QueueRuntimeService
     });
     this.worker = new Worker(
       OPERATIONS_QUEUE_NAME,
-      (job) => this.processor.process(job),
+      (job) => this.process(job as OperationsJob),
       {
         connection: {
           url: redisUrl,
@@ -79,7 +96,7 @@ export class QueueRuntimeService
       }
     );
     this.worker.on('failed', (job, error) => {
-      this.handleFailed(job, error);
+      void this.handleFailed(job as OperationsJob | undefined, error);
     });
     this.worker.on('error', (error) => {
       this.logger.error(
@@ -91,7 +108,19 @@ export class QueueRuntimeService
   }
 
   addReferenceJob(data: ReferenceJobData): Promise<ReferenceJob> {
-    return this.requiredQueue().add(REFERENCE_JOB_NAME, data);
+    return this.requiredQueue().add(
+      REFERENCE_JOB_NAME,
+      data
+    ) as Promise<ReferenceJob>;
+  }
+
+  addWooCommerceWebhookJob(
+    data: WooCommerceWebhookJobData,
+    jobId: string
+  ): Promise<WooCommerceWebhookJob> {
+    return this.requiredQueue().add(WOOCOMMERCE_WEBHOOK_JOB_NAME, data, {
+      jobId,
+    }) as Promise<WooCommerceWebhookJob>;
   }
 
   async ping(): Promise<void> {
@@ -135,7 +164,10 @@ export class QueueRuntimeService
     return count;
   }
 
-  handleFailed(job: ReferenceJob | undefined, error: Error): void {
+  async handleFailed(
+    job: OperationsJob | undefined,
+    error: Error
+  ): Promise<void> {
     if (!job) {
       this.logger.error(
         'Background job failed without job context',
@@ -149,6 +181,21 @@ export class QueueRuntimeService
 
     if (job.attemptsMade < attempts && !(error instanceof UnrecoverableError)) {
       return;
+    }
+
+    if (job.name === WOOCOMMERCE_WEBHOOK_JOB_NAME) {
+      try {
+        await this.webhookProcessor.markFailed(job.data);
+      } catch {
+        this.logger.error(
+          'WooCommerce webhook dead-letter state update failed',
+          {
+            queue: OPERATIONS_QUEUE_NAME,
+            jobId: job.id ?? null,
+          },
+          QueueRuntimeService.name
+        );
+      }
     }
 
     const tenantId =
@@ -191,14 +238,22 @@ export class QueueRuntimeService
   }
 
   private requiredQueue(): Queue<
-    ReferenceJobData,
-    ReferenceJobResult,
-    typeof REFERENCE_JOB_NAME
+    OperationsJobData,
+    OperationsJobResult,
+    OperationsJobName
   > {
     if (!this.queue) {
       throw new Error('Operations queue is not running');
     }
 
     return this.queue;
+  }
+
+  private process(job: OperationsJob): Promise<OperationsJobResult> {
+    if (job.name === WOOCOMMERCE_WEBHOOK_JOB_NAME) {
+      return this.webhookProcessor.process(job as WooCommerceWebhookJob);
+    }
+
+    return this.processor.process(job as ReferenceJob);
   }
 }

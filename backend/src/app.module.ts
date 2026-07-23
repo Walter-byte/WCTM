@@ -21,6 +21,7 @@ import { TenantContextGuard } from './tenant/guards/tenant-context.guard';
 import { TenantContextModule } from './tenant/tenant-context.module';
 import { TenantsModule } from './tenants/tenants.module';
 import { UsersModule } from './users/users.module';
+import { WebhooksModule } from './webhooks/webhooks.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     TenantsModule,
     MembershipsModule,
+    WebhooksModule,
   ],
   providers: [
     {

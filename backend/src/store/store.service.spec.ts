@@ -215,7 +215,7 @@ describe('StoreService', () => {
     expect(fixture.stores[0]).toMatchObject({
       tenantId: 'ten_a',
       status: StoreStatus.PENDING,
-      webhookSecretEncrypted: '',
+      webhookSecretEncrypted: null,
     });
     expect(fixture.stores[0]?.consumerKeyEncrypted).not.toBe('ck_plain');
     expect(fixture.stores[0]?.consumerSecretEncrypted).not.toBe('cs_plain');

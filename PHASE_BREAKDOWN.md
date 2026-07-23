@@ -169,6 +169,47 @@ Acceptance checklist:
 - [x] Credential/channel boundaries and secret-safe responses are tested
 - [x] Migration `20260722142357_store_registration_handshake` is applied cleanly
 
+### M8 — WooCommerce Webhook Verification & Idempotent Ingestion ✅ Complete
+
+- Dedicated server-generated webhook secrets are AES-256-GCM encrypted and
+  remain separate from plugin credentials. Unique opaque endpoint keys route
+  webhook requests but do not authenticate them.
+- M7 registration atomically provisions missing webhook credentials and returns
+  them once. OWNER and ADMIN members can provision missing credentials or
+  rotate both values; rotation invalidates the prior secret and endpoint key
+  immediately.
+- Public WooCommerce ingress resolves an active Store by endpoint key, validates
+  required WooCommerce headers, verifies the exact raw request bytes with
+  length-guarded constant-time HMAC-SHA256 comparison, and parses JSON only
+  after successful authentication.
+- Verified envelopes are tenant/store-scoped from server state, deduplicated by
+  Store and delivery ID, persisted as `RECEIVED`, and recoverably enqueued as
+  `woocommerce.webhook.process` on the existing `operations` queue.
+- Deterministic BullMQ job IDs prevent duplicate publication. Existing
+  `RECEIVED` events retry enqueue after a prior queue failure; all later
+  lifecycle states acknowledge redelivery without another row or job.
+- The M8 worker advances only `RECEIVED → QUEUED → PROCESSING → COMPLETED` or
+  terminal `FAILED` lifecycle state with the existing three-attempt exponential
+  retry policy. Domain synchronization remains deferred to M9.
+
+Acceptance checklist:
+
+- [x] Unknown routes and malformed or unauthenticated deliveries fail closed
+- [x] HMAC verification uses exact raw bytes and never authenticates by endpoint key
+- [x] Tenant and Store identity come only from the routed Store
+- [x] `{storeId, deliveryId}` persistence and deterministic job IDs are idempotent
+- [x] Persist-success/enqueue-failure remains recoverable through `RECEIVED`
+- [x] Retry exhaustion records `FAILED` and emits secret-safe structured logs
+- [x] OWNER/ADMIN provisioning and rotation never re-expose an existing secret
+- [x] Migration `20260723120000_woocommerce_webhook_ingestion` applies cleanly
+- [x] No order, product, customer, inventory, or other M9 sync behavior is included
+
+Exit criterion met on 2026-07-23: a signed WooCommerce delivery is routed by
+opaque endpoint key, authenticated over exact raw bytes, persisted once with
+server-derived tenant/Store identity, and recoverably published once to the M5
+queue while malformed, unauthenticated, and duplicate deliveries follow their
+defined fail-closed or acknowledgment paths.
+
 Phase 3 remains active. No next milestone is assigned.
 
 ## Phase 4 — Telegram Platform ⬜ Planned

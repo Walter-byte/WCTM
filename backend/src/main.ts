@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 
 import { NestFactory } from '@nestjs/core';
+import { json, raw, urlencoded } from 'express';
 
 import { AppModule } from './app.module';
 import { StructuredLoggerService } from './common/logging/structured-logger.service';
@@ -13,7 +14,10 @@ interface ExpressApplication {
 }
 
 async function bootstrap(): Promise<void> {
-  const application = await NestFactory.create(AppModule, { bufferLogs: true });
+  const application = await NestFactory.create(AppModule, {
+    bodyParser: false,
+    bufferLogs: true,
+  });
   const configuration = application.get(ApplicationConfigService);
   const logger = application.get(StructuredLoggerService);
   const { port } = configuration.app;
@@ -25,6 +29,12 @@ async function bootstrap(): Promise<void> {
     .getInstance() as ExpressApplication;
 
   httpApplication.set('trust proxy', 1);
+  application.use(
+    '/api/webhooks/woocommerce/:endpointKey',
+    raw({ type: 'application/json', inflate: false })
+  );
+  application.use(json());
+  application.use(urlencoded({ extended: true }));
   application.setGlobalPrefix('api');
   application.enableShutdownHooks();
 

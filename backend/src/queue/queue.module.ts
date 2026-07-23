@@ -4,10 +4,22 @@ import { TenantContextModule } from '../tenant/tenant-context.module';
 import { QueueRuntimeService } from './queue-runtime.service';
 import { ReferenceJobProducer } from './reference-job.producer';
 import { ReferenceProcessor } from './reference.processor';
+import { WooCommerceWebhookJobProducer } from './woocommerce-webhook-job.producer';
+import { WooCommerceWebhookProcessor } from './woocommerce-webhook.processor';
 
 @Module({
   imports: [TenantContextModule],
-  providers: [ReferenceProcessor, QueueRuntimeService, ReferenceJobProducer],
-  exports: [QueueRuntimeService, ReferenceJobProducer],
+  providers: [
+    ReferenceProcessor,
+    WooCommerceWebhookProcessor,
+    QueueRuntimeService,
+    ReferenceJobProducer,
+    WooCommerceWebhookJobProducer,
+  ],
+  exports: [
+    QueueRuntimeService,
+    ReferenceJobProducer,
+    WooCommerceWebhookJobProducer,
+  ],
 })
 export class QueueModule {}

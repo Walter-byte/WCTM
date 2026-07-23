@@ -80,7 +80,7 @@ export interface TenantScopedStoreCreate {
   status: Prisma.StoreCreateInput['status'];
   consumerKeyEncrypted: string;
   consumerSecretEncrypted: string;
-  webhookSecretEncrypted: string;
+  webhookSecretEncrypted: string | null;
 }
 
 export interface TenantScopedStoreUpdate {
