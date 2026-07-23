@@ -114,7 +114,7 @@ Status:
 
 Current Milestone:
 
-M10 — Telegram Account Linking & Private-Chat Authorization (implementation
+M11 — Telegram Order Listing & Detail (read-only; implementation
 complete; awaiting review)
 
 Deliverables
@@ -133,6 +133,16 @@ M10 scope:
 - Bot-key-authenticated internal API
 - `/start`, `/status`, and confirmed `/unlink`
 - Automatic context only for exactly one eligible tenant and Store
+
+M11 scope:
+
+- Bot-only projected Order list and detail endpoints
+- Read access for active OWNER, ADMIN, and MEMBER memberships
+- Eight-row keyset pagination with a 200-row reachable cap
+- Expiring HMAC-authenticated callback references bound to current context
+- `/orders`, inline pagination, detail selection, and back navigation
+- `Order.lastSyncedAt` freshness with configurable delayed signaling
+- No WooCommerce calls, writes, direct `/order` lookup, or Store switching
 
 Exit Criteria
 

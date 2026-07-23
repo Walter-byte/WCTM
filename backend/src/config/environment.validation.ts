@@ -15,6 +15,8 @@ const DEVELOPMENT_VALUES = {
   APP_ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
   TELEGRAM_BOT_TOKEN: '0000000000:development-placeholder-token',
   BOT_INTERNAL_API_KEY: 'development-only-bot-internal-api-key',
+  TELEGRAM_CALLBACK_SIGNING_KEY:
+    'development-only-telegram-callback-signing-key',
   BACKEND_INTERNAL_URL: 'http://backend:3000/api',
   WOOCOMMERCE_WEBHOOK_SECRET: 'development-only-webhook-secret-change-me',
   POSTGRES_PASSWORD: 'development-only-postgres-password',
@@ -27,6 +29,7 @@ const TEST_VALUES = {
   APP_ENCRYPTION_KEY: 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
   TELEGRAM_BOT_TOKEN: '0000000000:test-placeholder-token-value',
   BOT_INTERNAL_API_KEY: 'test-only-bot-internal-api-key',
+  TELEGRAM_CALLBACK_SIGNING_KEY: 'test-only-telegram-callback-signing-key',
   BACKEND_INTERNAL_URL: 'http://localhost:3000/api',
   WOOCOMMERCE_WEBHOOK_SECRET: 'test-only-webhook-secret-not-for-production',
 } as const;
@@ -116,6 +119,11 @@ function createEnvironmentSchema(
     nodeEnvironment,
     TEST_VALUES.BOT_INTERNAL_API_KEY
   );
+  let telegramCallbackSigningKey = requiredOrTestDefault(
+    Joi.string().trim().min(32),
+    nodeEnvironment,
+    TEST_VALUES.TELEGRAM_CALLBACK_SIGNING_KEY
+  );
   const backendInternalUrl = requiredOrTestDefault(
     Joi.string()
       .trim()
@@ -142,6 +150,9 @@ function createEnvironmentSchema(
     );
     botInternalApiKey = botInternalApiKey.invalid(
       DEVELOPMENT_VALUES.BOT_INTERNAL_API_KEY
+    );
+    telegramCallbackSigningKey = telegramCallbackSigningKey.invalid(
+      DEVELOPMENT_VALUES.TELEGRAM_CALLBACK_SIGNING_KEY
     );
     webhookSecret = webhookSecret.invalid(
       DEVELOPMENT_VALUES.WOOCOMMERCE_WEBHOOK_SECRET
@@ -177,7 +188,17 @@ function createEnvironmentSchema(
     TELEGRAM_BOT_TOKEN: telegramBotToken,
     BOT_INTERNAL_API_KEY: botInternalApiKey,
     BACKEND_INTERNAL_URL: backendInternalUrl,
+    BOT_BACKEND_TIMEOUT_MS: Joi.number().integer().min(1).default(5000),
     TELEGRAM_LINK_TOKEN_TTL_SECONDS: Joi.number().integer().min(1).default(900),
+    TELEGRAM_CALLBACK_SIGNING_KEY: telegramCallbackSigningKey,
+    TELEGRAM_CALLBACK_REF_TTL_SECONDS: Joi.number()
+      .integer()
+      .min(1)
+      .default(900),
+    TELEGRAM_ORDER_FRESHNESS_THRESHOLD_SECONDS: Joi.number()
+      .integer()
+      .min(1)
+      .default(300),
     WOOCOMMERCE_WEBHOOK_SECRET: webhookSecret,
     WOOCOMMERCE_REST_MAX_ATTEMPTS: Joi.number().integer().min(1).default(3),
     WOOCOMMERCE_REST_ATTEMPT_TIMEOUT_MS: Joi.number()

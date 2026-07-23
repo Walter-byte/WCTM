@@ -43,6 +43,11 @@ never reuse the Telegram bot token or a user JWT. `BACKEND_INTERNAL_URL` is the
 backend API base URL used only by the bot (the Compose default is
 `http://backend:3000/api`). Telegram account-link tokens default to a
 900-second lifetime through `TELEGRAM_LINK_TOKEN_TTL_SECONDS`.
+M11 callback data uses a dedicated `TELEGRAM_CALLBACK_SIGNING_KEY` (minimum 32
+characters), with reference lifetime controlled by
+`TELEGRAM_CALLBACK_REF_TTL_SECONDS`. Projected-order freshness is considered
+delayed after `TELEGRAM_ORDER_FRESHNESS_THRESHOLD_SECONDS`. The bot-to-backend
+deadline is configured through `BOT_BACKEND_TIMEOUT_MS`.
 
 WooCommerce REST credential validation defaults to three total attempts, a
 5,000ms timeout per attempt, and a 15,000ms hard operation cap. Retry delays use

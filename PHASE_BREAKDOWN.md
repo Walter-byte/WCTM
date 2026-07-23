@@ -253,12 +253,12 @@ diagnosable within the existing operations queue.
 Phase 3 closed on 2026-07-23 with M6–M9 complete and its exit criterion
 satisfied. No next milestone is assigned.
 
-## Phase 4 — Telegram Platform ⬜ Planned
+## Phase 4 — Telegram Platform 🚧 In Progress
 
 - Manager registration, chat authorization, commands, inline keyboards, and
   callback handling
 
-### M10 — Telegram Account Linking & Private-Chat Authorization 🚧 In Progress
+### M10 — Telegram Account Linking & Private-Chat Authorization ✅ Complete
 
 - Backend-owned one-time account-link tokens, Telegram identity persistence,
   private-chat authorization, and active tenant/Store context resolution
@@ -270,6 +270,24 @@ satisfied. No next milestone is assigned.
   and soft revocation
 - No order-management logic, Store selection/switching, group support, or
   webhook transport
+
+### M11 — Telegram Order Listing & Detail (read-only) 🚧 In Review
+
+- Bot-only internal list and detail endpoints read M9 projections after
+  backend-owned Telegram account, private-chat, active Membership, tenant, and
+  exactly-one active Store resolution
+- OWNER, ADMIN, and MEMBER may read; inactive, deleted, ambiguous, and changed
+  contexts return typed safe states
+- Fixed eight-row keyset pages order by WooCommerce creation time and order ID,
+  with previous/next navigation and a 200-row reachable cap
+- Short-lived HMAC-authenticated references bind account, chat, tenant, Store,
+  purpose, and order/boundary state without placing raw identifiers in Telegram
+  callback data
+- `/orders` renders summaries, inline detail, pagination, and back navigation;
+  edit failures fall back to a new message
+- Freshness uses `Order.lastSyncedAt` and a configurable delayed threshold
+- No WooCommerce calls, writes, reconciliation, `/order` direct lookup, Store
+  switching, group support, or next-milestone behavior
 
 ## Phase 5 — Core Store Management (MVP) ⬜ Planned
 

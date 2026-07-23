@@ -4,6 +4,7 @@ export interface BotConfiguration {
   botToken: string;
   internalApiKey: string;
   backendInternalUrl: string;
+  backendTimeoutMs: number;
 }
 
 const botEnvironmentSchema = Joi.object({
@@ -15,6 +16,7 @@ const botEnvironmentSchema = Joi.object({
     .trim()
     .uri({ scheme: ['http', 'https'] })
     .required(),
+  BOT_BACKEND_TIMEOUT_MS: Joi.number().integer().min(1).default(5000),
 }).unknown(true);
 
 export function loadBotConfiguration(
@@ -36,5 +38,6 @@ export function loadBotConfiguration(
     botToken: String(value.TELEGRAM_BOT_TOKEN),
     internalApiKey: String(value.BOT_INTERNAL_API_KEY),
     backendInternalUrl: String(value.BACKEND_INTERNAL_URL).replace(/\/+$/, ''),
+    backendTimeoutMs: Number(value.BOT_BACKEND_TIMEOUT_MS),
   });
 }

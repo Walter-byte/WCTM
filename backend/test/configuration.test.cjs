@@ -28,6 +28,7 @@ const validEnvironment = (overrides = {}) => ({
   TELEGRAM_BOT_TOKEN: '1234567890:valid-test-token-value-12345',
   BOT_INTERNAL_API_KEY: 'valid-bot-internal-api-key',
   BACKEND_INTERNAL_URL: 'http://backend:3000/api',
+  TELEGRAM_CALLBACK_SIGNING_KEY: 'valid-telegram-callback-signing-key-value',
   WOOCOMMERCE_WEBHOOK_SECRET:
     'valid-webhook-secret-value-at-least-32-characters',
   ...overrides,
@@ -81,6 +82,9 @@ test('valid environment loads typed configuration values', () => {
     'http://backend:3000/api'
   );
   assert.equal(configuration.telegram.linkTokenTtlSeconds, 900);
+  assert.equal(configuration.telegram.backendTimeoutMs, 5000);
+  assert.equal(configuration.telegram.callbackRefTtlSeconds, 900);
+  assert.equal(configuration.telegram.orderFreshnessThresholdSeconds, 300);
 });
 
 test('test environment supplies isolated safe defaults', () => {
@@ -145,6 +149,7 @@ test('missing required variables produce one aggregated safe error', () => {
       assert.match(error.message, /TELEGRAM_BOT_TOKEN is required/);
       assert.match(error.message, /BOT_INTERNAL_API_KEY is required/);
       assert.match(error.message, /BACKEND_INTERNAL_URL is required/);
+      assert.match(error.message, /TELEGRAM_CALLBACK_SIGNING_KEY is required/);
       assert.match(error.message, /WOOCOMMERCE_WEBHOOK_SECRET is required/);
       return true;
     }
@@ -173,6 +178,7 @@ test('invalid production bootstrap exits non-zero with aggregated errors', () =>
   assert.match(output, /TELEGRAM_BOT_TOKEN is required/);
   assert.match(output, /BOT_INTERNAL_API_KEY is required/);
   assert.match(output, /BACKEND_INTERNAL_URL is required/);
+  assert.match(output, /TELEGRAM_CALLBACK_SIGNING_KEY is required/);
   assert.match(output, /WOOCOMMERCE_WEBHOOK_SECRET is required/);
 });
 
@@ -215,6 +221,8 @@ test('production rejects documented development placeholder values', () => {
         TELEGRAM_BOT_TOKEN: '0000000000:development-placeholder-token',
         BOT_INTERNAL_API_KEY: 'development-only-bot-internal-api-key',
         BACKEND_INTERNAL_URL: 'http://backend:3000/api',
+        TELEGRAM_CALLBACK_SIGNING_KEY:
+          'development-only-telegram-callback-signing-key',
         WOOCOMMERCE_WEBHOOK_SECRET: 'development-only-webhook-secret-change-me',
       }),
     (error) => {
@@ -223,6 +231,7 @@ test('production rejects documented development placeholder values', () => {
       assert.match(error.message, /APP_ENCRYPTION_KEY/);
       assert.match(error.message, /TELEGRAM_BOT_TOKEN/);
       assert.match(error.message, /BOT_INTERNAL_API_KEY/);
+      assert.match(error.message, /TELEGRAM_CALLBACK_SIGNING_KEY/);
       assert.match(error.message, /WOOCOMMERCE_WEBHOOK_SECRET/);
       assert.doesNotMatch(error.message, new RegExp(developmentOnlyJwtSecret));
       return true;
@@ -248,6 +257,7 @@ test('configuration serialization and inspection redact every secret', () => {
     environment.APP_ENCRYPTION_KEY,
     environment.TELEGRAM_BOT_TOKEN,
     environment.BOT_INTERNAL_API_KEY,
+    environment.TELEGRAM_CALLBACK_SIGNING_KEY,
     environment.WOOCOMMERCE_WEBHOOK_SECRET,
   ]) {
     assert.doesNotMatch(
