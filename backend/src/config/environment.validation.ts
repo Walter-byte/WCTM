@@ -14,6 +14,8 @@ const DEVELOPMENT_VALUES = {
   JWT_SECRET: 'development-only-jwt-secret-change-me',
   APP_ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
   TELEGRAM_BOT_TOKEN: '0000000000:development-placeholder-token',
+  BOT_INTERNAL_API_KEY: 'development-only-bot-internal-api-key',
+  BACKEND_INTERNAL_URL: 'http://backend:3000/api',
   WOOCOMMERCE_WEBHOOK_SECRET: 'development-only-webhook-secret-change-me',
   POSTGRES_PASSWORD: 'development-only-postgres-password',
 } as const;
@@ -24,6 +26,8 @@ const TEST_VALUES = {
   JWT_SECRET: 'test-only-jwt-secret-not-for-production',
   APP_ENCRYPTION_KEY: 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
   TELEGRAM_BOT_TOKEN: '0000000000:test-placeholder-token-value',
+  BOT_INTERNAL_API_KEY: 'test-only-bot-internal-api-key',
+  BACKEND_INTERNAL_URL: 'http://localhost:3000/api',
   WOOCOMMERCE_WEBHOOK_SECRET: 'test-only-webhook-secret-not-for-production',
 } as const;
 
@@ -107,6 +111,18 @@ function createEnvironmentSchema(
     nodeEnvironment,
     TEST_VALUES.TELEGRAM_BOT_TOKEN
   );
+  let botInternalApiKey = requiredOrTestDefault(
+    Joi.string().trim().min(1),
+    nodeEnvironment,
+    TEST_VALUES.BOT_INTERNAL_API_KEY
+  );
+  const backendInternalUrl = requiredOrTestDefault(
+    Joi.string()
+      .trim()
+      .uri({ scheme: ['http', 'https'] }),
+    nodeEnvironment,
+    TEST_VALUES.BACKEND_INTERNAL_URL
+  );
   let webhookSecret = requiredOrTestDefault(
     Joi.string().trim().min(32),
     nodeEnvironment,
@@ -123,6 +139,9 @@ function createEnvironmentSchema(
     );
     telegramBotToken = telegramBotToken.invalid(
       DEVELOPMENT_VALUES.TELEGRAM_BOT_TOKEN
+    );
+    botInternalApiKey = botInternalApiKey.invalid(
+      DEVELOPMENT_VALUES.BOT_INTERNAL_API_KEY
     );
     webhookSecret = webhookSecret.invalid(
       DEVELOPMENT_VALUES.WOOCOMMERCE_WEBHOOK_SECRET
@@ -156,6 +175,9 @@ function createEnvironmentSchema(
     JWT_ACCESS_TTL: Joi.string().trim().min(1).required(),
     APP_ENCRYPTION_KEY: encryptionKey,
     TELEGRAM_BOT_TOKEN: telegramBotToken,
+    BOT_INTERNAL_API_KEY: botInternalApiKey,
+    BACKEND_INTERNAL_URL: backendInternalUrl,
+    TELEGRAM_LINK_TOKEN_TTL_SECONDS: Joi.number().integer().min(1).default(900),
     WOOCOMMERCE_WEBHOOK_SECRET: webhookSecret,
     WOOCOMMERCE_REST_MAX_ATTEMPTS: Joi.number().integer().min(1).default(3),
     WOOCOMMERCE_REST_ATTEMPT_TIMEOUT_MS: Joi.number()

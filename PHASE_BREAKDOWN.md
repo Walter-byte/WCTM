@@ -258,6 +258,19 @@ satisfied. No next milestone is assigned.
 - Manager registration, chat authorization, commands, inline keyboards, and
   callback handling
 
+### M10 — Telegram Account Linking & Private-Chat Authorization 🚧 In Progress
+
+- Backend-owned one-time account-link tokens, Telegram identity persistence,
+  private-chat authorization, and active tenant/Store context resolution
+- Bot-key-authenticated internal backend API with correlation and Telegram
+  update identity propagation
+- Stateless grammY long-polling adapter with `/start`, `/status`, and confirmed
+  `/unlink`
+- Private-chat-only enforcement, update deduplication, transactional redemption,
+  and soft revocation
+- No order-management logic, Store selection/switching, group support, or
+  webhook transport
+
 ## Phase 5 — Core Store Management (MVP) ⬜ Planned
 
 - Orders, inventory, customers, payments, reports, and notifications

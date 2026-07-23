@@ -13,6 +13,9 @@ export interface ValidatedEnvironment {
   JWT_ACCESS_TTL: string;
   APP_ENCRYPTION_KEY: string;
   TELEGRAM_BOT_TOKEN: string;
+  BOT_INTERNAL_API_KEY: string;
+  BACKEND_INTERNAL_URL: string;
+  TELEGRAM_LINK_TOKEN_TTL_SECONDS: number;
   WOOCOMMERCE_WEBHOOK_SECRET: string;
   WOOCOMMERCE_REST_MAX_ATTEMPTS: number;
   WOOCOMMERCE_REST_ATTEMPT_TIMEOUT_MS: number;
@@ -39,6 +42,9 @@ export const CONFIG_ENV_KEYS = [
   'JWT_ACCESS_TTL',
   'APP_ENCRYPTION_KEY',
   'TELEGRAM_BOT_TOKEN',
+  'BOT_INTERNAL_API_KEY',
+  'BACKEND_INTERNAL_URL',
+  'TELEGRAM_LINK_TOKEN_TTL_SECONDS',
   'WOOCOMMERCE_WEBHOOK_SECRET',
   'WOOCOMMERCE_REST_MAX_ATTEMPTS',
   'WOOCOMMERCE_REST_ATTEMPT_TIMEOUT_MS',
@@ -80,6 +86,9 @@ export interface EncryptionSettings {
 
 export interface TelegramSettings {
   botToken: string;
+  internalApiKey: string;
+  backendInternalUrl: string;
+  linkTokenTtlSeconds: number;
 }
 
 export interface WooCommerceSettings {

@@ -41,30 +41,39 @@ enum WebhookEventStatus {
   @@map("webhook_event_status")
 }
 
+enum TelegramChatType {
+  PRIVATE
+
+  @@map("telegram_chat_type")
+}
+
 model Tenant {
-  id            String         @id @map("id") @db.VarChar(64)
-  name          String         @map("name") @db.VarChar(255)
-  plan          TenantPlan     @default(FREE) @map("plan")
-  createdAt     DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt     DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt     DateTime?      @map("deleted_at") @db.Timestamptz(3)
-  memberships   Membership[]
-  stores        Store[]
-  orders        Order[]
-  webhookEvents WebhookEvent[]
-  auditLogs     AuditLog[]
+  id                         String                      @id @map("id") @db.VarChar(64)
+  name                       String                      @map("name") @db.VarChar(255)
+  plan                       TenantPlan                  @default(FREE) @map("plan")
+  createdAt                  DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                  DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt                  DateTime?                   @map("deleted_at") @db.Timestamptz(3)
+  memberships                Membership[]
+  stores                     Store[]
+  orders                     Order[]
+  webhookEvents              WebhookEvent[]
+  auditLogs                  AuditLog[]
+  telegramChatAuthorizations TelegramChatAuthorization[] @relation("TelegramActiveTenant")
 
   @@map("tenants")
 }
 
 model User {
-  id          String       @id @map("id") @db.VarChar(64)
-  email       String       @unique @map("email") @db.VarChar(320)
-  displayName String?      @map("display_name") @db.VarChar(255)
-  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt   DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
-  memberships Membership[]
-  auditLogs   AuditLog[]
+  id                 String              @id @map("id") @db.VarChar(64)
+  email              String              @unique @map("email") @db.VarChar(320)
+  displayName        String?             @map("display_name") @db.VarChar(255)
+  createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  memberships        Membership[]
+  auditLogs          AuditLog[]
+  telegramAccount    TelegramAccount?
+  telegramLinkTokens TelegramLinkToken[]
 
   @@map("users")
 }
@@ -87,28 +96,29 @@ model Membership {
 }
 
 model Store {
-  id                          String         @id @map("id") @db.VarChar(64)
-  tenantId                    String         @map("tenant_id") @db.VarChar(64)
-  name                        String         @map("name") @db.VarChar(255)
-  baseUrl                     String         @map("base_url") @db.Text
-  status                      StoreStatus    @default(PENDING) @map("status")
-  consumerKeyEncrypted        String         @map("consumer_key_encrypted") @db.Text
-  consumerSecretEncrypted     String         @map("consumer_secret_encrypted") @db.Text
-  webhookSecretEncrypted      String?        @map("webhook_secret_encrypted") @db.Text
-  webhookEndpointKey          String?        @unique @map("webhook_endpoint_key") @db.VarChar(64)
-  registrationTokenHash       String?        @unique @map("registration_token_hash") @db.VarChar(64)
-  registrationTokenExpiresAt  DateTime?      @map("registration_token_expires_at") @db.Timestamptz(3)
-  registrationTokenConsumedAt DateTime?      @map("registration_token_consumed_at") @db.Timestamptz(3)
-  pluginSecretHash            String?        @map("plugin_secret_hash") @db.VarChar(64)
-  pluginRegisteredAt          DateTime?      @map("plugin_registered_at") @db.Timestamptz(3)
-  lastSeenAt                  DateTime?      @map("last_seen_at") @db.Timestamptz(3)
-  lastHealthyAt               DateTime?      @map("last_healthy_at") @db.Timestamptz(3)
-  createdAt                   DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                   DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt                   DateTime?      @map("deleted_at") @db.Timestamptz(3)
-  tenant                      Tenant         @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  id                          String                      @id @map("id") @db.VarChar(64)
+  tenantId                    String                      @map("tenant_id") @db.VarChar(64)
+  name                        String                      @map("name") @db.VarChar(255)
+  baseUrl                     String                      @map("base_url") @db.Text
+  status                      StoreStatus                 @default(PENDING) @map("status")
+  consumerKeyEncrypted        String                      @map("consumer_key_encrypted") @db.Text
+  consumerSecretEncrypted     String                      @map("consumer_secret_encrypted") @db.Text
+  webhookSecretEncrypted      String?                     @map("webhook_secret_encrypted") @db.Text
+  webhookEndpointKey          String?                     @unique @map("webhook_endpoint_key") @db.VarChar(64)
+  registrationTokenHash       String?                     @unique @map("registration_token_hash") @db.VarChar(64)
+  registrationTokenExpiresAt  DateTime?                   @map("registration_token_expires_at") @db.Timestamptz(3)
+  registrationTokenConsumedAt DateTime?                   @map("registration_token_consumed_at") @db.Timestamptz(3)
+  pluginSecretHash            String?                     @map("plugin_secret_hash") @db.VarChar(64)
+  pluginRegisteredAt          DateTime?                   @map("plugin_registered_at") @db.Timestamptz(3)
+  lastSeenAt                  DateTime?                   @map("last_seen_at") @db.Timestamptz(3)
+  lastHealthyAt               DateTime?                   @map("last_healthy_at") @db.Timestamptz(3)
+  createdAt                   DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                   DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt                   DateTime?                   @map("deleted_at") @db.Timestamptz(3)
+  tenant                      Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   orders                      Order[]
   webhookEvents               WebhookEvent[]
+  telegramChatAuthorizations  TelegramChatAuthorization[] @relation("TelegramActiveStore")
 
   @@unique([tenantId, baseUrl])
   @@index([tenantId])
@@ -188,4 +198,54 @@ model AuditLog {
   @@index([tenantId])
   @@index([userId])
   @@map("audit_logs")
+}
+
+model TelegramAccount {
+  id                 String                      @id @map("id") @db.VarChar(64)
+  telegramUserId     BigInt                      @unique @map("telegram_user_id")
+  userId             String                      @unique @map("user_id") @db.VarChar(64)
+  lastRedeemUpdateId BigInt?                     @map("last_redeem_update_id")
+  lastUnlinkUpdateId BigInt?                     @map("last_unlink_update_id")
+  createdAt          DateTime                    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt          DateTime?                   @map("deleted_at") @db.Timestamptz(3)
+  user               User                        @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  chatAuthorizations TelegramChatAuthorization[]
+
+  @@index([userId])
+  @@map("telegram_accounts")
+}
+
+model TelegramChatAuthorization {
+  id                String           @id @map("id") @db.VarChar(64)
+  telegramAccountId String           @map("telegram_account_id") @db.VarChar(64)
+  telegramChatId    BigInt           @unique @map("telegram_chat_id")
+  chatType          TelegramChatType @map("chat_type")
+  activeTenantId    String?          @map("active_tenant_id") @db.VarChar(64)
+  activeStoreId     String?          @map("active_store_id") @db.VarChar(64)
+  revokedAt         DateTime?        @map("revoked_at") @db.Timestamptz(3)
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  telegramAccount   TelegramAccount  @relation(fields: [telegramAccountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  activeTenant      Tenant?          @relation("TelegramActiveTenant", fields: [activeTenantId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  activeStore       Store?           @relation("TelegramActiveStore", fields: [activeStoreId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([telegramAccountId])
+  @@index([activeTenantId])
+  @@index([activeStoreId])
+  @@map("telegram_chat_authorizations")
+}
+
+model TelegramLinkToken {
+  id         String    @id @map("id") @db.VarChar(64)
+  userId     String    @map("user_id") @db.VarChar(64)
+  tokenHash  String    @unique @map("token_hash") @db.VarChar(64)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([userId])
+  @@map("telegram_link_tokens")
 }

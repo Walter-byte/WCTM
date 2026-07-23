@@ -6,14 +6,15 @@ Version: 1.0
 
 Current Phase
 
-Phase 3 — WooCommerce Integration active. M9 is complete; M8 and M7 are
-complete.
+Phase 4 — Telegram Platform active. M10 implementation is complete and awaiting
+review.
 
 ---
 
 Current Task
 
-None assigned. M9 is complete, and the next milestone must await A's approval.
+M10 — Telegram Account Linking & Private-Chat Authorization. Do not begin
+another milestone until M10 is reviewed and approved.
 
 ---
 
@@ -188,7 +189,27 @@ is available; plugin-side UI and implementation remain outside M7.
 
 Telegram Bot
 
-grammY scaffold created.
+The grammY process now runs long-polling as a stateless transport adapter. It
+accepts `/start`, `/start <token>`, `/status`, and `/unlink` with a single
+inline confirmation step. Only private chats are processed; group, supergroup,
+and channel updates receive one safe rejection and cannot change state.
+
+The bot validates `TELEGRAM_BOT_TOKEN`, `BOT_INTERNAL_API_KEY`, and
+`BACKEND_INTERNAL_URL`, calls only the NestJS internal Telegram API, propagates
+correlation and Telegram update IDs, and writes no local persistent state. It
+does not import Prisma or connect to PostgreSQL.
+
+The backend owns Telegram link-token issuance, SHA-256 token hashing, atomic
+redemption, one-to-one Telegram/SaaS identity constraints, private-chat
+authorization, membership and active Store resolution, durable update
+idempotency, status, and atomic soft unlinking. Active tenant and Store IDs are
+set only when exactly one active Membership and exactly one non-deleted
+`ACTIVE` Store exist.
+
+Migration `20260723220000_telegram_account_linking` adds TelegramAccount,
+TelegramChatAuthorization, and TelegramLinkToken and applied cleanly in an
+isolated PostgreSQL database. Internal bot routes require `X-Bot-Api-Key`;
+link-token issuance remains on the authenticated JWT user surface.
 
 ---
 
@@ -257,7 +278,8 @@ None
 
 Next Milestone
 
-None assigned. Await A's approval before starting another milestone or Phase 4.
+None assigned. Await M10 review and A's approval before starting another
+milestone.
 
 ---
 

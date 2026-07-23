@@ -69,6 +69,7 @@ export class StructuredLoggerService implements LoggerService {
       timestamp: new Date().toISOString(),
       level,
       requestId: this.requestContext.requestId ?? null,
+      telegramUpdateId: this.requestContext.telegramUpdateId ?? null,
       tenantId: this.requestContext.tenant?.tenantId ?? null,
       userId: this.requestContext.tenant?.userId ?? null,
       membershipRole: this.requestContext.tenant?.membershipRole ?? null,

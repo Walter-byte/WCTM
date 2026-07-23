@@ -445,4 +445,56 @@ Accepted.
 
 ---
 
-Future decisions continue below.
+## D-019
+
+Date
+
+2026-07-23
+
+Decision
+
+Telegram account linking uses one-time, short-lived, cryptographically random
+tokens issued from the authenticated SaaS user surface. Only SHA-256 token
+hashes are persisted. Redemption is atomic and binds one Telegram user to one
+SaaS User plus one authorized private chat; groups, supergroups, and channels
+cannot become authorized.
+
+All Telegram identity persistence, token validation, membership lookup, and
+tenant/Store context resolution remain in the NestJS backend. The standalone
+grammY process is a stateless long-polling transport and presentation adapter
+that never imports Prisma or opens a database connection.
+
+Bot-only internal endpoints bypass the global JWT guard only to enforce a
+dedicated `X-Bot-Api-Key` guard using the typed `BOT_INTERNAL_API_KEY`
+configuration. Every bot request propagates `X-Correlation-Id` and
+`X-Telegram-Update-Id`. Redeem and confirmed unlink operations are transactionally
+idempotent by Telegram user and update ID.
+
+Active context is selected automatically only when the linked User has exactly
+one active Membership and that tenant has exactly one non-deleted `ACTIVE`
+Store. Otherwise both active IDs remain null and selection is reported as
+required. M10 adds no selection/switching command.
+
+Unlink requires explicit private-chat confirmation and atomically soft-revokes
+the TelegramAccount and all of its chat authorizations.
+
+Reason
+
+This boundary preserves tenant and membership authorization in the backend,
+prevents possession of a chat ID from becoming authorization, keeps the bot
+recoverable and free of local persistent state, and makes duplicated Telegram
+updates and timeout-after-commit recovery safe.
+
+Boundary
+
+M10 includes `/start`, `/status`, and confirmed `/unlink` account-linking
+behavior only. It adds no order management, Store switching, group support,
+webhook transport, or other Telegram operational commands.
+
+Status
+
+Accepted.
+
+---
+
+Next decision number: D-020.

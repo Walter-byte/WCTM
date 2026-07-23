@@ -6,10 +6,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
+    "test": "npm run build && node --test test/*.test.cjs",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "grammy": "^1.35.0"
+    "grammy": "^1.35.0",
+    "joi": "^18.2.3"
   },
   "devDependencies": {
     "@types/node": "^20.17.0",
