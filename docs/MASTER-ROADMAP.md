@@ -93,7 +93,7 @@ Status:
 Deliverables
 
 - REST client — M6 complete
-- Webhook verification
+- Webhook verification — M8 complete
 - Plugin communication — M7 registration handshake complete
 - Credential validation — M6 complete
 - Store registration — M7 complete
