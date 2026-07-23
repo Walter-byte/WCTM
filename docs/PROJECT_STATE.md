@@ -6,13 +6,15 @@ Version: 1.0
 
 Current Phase
 
-Phase 3 — WooCommerce Integration active. M7 is complete.
+Phase 3 — WooCommerce Integration active. M8 is complete and merged; M7 is
+complete.
 
 ---
 
 Current Task
 
-None assigned. M7 is complete; await review and the next approved milestone.
+None assigned. M8 is merged, M9 has not started, and the next Phase 3 milestone
+must await A's approval.
 
 ---
 
@@ -121,6 +123,30 @@ Store registration fields are introduced by migration
 `20260722142357_store_registration_handshake`. The final `StoreStatus` literals
 remain `PENDING`, `ACTIVE`, `DISCONNECTED`, and `DISABLED`.
 
+M8 adds dedicated server-generated webhook secrets encrypted through the
+existing AES-256-GCM service and unique opaque endpoint keys used only for Store
+routing. M7 registration atomically provisions missing webhook credentials;
+OWNER and ADMIN members can provision or rotate both values without re-exposing
+an existing secret.
+
+The public WooCommerce webhook route resolves an active Store by endpoint key,
+validates required WooCommerce headers, verifies HMAC-SHA256 over exact raw
+request bytes with a length-guarded constant-time comparison, and parses JSON
+only after authentication. Tenant and Store identity always come from the
+server-resolved Store.
+
+Verified envelopes persist as `WebhookEvent` records deduplicated by Store and
+delivery ID, then enqueue `woocommerce.webhook.process` on the existing
+`operations` queue with a deterministic job ID. Enqueue failure leaves the
+event `RECEIVED` for recoverable redelivery; later lifecycle states acknowledge
+duplicates without another row or job. The worker advances operational state
+through `QUEUED`, `PROCESSING`, `COMPLETED`, or terminal `FAILED` only and
+performs no domain synchronization.
+
+Migration `20260723120000_woocommerce_webhook_ingestion` was applied cleanly.
+D-017 records the credential, authentication, idempotency, recovery, rotation,
+scope, and structured-logging boundaries.
+
 ---
 
 Plugin
@@ -171,7 +197,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-feature/m7-store-registration
+main
 
 ---
 
@@ -201,14 +227,15 @@ None
 
 Next Milestone
 
-Await review of M7 and the next approved Phase 3 milestone.
+None assigned. M9 has not started; await A's approval before starting the next
+Phase 3 milestone.
 
 ---
 
 Last Completed
 
-M7 — Plugin Communication & Store Registration (MVP), complete on feature branch
-`feature/m7-store-registration` and awaiting review and merge.
+M8 — WooCommerce Webhook Verification & Idempotent Ingestion, merged into
+`main` in commit `e4dfef6`.
 
 ---
 
@@ -220,4 +247,4 @@ Excellent
 
 Last Updated
 
-2026-07-22
+2026-07-23

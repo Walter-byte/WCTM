@@ -479,9 +479,9 @@ None.
 ## 7. Current Task
 
 No milestone is currently assigned. M8 — WooCommerce Webhook Verification &
-Idempotent Ingestion is complete on `feat/m8-webhook-ingestion` and awaits
-review. Phase 3 remains active; do not begin another milestone without explicit
-approval from A.
+Idempotent Ingestion is merged into `main` in commit `e4dfef6`. M9 has not
+started. Phase 3 remains active; do not begin another milestone without
+explicit approval from A.
 
 ---
 
