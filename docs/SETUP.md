@@ -37,6 +37,13 @@ canonical application value and rejects the documented development placeholders.
 Configuration validation reports all invalid variable names together without
 including their values.
 
+The Telegram transport and backend share `BOT_INTERNAL_API_KEY` as a dedicated
+service credential. Generate a strong random value outside local development;
+never reuse the Telegram bot token or a user JWT. `BACKEND_INTERNAL_URL` is the
+backend API base URL used only by the bot (the Compose default is
+`http://backend:3000/api`). Telegram account-link tokens default to a
+900-second lifetime through `TELEGRAM_LINK_TOKEN_TTL_SECONDS`.
+
 WooCommerce REST credential validation defaults to three total attempts, a
 5,000ms timeout per attempt, and a 15,000ms hard operation cap. Retry delays use
 a 300ms exponential base, factor 2, and jitter ratio `0.2` (±20%). These values
@@ -51,8 +58,9 @@ these limits with `PLUGIN_REGISTRATION_TOKEN_TTL_SECONDS`,
 `PLUGIN_REGISTRATION_RATE_WINDOW_SECONDS`. This limiter is endpoint-scoped and
 does not install a global throttling guard.
 
-The Telegram bot scaffold does not call the Telegram API, so the placeholder
-token is sufficient for local startup.
+The Telegram bot now starts grammY long-polling. A real `TELEGRAM_BOT_TOKEN` is
+required to run the bot transport; the documented placeholder remains suitable
+only for configuration validation and backend-only development.
 
 ## 2. Start the Docker Stack
 
@@ -64,14 +72,14 @@ Docker starts:
 
 1. PostgreSQL 16 and Redis 7 with persistent named volumes.
 2. The NestJS backend after both data services pass health checks.
-3. The offline grammY bot scaffold.
+3. The grammY bot transport, which calls the backend internal Telegram API.
 4. Caddy as the HTTP/HTTPS entry point.
 
 Expected application log messages include:
 
 ```text
 NestJS application started on port 3000
-Bot started
+{"event":"telegram_bot_polling_started",...}
 ```
 
 ## 3. Verify Services

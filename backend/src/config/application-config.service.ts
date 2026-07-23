@@ -49,6 +49,16 @@ export class ApplicationConfigService {
     });
     this.telegram = guardSecretSerialization({
       botToken: this.configService.get('TELEGRAM_BOT_TOKEN', { infer: true }),
+      internalApiKey: this.configService.get('BOT_INTERNAL_API_KEY', {
+        infer: true,
+      }),
+      backendInternalUrl: this.configService.get('BACKEND_INTERNAL_URL', {
+        infer: true,
+      }),
+      linkTokenTtlSeconds: this.configService.get(
+        'TELEGRAM_LINK_TOKEN_TTL_SECONDS',
+        { infer: true }
+      ),
     });
     this.woocommerce = guardSecretSerialization({
       webhookSecret: this.configService.get('WOOCOMMERCE_WEBHOOK_SECRET', {

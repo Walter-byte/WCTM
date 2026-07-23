@@ -110,7 +110,12 @@ processing leases, and bounded single-order reconciliation.
 ## Phase 4 — Telegram Platform
 
 Status:
-⬜ Pending
+🚧 In Progress
+
+Current Milestone:
+
+M10 — Telegram Account Linking & Private-Chat Authorization (implementation
+complete; awaiting review)
 
 Deliverables
 
@@ -120,6 +125,14 @@ Deliverables
 - Command system
 - Inline keyboards
 - Callback handling
+
+M10 scope:
+
+- Backend-owned Telegram identity and private-chat authorization
+- One-time account-link token issue and redemption
+- Bot-key-authenticated internal API
+- `/start`, `/status`, and confirmed `/unlink`
+- Automatic context only for exactly one eligible tenant and Store
 
 Exit Criteria
 

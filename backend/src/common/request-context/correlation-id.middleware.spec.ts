@@ -3,8 +3,10 @@ import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import type { ApplicationConfigService } from '../../config/application-config.service';
 import { StructuredLoggerService } from '../logging/structured-logger.service';
 import {
+  CORRELATION_ID_HEADER,
   CorrelationIdMiddleware,
   REQUEST_ID_HEADER,
+  TELEGRAM_UPDATE_ID_HEADER,
 } from './correlation-id.middleware';
 import { RequestContextService } from './request-context.service';
 
@@ -67,6 +69,39 @@ describe('CorrelationIdMiddleware', () => {
     expect(response.setHeader).toHaveBeenCalledWith(
       REQUEST_ID_HEADER,
       'client-request-id'
+    );
+  });
+
+  it('propagates internal correlation and Telegram update IDs into structured logs', () => {
+    const requestContext = new RequestContextService();
+    const middleware = new CorrelationIdMiddleware(requestContext);
+    const logger = new StructuredLoggerService(configuration(), requestContext);
+    const write = jest
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+    const request = {
+      headers: {
+        [CORRELATION_ID_HEADER]: 'bot-correlation-id',
+        [TELEGRAM_UPDATE_ID_HEADER]: '123456',
+      },
+    };
+    const response = { setHeader: jest.fn() };
+
+    middleware.use(request, response, () => {
+      logger.log('internal request', 'TelegramInternal');
+    });
+
+    const record = JSON.parse(String(write.mock.calls[0]?.[0])) as {
+      requestId: string;
+      telegramUpdateId: string;
+    };
+    expect(record).toMatchObject({
+      requestId: 'bot-correlation-id',
+      telegramUpdateId: '123456',
+    });
+    expect(response.setHeader).toHaveBeenCalledWith(
+      CORRELATION_ID_HEADER,
+      'bot-correlation-id'
     );
   });
 });

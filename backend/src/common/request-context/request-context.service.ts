@@ -9,6 +9,7 @@ export interface TenantRequestContext {
 
 interface RequestContext {
   requestId: string;
+  telegramUpdateId?: string;
   tenant?: Readonly<TenantRequestContext>;
 }
 
@@ -24,6 +25,10 @@ export class RequestContextService {
     return this.storage.getStore()?.tenant;
   }
 
+  get telegramUpdateId(): string | undefined {
+    return this.storage.getStore()?.telegramUpdateId;
+  }
+
   setTenant(tenant: TenantRequestContext): void {
     const context = this.storage.getStore();
 
@@ -34,7 +39,7 @@ export class RequestContextService {
     context.tenant = Object.freeze({ ...tenant });
   }
 
-  run<T>(requestId: string, callback: () => T): T {
-    return this.storage.run({ requestId }, callback);
+  run<T>(requestId: string, callback: () => T, telegramUpdateId?: string): T {
+    return this.storage.run({ requestId, telegramUpdateId }, callback);
   }
 }

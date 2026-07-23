@@ -43,30 +43,31 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-018)
+## 3. Architectural Decisions (D-001–D-019)
 
-| ID    | Decision                                                                                                                                                        | Status   |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| D-001 | Develop as production SaaS                                                                                                                                      | Accepted |
-| D-002 | NestJS for backend (alt: Fastify standalone)                                                                                                                    | Accepted |
-| D-003 | PostgreSQL as database                                                                                                                                          | Accepted |
-| D-004 | Redis mandatory (cache, queues, sessions, rate-limiting)                                                                                                        | Accepted |
-| D-005 | BullMQ for async jobs                                                                                                                                           | Accepted |
-| D-006 | WooCommerce via REST API + Webhooks                                                                                                                             | Accepted |
-| D-007 | Telegram is primary management UI                                                                                                                               | Accepted |
-| D-008 | n8n excluded from production                                                                                                                                    | Accepted |
-| D-009 | WordPress plugin stays lightweight                                                                                                                              | Accepted |
-| D-010 | Simplicity-first; no overengineering, no premature optimization                                                                                                 | Accepted |
-| D-011 | Prisma ORM + Prisma Migrate; `schema.prisma` is single source of truth; all models have `created_at`/`updated_at`; soft-delete on Tenant, Store, Membership     | Accepted |
-| D-012 | PrismaService uses Prisma's official PostgreSQL driver adapter                                                                                                  | Accepted |
-| D-013 | Global typed configuration uses `@nestjs/config` with Joi validation                                                                                            | Accepted |
-| D-014 | One in-process BullMQ operations worker with three exponential-backoff attempts                                                                                 | Accepted |
-| D-015 | Fail-closed WooCommerce credential validation with bounded REST retries, timeouts, and secret-safe normalized errors                                            | Accepted |
-| D-016 | WooCommerce-REST-only plugin registration verification, reissue-and-rotate recovery, and endpoint-scoped Redis limiting                                         | Accepted |
-| D-017 | Dedicated encrypted webhook secrets, routing-only endpoint keys, raw-body HMAC authentication, recoverable idempotent persist/enqueue, and OWNER/ADMIN rotation | Accepted |
+| ID    | Decision                                                                                                                                                                | Status   |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| D-001 | Develop as production SaaS                                                                                                                                              | Accepted |
+| D-002 | NestJS for backend (alt: Fastify standalone)                                                                                                                            | Accepted |
+| D-003 | PostgreSQL as database                                                                                                                                                  | Accepted |
+| D-004 | Redis mandatory (cache, queues, sessions, rate-limiting)                                                                                                                | Accepted |
+| D-005 | BullMQ for async jobs                                                                                                                                                   | Accepted |
+| D-006 | WooCommerce via REST API + Webhooks                                                                                                                                     | Accepted |
+| D-007 | Telegram is primary management UI                                                                                                                                       | Accepted |
+| D-008 | n8n excluded from production                                                                                                                                            | Accepted |
+| D-009 | WordPress plugin stays lightweight                                                                                                                                      | Accepted |
+| D-010 | Simplicity-first; no overengineering, no premature optimization                                                                                                         | Accepted |
+| D-011 | Prisma ORM + Prisma Migrate; `schema.prisma` is single source of truth; all models have `created_at`/`updated_at`; soft-delete on Tenant, Store, Membership             | Accepted |
+| D-012 | PrismaService uses Prisma's official PostgreSQL driver adapter                                                                                                          | Accepted |
+| D-013 | Global typed configuration uses `@nestjs/config` with Joi validation                                                                                                    | Accepted |
+| D-014 | One in-process BullMQ operations worker with three exponential-backoff attempts                                                                                         | Accepted |
+| D-015 | Fail-closed WooCommerce credential validation with bounded REST retries, timeouts, and secret-safe normalized errors                                                    | Accepted |
+| D-016 | WooCommerce-REST-only plugin registration verification, reissue-and-rotate recovery, and endpoint-scoped Redis limiting                                                 | Accepted |
+| D-017 | Dedicated encrypted webhook secrets, routing-only endpoint keys, raw-body HMAC authentication, recoverable idempotent persist/enqueue, and OWNER/ADMIN rotation         | Accepted |
 | D-018 | Store-scoped Order projection with timestamp/fingerprint ordering, processing-lease recovery, bounded single-order reconciliation, and verified delete/restore handling | Accepted |
+| D-019 | Backend-owned one-time Telegram linking, bot-key internal API, private-chat-only authorization, update idempotency, exact-one context resolution, and soft unlinking    | Accepted |
 
-Next decision number: **D-019**, if a future task produces a genuine
+Next decision number: **D-020**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -343,7 +344,7 @@ Operational runbook:
    and queue connection shutdown. Do not force-kill during active work unless
    recovery procedures require it.
 
-### Phase 3 — WooCommerce Integration (active)
+### Phase 3 — WooCommerce Integration (complete)
 
 #### M6 — REST Client Hardening & Credential Validation (complete)
 
@@ -485,6 +486,31 @@ Migration: `20260723120000_woocommerce_webhook_ingestion`.
 - No Telegram behavior, outbound WooCommerce write, related domain model, bulk
   sync, polling, historical import, replay surface, or metrics platform is added
 
+### Phase 4 — Telegram Platform (active)
+
+#### M10 — Telegram Account Linking & Private-Chat Authorization (in review)
+
+- `POST /api/internal/telegram/link-tokens` uses the authenticated JWT user
+  subject and returns a short-lived raw link token once; only its SHA-256 hash
+  is stored.
+- Bot-only `redeem`, `status`, and `unlink` internal endpoints require
+  `X-Bot-Api-Key` and propagate `X-Correlation-Id` plus
+  `X-Telegram-Update-Id`.
+- TelegramAccount enforces unique Telegram-user and SaaS-user identities.
+  TelegramChatAuthorization authorizes unique private chats only and always
+  joins through TelegramAccount.
+- Migration `20260723220000_telegram_account_linking` applied cleanly in an
+  isolated PostgreSQL database.
+- Redemption and confirmed unlink are atomic and update-idempotent. Unlink
+  soft-revokes the account and every related chat authorization.
+- Active tenant and Store context is persisted only when exactly one active
+  Membership and exactly one non-deleted `ACTIVE` Store are eligible.
+- The grammY process now long-polls and implements `/start`,
+  `/start <token>`, `/status`, and confirmed `/unlink`. It has no Prisma import,
+  database connection, or local persisted state.
+- Groups, supergroups, and channels receive a safe rejection. Order management,
+  Store switching, and webhook transport remain excluded.
+
 ---
 
 ## 5. Current Repository Structure
@@ -504,9 +530,9 @@ None.
 
 ## 7. Current Task
 
-No milestone is currently assigned. M9 — Order Webhook Projection &
-Single-Order Reconciliation is complete. Phase 3 remains active; do not begin
-another milestone or Phase 4 without explicit approval from A.
+M10 — Telegram Account Linking & Private-Chat Authorization is implemented and
+awaiting review. Do not begin another milestone without explicit approval from
+A.
 
 ---
 

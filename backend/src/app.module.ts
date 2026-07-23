@@ -19,6 +19,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { StoreModule } from './store/store.module';
 import { TenantContextGuard } from './tenant/guards/tenant-context.guard';
 import { TenantContextModule } from './tenant/tenant-context.module';
+import { TelegramModule } from './telegram/telegram.module';
 import { TenantsModule } from './tenants/tenants.module';
 import { UsersModule } from './users/users.module';
 import { WebhooksModule } from './webhooks/webhooks.module';
@@ -37,6 +38,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     TenantsModule,
     MembershipsModule,
     WebhooksModule,
+    TelegramModule,
   ],
   providers: [
     {

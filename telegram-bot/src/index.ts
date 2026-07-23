@@ -1,14 +1,15 @@
-import { Bot } from 'grammy';
+import { createBot } from './bot';
+import { loadBotConfiguration } from './config';
+import { InternalBackendClient } from './internal-backend.client';
 
 const shutdownSignals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
+const MAX_POLLING_ATTEMPTS = 3;
+const POLLING_BACKOFF_BASE_MS = 1_000;
 
 async function waitForShutdown(): Promise<NodeJS.Signals> {
   return new Promise((resolve) => {
-    const keepAliveTimer = setInterval(() => undefined, 60_000);
-
     for (const signal of shutdownSignals) {
       process.once(signal, () => {
-        clearInterval(keepAliveTimer);
         resolve(signal);
       });
     }
@@ -16,26 +17,97 @@ async function waitForShutdown(): Promise<NodeJS.Signals> {
 }
 
 async function main(): Promise<void> {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-
-  if (!token) {
-    throw new Error('TELEGRAM_BOT_TOKEN is required.');
-  }
-
-  const bot = new Bot(token);
-
-  // Polling starts in the Telegram platform phase; this scaffold stays offline.
-  bot.command('start', async (context) => {
-    await context.reply('WC-Telegram-SaaS bot is being prepared.');
+  const configuration = loadBotConfiguration(process.env);
+  const backend = new InternalBackendClient(configuration);
+  const bot = createBot(configuration.botToken, {
+    backend,
+    log: (record) => {
+      process.stdout.write(
+        `${JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'log',
+          ...record,
+        })}\n`
+      );
+    },
   });
 
-  console.log('Bot started');
+  const polling = startPollingWithRetry(bot);
+  const outcome = await Promise.race([
+    waitForShutdown().then((signal) => ({ signal })),
+    polling.then(() => ({ signal: undefined })),
+  ]);
 
-  const shutdownSignal = await waitForShutdown();
-  console.log(`Bot received ${shutdownSignal}; shutting down gracefully.`);
+  if (!outcome.signal) {
+    throw new Error('Telegram polling stopped unexpectedly');
+  }
+
+  const shutdownSignal = outcome.signal;
+  bot.stop();
+  await polling;
+  process.stdout.write(
+    `${JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'log',
+      event: 'telegram_bot_stopping',
+      signal: shutdownSignal,
+    })}\n`
+  );
 }
 
 void main().catch((error: unknown) => {
-  console.error('Telegram bot failed to start.', error);
+  const errorName = error instanceof Error ? error.name : 'UnknownError';
+
+  process.stderr.write(
+    `${JSON.stringify({
+      timestamp: new Date().toISOString(),
+      level: 'error',
+      event: 'telegram_bot_failed',
+      errorName,
+    })}\n`
+  );
   process.exitCode = 1;
 });
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function startPollingWithRetry(
+  bot: ReturnType<typeof createBot>
+): Promise<void> {
+  for (let attempt = 1; attempt <= MAX_POLLING_ATTEMPTS; attempt += 1) {
+    try {
+      await bot.start({
+        onStart: () => {
+          process.stdout.write(
+            `${JSON.stringify({
+              timestamp: new Date().toISOString(),
+              level: 'log',
+              event: 'telegram_bot_polling_started',
+            })}\n`
+          );
+        },
+      });
+      return;
+    } catch (error) {
+      const errorName = error instanceof Error ? error.name : 'UnknownError';
+
+      process.stderr.write(
+        `${JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'error',
+          event: 'telegram_bot_polling_failed',
+          attempt,
+          errorName,
+        })}\n`
+      );
+
+      if (attempt >= MAX_POLLING_ATTEMPTS) {
+        throw new Error('Telegram polling is unavailable');
+      }
+
+      await delay(POLLING_BACKOFF_BASE_MS * 2 ** (attempt - 1));
+    }
+  }
+}
