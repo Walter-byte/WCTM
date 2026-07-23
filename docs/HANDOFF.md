@@ -565,7 +565,7 @@ Bot transport:
 - The bot has no Prisma import, database connection, WooCommerce call, filtering,
   ownership parsing, or domain mutation.
 
-#### M12 — Telegram Order Status Update (implemented; in review)
+#### M12 — Telegram Order Status Update (merged; awaiting real-store validation)
 
 - `POST /api/internal/telegram/orders/transitions` accepts an M11 detail
   reference, revalidates current context and OWNER/ADMIN role, derives a
@@ -591,8 +591,9 @@ Bot transport:
 - The grammY bot renders only backend-provided targets, forwards the selected
   target, and retains M11 edit-to-reply fallback. It has no Prisma, database,
   WooCommerce, or status-policy logic.
-- Phase 4 stays open until M12 is merged, validated against a real WooCommerce
-  store, and accepted by A.
+- Phase 4 stays In Progress. M12 is merged and the minimum exit criterion is
+  technically implemented; the only active gate before closure review is A's
+  validation against a real WooCommerce store.
 
 ---
 
@@ -607,15 +608,17 @@ the lightweight connector. The larger `apps/`, `packages/`, and
 
 ## 6. Current Blockers
 
-None.
+A's validation of M12 against a real WooCommerce store is the only active gate
+before Phase 4 closure review.
 
 ---
 
 ## 7. Current Task
 
-M12 — Telegram Order Status Update is implemented and awaiting review. Do not
-begin another milestone until M12 is merged, validated against a real
-WooCommerce store, and accepted by A.
+M12 — Telegram Order Status Update is merged and awaiting real-store
+validation. Phase 4 stays In Progress, no next milestone is assigned or may
+begin, and A's validation against a real WooCommerce store is the only active
+gate before closure review.
 
 ---
 

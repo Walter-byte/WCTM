@@ -289,7 +289,7 @@ satisfied. No next milestone is assigned.
 - No WooCommerce calls, writes, reconciliation, `/order` direct lookup, Store
   switching, group support, or next-milestone behavior
 
-### M12 — Telegram Order Status Update 🚧 Implemented / In Review
+### M12 — Telegram Order Status Update ✅ Complete / Merged
 
 - OWNER and ADMIN can open a server-derived status menu from an M11 order
   detail; MEMBER remains read-only
@@ -306,8 +306,9 @@ satisfied. No next milestone is assigned.
 - Stateless grammY target rendering and forwarding with edit-to-reply fallback
 - Migration `20260724090000_telegram_order_status_write`
 
-Phase 4 remains open until M12 is merged, validated against a real
-WooCommerce store, and accepted by A.
+Phase 4 remains In Progress; M12 is merged and the minimum exit criterion is
+technically implemented. Closure is blocked pending A's validation against a
+real WooCommerce store.
 
 ## Phase 5 — Core Store Management (MVP) ⬜ Planned
 
