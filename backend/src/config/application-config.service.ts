@@ -55,8 +55,23 @@ export class ApplicationConfigService {
       backendInternalUrl: this.configService.get('BACKEND_INTERNAL_URL', {
         infer: true,
       }),
+      backendTimeoutMs: this.configService.get('BOT_BACKEND_TIMEOUT_MS', {
+        infer: true,
+      }),
       linkTokenTtlSeconds: this.configService.get(
         'TELEGRAM_LINK_TOKEN_TTL_SECONDS',
+        { infer: true }
+      ),
+      callbackSigningKey: this.configService.get(
+        'TELEGRAM_CALLBACK_SIGNING_KEY',
+        { infer: true }
+      ),
+      callbackRefTtlSeconds: this.configService.get(
+        'TELEGRAM_CALLBACK_REF_TTL_SECONDS',
+        { infer: true }
+      ),
+      orderFreshnessThresholdSeconds: this.configService.get(
+        'TELEGRAM_ORDER_FRESHNESS_THRESHOLD_SECONDS',
         { infer: true }
       ),
     });

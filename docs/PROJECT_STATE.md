@@ -6,15 +6,15 @@ Version: 1.0
 
 Current Phase
 
-Phase 4 — Telegram Platform active. M10 implementation is complete and awaiting
+Phase 4 — Telegram Platform active. M11 implementation is complete and awaiting
 review.
 
 ---
 
 Current Task
 
-M10 — Telegram Account Linking & Private-Chat Authorization. Do not begin
-another milestone until M10 is reviewed and approved.
+M11 — Telegram Order Listing & Detail (read-only). Do not begin another
+milestone until M11 is reviewed and approved.
 
 ---
 
@@ -211,6 +211,33 @@ TelegramChatAuthorization, and TelegramLinkToken and applied cleanly in an
 isolated PostgreSQL database. Internal bot routes require `X-Bot-Api-Key`;
 link-token issuance remains on the authenticated JWT user surface.
 
+M11 adds bot-only `POST /api/internal/telegram/orders/list` and
+`POST /api/internal/telegram/orders/detail`. Both re-resolve the linked
+Telegram account, authorized private chat, active Membership and role, active
+tenant, and exactly one active Store from server state. OWNER, ADMIN, and MEMBER
+may read; inactive/deleted identities and ambiguous or changed contexts fail
+through typed states without exposing ownership.
+
+Order lists read only M9 projections in fixed eight-row pages ordered by
+`wc_created_at DESC, wc_order_id DESC`. Full-boundary keyset references support
+previous and next navigation without offset pagination, and the reachable
+window is capped at 200 rows.
+
+Because complete account/chat/tenant/Store/order bindings exceed Telegram's
+64-byte callback-data limit, migration
+`20260723230000_telegram_order_callback_references` adds expiring server-side
+references. Callback data contains only a purpose prefix, random short ID, and
+HMAC tag; every request validates signature, TTL, purpose, and current
+account/chat/tenant/Store binding. The complete seven-migration chain applied
+cleanly in an isolated PostgreSQL database and Prisma reported it up to date.
+
+Order summaries and details expose sanitized projection fields only. Remotely
+deleted Orders return a minimal marker without line items or customer details
+beyond display name. Freshness uses the authoritative M9 `last_synced_at`
+timestamp with a configured delayed threshold. The bot adds `/orders`, inline
+pagination, detail selection, and back navigation while remaining a stateless
+transport adapter with no Prisma, database, or WooCommerce access.
+
 ---
 
 Infrastructure
@@ -248,7 +275,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-main
+feat/m11-telegram-order-listing
 
 ---
 
@@ -278,14 +305,14 @@ None
 
 Next Milestone
 
-None assigned. Await M10 review and A's approval before starting another
+None assigned. Await M11 review and A's approval before starting another
 milestone.
 
 ---
 
 Last Completed
 
-M9 — Order Webhook Projection & Single-Order Reconciliation.
+M10 — Telegram Account Linking & Private-Chat Authorization.
 
 ---
 

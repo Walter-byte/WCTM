@@ -15,7 +15,11 @@ export interface ValidatedEnvironment {
   TELEGRAM_BOT_TOKEN: string;
   BOT_INTERNAL_API_KEY: string;
   BACKEND_INTERNAL_URL: string;
+  BOT_BACKEND_TIMEOUT_MS: number;
   TELEGRAM_LINK_TOKEN_TTL_SECONDS: number;
+  TELEGRAM_CALLBACK_SIGNING_KEY: string;
+  TELEGRAM_CALLBACK_REF_TTL_SECONDS: number;
+  TELEGRAM_ORDER_FRESHNESS_THRESHOLD_SECONDS: number;
   WOOCOMMERCE_WEBHOOK_SECRET: string;
   WOOCOMMERCE_REST_MAX_ATTEMPTS: number;
   WOOCOMMERCE_REST_ATTEMPT_TIMEOUT_MS: number;
@@ -44,7 +48,11 @@ export const CONFIG_ENV_KEYS = [
   'TELEGRAM_BOT_TOKEN',
   'BOT_INTERNAL_API_KEY',
   'BACKEND_INTERNAL_URL',
+  'BOT_BACKEND_TIMEOUT_MS',
   'TELEGRAM_LINK_TOKEN_TTL_SECONDS',
+  'TELEGRAM_CALLBACK_SIGNING_KEY',
+  'TELEGRAM_CALLBACK_REF_TTL_SECONDS',
+  'TELEGRAM_ORDER_FRESHNESS_THRESHOLD_SECONDS',
   'WOOCOMMERCE_WEBHOOK_SECRET',
   'WOOCOMMERCE_REST_MAX_ATTEMPTS',
   'WOOCOMMERCE_REST_ATTEMPT_TIMEOUT_MS',
@@ -88,7 +96,11 @@ export interface TelegramSettings {
   botToken: string;
   internalApiKey: string;
   backendInternalUrl: string;
+  backendTimeoutMs: number;
   linkTokenTtlSeconds: number;
+  callbackSigningKey: string;
+  callbackRefTtlSeconds: number;
+  orderFreshnessThresholdSeconds: number;
 }
 
 export interface WooCommerceSettings {

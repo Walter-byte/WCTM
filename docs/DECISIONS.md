@@ -497,4 +497,55 @@ Accepted.
 
 ---
 
-Next decision number: D-020.
+## D-020
+
+Date
+
+2026-07-23
+
+Decision
+
+Telegram order access reads only M9 projections through bot-key-authenticated
+internal endpoints. Every request resolves the linked Telegram account,
+authorized private chat, active Membership, tenant, and exactly one active
+Store again in the backend. OWNER, ADMIN, and MEMBER roles may read; the bot
+never receives or supplies tenant, Store, or raw order ownership identifiers.
+
+Order lists use a fixed eight-row keyset ordered by WooCommerce creation time
+descending and WooCommerce order ID descending. Cursors carry the full boundary,
+direction, and reachable offset through a server-side reference, and the
+reachable window ends after 200 rows.
+
+Telegram's 64-byte callback-data limit is handled with short opaque references.
+The callback contains only a purpose prefix, a random 12-byte reference ID, and
+a truncated HMAC-SHA256 tag. The expiring server-side reference binds the
+Telegram account and chat, tenant, Store, purpose, order key or keyset boundary,
+issuance time, and TTL. Every use validates the signature, expiry, purpose, and
+current context. Replays are harmless because M11 is read-only.
+
+Freshness is derived from the M9 `Order.lastSyncedAt` projection timestamp.
+Delayed state uses a typed configurable threshold. An empty projection set uses
+the Unix epoch with `delayed: true` so absence is never presented as fresh.
+
+Reason
+
+Keyset pagination remains deterministic while new orders arrive, and
+server-side callback references preserve complete authorization/context binding
+without exposing raw identifiers or exceeding Telegram's callback limit.
+Backend-owned resolution keeps the grammY process stateless and prevents stale
+keyboards from authorizing data after membership or Store context changes.
+
+Boundary
+
+M11 adds `/orders`, list pagination, and inline read-only order detail only. It
+adds no direct `/order` lookup, WooCommerce request, reconciliation, order
+mutation, Store switching, group support, notification delivery, or later
+Telegram command.
+
+Status
+
+Accepted.
+
+---
+
+Next decision number: D-021.
