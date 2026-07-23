@@ -393,4 +393,56 @@ Accepted.
 
 ---
 
+## D-018
+
+Date
+
+2026-07-23
+
+Decision
+
+Verified WooCommerce `order.created`, `order.updated`, `order.deleted`, and
+`order.restored` WebhookEvents project into a tenant/Store-scoped Order snapshot
+identified uniquely by Store ID and WooCommerce order ID.
+
+WooCommerce `date_modified_gmt` is the primary ordering field. Older projections
+are no-ops; newer projections apply; equal timestamps with equal stable
+fingerprints are no-ops; equal timestamps with different fingerprints require
+one authoritative M6 single-order fetch. Missing or unreliable modification
+timestamps and otherwise malformed snapshots with a stable order ID use that
+same bounded reconciliation path.
+
+WebhookEvent processing uses a 30-second database lease. `QUEUED` events and
+expired `PROCESSING` leases may be claimed atomically; active leases do not
+duplicate projection work. Retryable reconciliation failures return to
+`QUEUED` for the existing three BullMQ attempts. Terminal or exhausted failures
+remain `FAILED` with an M6-normalized category, bounded safe code, attempt count,
+and failure timestamp.
+
+WooCommerce core source verification established that `order.deleted` builds an
+ID-only payload and `order.restored` builds the normal REST resource payload.
+M9 therefore sets `remote_deleted_at` on an existing snapshot for verified
+delete topics and clears it by re-projecting verified restore topics. A generic
+M6 `not-found` reconciliation result remains terminal because it cannot safely
+distinguish a missing order from a missing REST route.
+
+Reason
+
+Database uniqueness, source modification time, canonical fingerprints, and
+bounded lease recovery provide deterministic at-least-once processing without a
+new queue or distributed lock. Single-order reconciliation repairs uncertain
+state without introducing full-store sweeps, polling, or historical imports.
+
+Boundary
+
+M9 synchronizes Orders only. It adds no Telegram behavior, WooCommerce writes,
+product/customer/inventory/address domain models, bulk synchronization, replay
+API/UI, scheduler, or metrics platform.
+
+Status
+
+Accepted.
+
+---
+
 Future decisions continue below.

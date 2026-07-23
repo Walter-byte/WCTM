@@ -97,12 +97,13 @@ Deliverables
 - Plugin communication — M7 registration handshake complete
 - Credential validation — M6 complete
 - Store registration — M7 complete
-- Sync service
+- Order sync service — M9 complete
 
 Exit Criteria
 
-✅ Met on 2026-07-22: a pre-existing Store can complete the single-use plugin
-registration handshake after WooCommerce REST verification.
+✅ Met on 2026-07-23: verified order webhooks project idempotently into
+tenant/Store-scoped Order snapshots, with stale-event protection, recoverable
+processing leases, and bounded single-order reconciliation.
 
 ---
 

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { OrdersModule } from '../orders/orders.module';
 import { TenantContextModule } from '../tenant/tenant-context.module';
 import { QueueRuntimeService } from './queue-runtime.service';
 import { ReferenceJobProducer } from './reference-job.producer';
@@ -8,7 +9,7 @@ import { WooCommerceWebhookJobProducer } from './woocommerce-webhook-job.produce
 import { WooCommerceWebhookProcessor } from './woocommerce-webhook.processor';
 
 @Module({
-  imports: [TenantContextModule],
+  imports: [TenantContextModule, OrdersModule],
   providers: [
     ReferenceProcessor,
     WooCommerceWebhookProcessor,

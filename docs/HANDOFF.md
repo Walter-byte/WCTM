@@ -43,7 +43,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-017)
+## 3. Architectural Decisions (D-001–D-018)
 
 | ID    | Decision                                                                                                                                                        | Status   |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -64,8 +64,9 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-015 | Fail-closed WooCommerce credential validation with bounded REST retries, timeouts, and secret-safe normalized errors                                            | Accepted |
 | D-016 | WooCommerce-REST-only plugin registration verification, reissue-and-rotate recovery, and endpoint-scoped Redis limiting                                         | Accepted |
 | D-017 | Dedicated encrypted webhook secrets, routing-only endpoint keys, raw-body HMAC authentication, recoverable idempotent persist/enqueue, and OWNER/ADMIN rotation | Accepted |
+| D-018 | Store-scoped Order projection with timestamp/fingerprint ordering, processing-lease recovery, bounded single-order reconciliation, and verified delete/restore handling | Accepted |
 
-Next decision number: **D-018**, if a future task produces a genuine
+Next decision number: **D-019**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -459,6 +460,31 @@ Persistence and queue lifecycle:
 
 Migration: `20260723120000_woocommerce_webhook_ingestion`.
 
+#### M9 — Order Webhook Projection & Single-Order Reconciliation (complete)
+
+- Migration `20260723180000_order_projection` adds the Order snapshot and unique
+  `(store_id, wc_order_id)` identity boundary plus WebhookEvent lease, attempt,
+  and bounded diagnostic fields
+- `order.created` and `order.updated` project totals, customer display data,
+  line items, WooCommerce timestamps, and a canonical SHA-256 fingerprint
+- Older timestamps and exact equal-timestamp duplicates are no-ops; newer
+  snapshots apply; equal-timestamp content conflicts fetch exactly one
+  authoritative order through the bounded M6 client
+- Missing/unreliable timestamps and malformed payloads with a stable order ID
+  use the same single-order reconciliation path
+- The operations worker derives tenant and Store only from the persisted
+  WebhookEvent Store relation and ignores payload/queued ownership claims
+- A 30-second processing lease permits crash recovery while blocking active
+  duplicate work; Store-scoped uniqueness remains the final safety boundary
+- Retryable transport, timeout, and rate-limit failures return to `QUEUED` for
+  the existing three attempts. Auth, not-found, malformed, unexpected terminal,
+  and exhausted failures persist secret-safe `FAILED` diagnostics
+- WooCommerce core source confirms `order.deleted` delivers `{ id }` and
+  `order.restored` delivers the REST resource. M9 retains snapshots on delete
+  and re-projects them on restore
+- No Telegram behavior, outbound WooCommerce write, related domain model, bulk
+  sync, polling, historical import, replay surface, or metrics platform is added
+
 ---
 
 ## 5. Current Repository Structure
@@ -478,10 +504,9 @@ None.
 
 ## 7. Current Task
 
-No milestone is currently assigned. M8 — WooCommerce Webhook Verification &
-Idempotent Ingestion is merged into `main` in commit `e4dfef6`. M9 has not
-started. Phase 3 remains active; do not begin another milestone without
-explicit approval from A.
+No milestone is currently assigned. M9 — Order Webhook Projection &
+Single-Order Reconciliation is complete. Phase 3 remains active; do not begin
+another milestone or Phase 4 without explicit approval from A.
 
 ---
 

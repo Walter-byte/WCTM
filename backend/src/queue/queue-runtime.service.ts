@@ -185,7 +185,7 @@ export class QueueRuntimeService
 
     if (job.name === WOOCOMMERCE_WEBHOOK_JOB_NAME) {
       try {
-        await this.webhookProcessor.markFailed(job.data);
+        await this.webhookProcessor.markFailed(job.data, error);
       } catch {
         this.logger.error(
           'WooCommerce webhook dead-letter state update failed',

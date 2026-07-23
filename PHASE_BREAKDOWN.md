@@ -210,6 +210,46 @@ server-derived tenant/Store identity, and recoverably published once to the M5
 queue while malformed, unauthenticated, and duplicate deliveries follow their
 defined fail-closed or acknowledgment paths.
 
+### M9 — Order Webhook Projection & Single-Order Reconciliation ✅ Complete
+
+- Verified `order.created`, `order.updated`, `order.deleted`, and
+  `order.restored` events project into tenant/Store-scoped Order records.
+- Store and tenant identity come only from the persisted WebhookEvent Store
+  relation; payload and queued ownership fields cannot select another Store.
+- The `(store_id, wc_order_id)` uniqueness boundary, WooCommerce modification
+  timestamps, and stable projection fingerprints provide deterministic
+  idempotency and stale/equal-timestamp conflict handling.
+- Missing, malformed, or equal-timestamp-conflicting snapshots use one bounded
+  M6 REST fetch for that WooCommerce order only. No sweep, polling, historical
+  import, or outbound WooCommerce write is included.
+- A 30-second processing lease reclaims abandoned `PROCESSING` events while
+  active leases reject duplicate projection work. Retryable failures return to
+  `QUEUED`; terminal or exhausted failures remain `FAILED` with bounded,
+  secret-safe diagnostics and attempt counts.
+- WooCommerce core verification established that `order.deleted` carries a
+  stable ID-only payload and `order.restored` carries the REST order resource.
+  Deletes retain the existing snapshot and set `remote_deleted_at`; restores
+  re-project and clear it.
+
+Acceptance checklist:
+
+- [x] Order snapshots are tenant/Store-scoped and unique by Store/WooCommerce ID
+- [x] Older events and exact duplicates cannot regress Order state
+- [x] Equal-timestamp conflicts reconcile one authoritative order
+- [x] Missing or malformed timestamps route to bounded reconciliation
+- [x] Retryable M6 failures use the existing three BullMQ attempts
+- [x] Auth, not-found, malformed, and exhausted failures persist safe diagnostics
+- [x] Stale processing leases are reclaimable without duplicating Orders
+- [x] Verified delete/restore transitions retain and restore snapshots safely
+- [x] Migration `20260723180000_order_projection` applies cleanly
+- [x] No Telegram, product, customer, inventory, address model, bulk sync, or
+      outbound WooCommerce write is included
+
+Exit criterion met on 2026-07-23: verified WooCommerce order webhooks project
+once into Store-scoped Order snapshots, ambiguous state reconciles through one
+bounded M6 order fetch, and stalled or failed processing remains recoverable and
+diagnosable within the existing operations queue.
+
 Phase 3 remains active. No next milestone is assigned.
 
 ## Phase 4 — Telegram Platform ⬜ Planned

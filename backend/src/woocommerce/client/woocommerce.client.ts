@@ -31,7 +31,7 @@ export type WooCommerceErrorCategory =
 const SAFE_ERROR_MESSAGES: Readonly<Record<WooCommerceErrorCategory, string>> =
   {
     auth: 'WooCommerce authentication failed',
-    'not-found': 'WooCommerce validation endpoint was not found',
+    'not-found': 'WooCommerce resource was not found',
     transport: 'Unable to reach the WooCommerce store',
     'rate-limited': 'WooCommerce rate limit was exceeded',
     timeout: 'WooCommerce connection timed out',
@@ -59,6 +59,21 @@ export class WooCommerceClient {
   constructor(private readonly options: WooCommerceClientOptions) {}
 
   async validateCredentials(): Promise<WooCommerceValidationResult> {
+    const data = await this.requestWithTotalTimeout<unknown>(
+      this.validationUrl
+    );
+    const storeName = this.readStoreName(data);
+
+    return storeName ? { storeName } : {};
+  }
+
+  fetchOrder(wcOrderId: string): Promise<unknown> {
+    return this.requestWithTotalTimeout<unknown>(
+      `${this.ordersUrl}/${encodeURIComponent(wcOrderId)}`
+    );
+  }
+
+  private async requestWithTotalTimeout<T>(url: string): Promise<T> {
     const controller = new AbortController();
     let totalTimeout: NodeJS.Timeout | undefined;
     const totalTimeoutPromise = new Promise<never>((_resolve, reject) => {
@@ -70,7 +85,7 @@ export class WooCommerceClient {
 
     try {
       return await Promise.race([
-        this.probeWithRetries(controller.signal),
+        this.getWithRetries<T>(url, controller.signal),
         totalTimeoutPromise,
       ]);
     } finally {
@@ -102,16 +117,17 @@ export class WooCommerceClient {
     }
   }
 
-  private async probeWithRetries(
+  private async getWithRetries<T>(
+    url: string,
     signal: AbortSignal
-  ): Promise<WooCommerceValidationResult> {
+  ): Promise<T> {
     for (
       let attempt = 1;
       attempt <= this.options.resilience.maxAttempts;
       attempt += 1
     ) {
       try {
-        const response = await axios.get<unknown>(this.validationUrl, {
+        const response = await axios.get<T>(url, {
           auth: {
             username: this.options.consumerKey,
             password: this.options.consumerSecret,
@@ -119,9 +135,7 @@ export class WooCommerceClient {
           signal,
           timeout: this.options.resilience.attemptTimeoutMs,
         });
-        const storeName = this.readStoreName(response.data);
-
-        return storeName ? { storeName } : {};
+        return response.data;
       } catch (error: unknown) {
         if (signal.aborted) {
           throw new WooCommerceClientError('timeout');
@@ -227,6 +241,10 @@ export class WooCommerceClient {
 
   private get validationUrl(): string {
     return `${this.options.storeUrl.replace(/\/+$/, '')}/wp-json/wc/v3/system_status`;
+  }
+
+  private get ordersUrl(): string {
+    return `${this.options.storeUrl.replace(/\/+$/, '')}/wp-json/wc/v3/orders`;
   }
 
   private readStoreName(value: unknown): string | undefined {

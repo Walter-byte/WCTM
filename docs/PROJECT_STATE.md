@@ -6,15 +6,14 @@ Version: 1.0
 
 Current Phase
 
-Phase 3 — WooCommerce Integration active. M8 is complete and merged; M7 is
+Phase 3 — WooCommerce Integration active. M9 is complete; M8 and M7 are
 complete.
 
 ---
 
 Current Task
 
-None assigned. M8 is merged, M9 has not started, and the next Phase 3 milestone
-must await A's approval.
+None assigned. M9 is complete, and the next milestone must await A's approval.
 
 ---
 
@@ -147,6 +146,37 @@ Migration `20260723120000_woocommerce_webhook_ingestion` was applied cleanly.
 D-017 records the credential, authentication, idempotency, recovery, rotation,
 scope, and structured-logging boundaries.
 
+M9 adds tenant/Store-scoped Order snapshots with a unique
+`(store_id, wc_order_id)` identity boundary. Verified `order.created` and
+`order.updated` payloads map order number, status, currency, totals, customer
+display data, line items, WooCommerce creation/modification timestamps, and a
+canonical SHA-256 projection fingerprint without introducing related product,
+customer, inventory, address, or line-item tables.
+
+The M8 `woocommerce.webhook.process` worker now loads identity only through the
+WebhookEvent Store relation. Older WooCommerce modification timestamps are
+no-ops, newer snapshots apply, exact equal-timestamp duplicates are no-ops, and
+equal-timestamp content conflicts reconcile through one bounded M6 order fetch.
+Missing or unreliable timestamps and malformed snapshots with a stable order ID
+use the same single-order reconciliation path.
+
+WebhookEvent processing has a 30-second lease, attempt counter, normalized
+failure category, bounded safe failure code, and last-failure timestamp.
+Expired `PROCESSING` work can be reclaimed after a crash; active leases cannot
+duplicate projection work. Retryable WooCommerce failures use the existing
+three BullMQ attempts, while auth, not-found, malformed, and exhausted failures
+remain terminal diagnostic records.
+
+WooCommerce core source verification confirmed stable ID-only
+`order.deleted` payloads and full REST-resource `order.restored` payloads. M9
+therefore retains the Order snapshot while setting `remote_deleted_at`, and a
+restore re-projects the snapshot and clears that marker. Generic reconciliation
+not-found results remain terminal.
+
+Migration `20260723180000_order_projection` applied cleanly in an isolated
+PostgreSQL database. D-018 records projection ordering, canonical fingerprint,
+lease recovery, reconciliation, and verified delete/restore boundaries.
+
 ---
 
 Plugin
@@ -227,15 +257,13 @@ None
 
 Next Milestone
 
-None assigned. M9 has not started; await A's approval before starting the next
-Phase 3 milestone.
+None assigned. Await A's approval before starting another milestone or Phase 4.
 
 ---
 
 Last Completed
 
-M8 — WooCommerce Webhook Verification & Idempotent Ingestion, merged into
-`main` in commit `e4dfef6`.
+M9 — Order Webhook Projection & Single-Order Reconciliation.
 
 ---
 

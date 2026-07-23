@@ -147,6 +147,25 @@ describe('WooCommerceClient', () => {
     );
   });
 
+  it('fetches exactly one order through the same bounded M6 client', async () => {
+    const payload = { id: 101, status: 'processing' };
+    const request = jest
+      .spyOn(axios, 'get')
+      .mockResolvedValue({ data: payload });
+
+    await expect(client().fetchOrder('101')).resolves.toEqual(payload);
+    expect(request).toHaveBeenCalledWith(
+      'https://shop.example/wp-json/wc/v3/orders/101',
+      expect.objectContaining({
+        timeout: 5000,
+        auth: {
+          username: 'ck_sensitive_value',
+          password: 'cs_sensitive_value',
+        },
+      })
+    );
+  });
+
   it('enforces the total operation hard cap and aborts the active request', async () => {
     jest.useFakeTimers();
     const request = jest
