@@ -14,6 +14,8 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:status": "prisma migrate status",
     "prisma:validate": "prisma validate",
+    "pilot:setup": "node dist/pilot/pilot.cli.js setup",
+    "pilot:readiness": "node dist/pilot/pilot.cli.js readiness",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "test": "npm run build && node --test test/*.test.cjs && jest --runInBand",

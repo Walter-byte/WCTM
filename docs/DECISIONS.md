@@ -609,4 +609,48 @@ Accepted.
 
 ---
 
-Next decision number: D-022.
+## D-022
+
+Date
+
+2026-07-25
+
+Decision
+
+M12-V adds two private-pilot operator commands, `pilot:setup` and
+`pilot:readiness`, as the supported validation bootstrap preceding M12 V1.
+These commands are available only when `PILOT_MODE=true`, support exactly one
+pilot User, Tenant, OWNER Membership, and Store, and refuse unrelated existing
+bootstrap data.
+
+The bootstrap has no reset, force, overwrite, teardown, or deletion path.
+Operator JWT internals remain hidden: the command issues the access token
+through `AuthService`, keeps it in memory, and uses the existing configured
+access-token TTL. WooCommerce credentials are entered without terminal echo and
+flow directly through the existing fail-closed encrypted Store validation.
+
+Remote WooCommerce webhook registration requires an approved public HTTPS
+origin routed through Caddy. Localhost, private-address, non-HTTPS, and tunneled
+topologies are outside the supported pilot path. The backend retains ownership
+of the dedicated encrypted webhook secret and opaque endpoint key.
+
+Telegram linking remains a one-time `/start <token>` handoff. Creating the
+synthetic order is deliberately manual and must use no real payment or
+customer. M12-V is private-pilot validation tooling only; it is not public
+onboarding, plugin UI, connector completion, billing, or a Phase 5 feature.
+
+Reason
+
+Real-store validation cannot begin from an empty database through the current
+public surfaces, while manual SQL, JWT signing, secret copying, and an
+unverified connector artifact would violate the approved security boundary.
+The two bounded operator commands provide the minimum supported path without
+expanding product onboarding scope.
+
+Status
+
+Accepted.
+
+---
+
+Next decision number: D-023.

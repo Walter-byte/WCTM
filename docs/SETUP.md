@@ -67,6 +67,86 @@ The Telegram bot now starts grammY long-polling. A real `TELEGRAM_BOT_TOKEN` is
 required to run the bot transport; the documented placeholder remains suitable
 only for configuration validation and backend-only development.
 
+## Private-Pilot M12 Validation Bootstrap
+
+M12-V provides exactly two supported operator commands:
+
+```bash
+npm run pilot:setup
+npm run pilot:readiness
+```
+
+They are private-pilot validation tools. They are not public onboarding, a
+WordPress connector UI, billing, or a general account-administration surface.
+They support exactly one pilot User, one Tenant, one OWNER Membership, and one
+Store.
+
+Configure the backend container before running either command:
+
+```dotenv
+PILOT_MODE=true
+PILOT_WEBHOOK_BASE_URL=https://pilot-api.example.com
+PILOT_READINESS_TIMEOUT_SECONDS=60
+```
+
+`PILOT_MODE=true` is an explicit safety gate. With the flag absent or false,
+both commands refuse to run. `PILOT_WEBHOOK_BASE_URL` must be the approved
+public HTTPS origin served by Caddy. Localhost, private IP addresses, plain
+HTTP, URL paths, and tunnels are rejected.
+
+The validation topology is:
+
+```text
+Internet → Caddy :443 → backend /api/*
+```
+
+Only Caddy publishes HTTP/HTTPS. PostgreSQL, Redis, the backend container port,
+and other internal services remain on the Compose network and must not be
+published publicly. Real WooCommerce cannot deliver webhooks to localhost; do
+not substitute a tunnel.
+
+After deploying or rebuilding the backend on the approved VPS, run the commands
+inside the backend container so they use its typed configuration and private
+network database connection:
+
+```bash
+docker compose exec backend npm run pilot:setup
+```
+
+The setup command:
+
+1. refuses unrelated existing User/Tenant bootstrap data;
+2. atomically creates the first User, Tenant, and OWNER Membership, or reuses
+   the exact same sole pilot identity;
+3. issues an access token through `AuthService` and keeps it in memory;
+4. prompts for the WooCommerce Store URL and REST credentials, with both
+   credential values hidden from terminal echo;
+5. validates and encrypts the Store credentials, provisions the dedicated
+   webhook secret and endpoint key, and registers the four required order
+   webhooks at the public Caddy route;
+6. prints the one-time `/start <token>` string for the private Telegram bot
+   chat.
+
+No JWT, SQL, curl request, Store ID, webhook secret, bot API key, or manual API
+payload is required from the operator. A completed re-run is a no-op for the
+same identity and reuses the encrypted Store configuration. There is no
+`--force`, reset, overwrite, delete, or teardown option.
+
+After pasting the `/start` command into the private bot chat, create one clearly
+marked synthetic order in WooCommerce admin. Use no real payment or customer
+and keep it in a non-terminal status. Order creation is intentionally manual.
+Then run:
+
+```bash
+docker compose exec backend npm run pilot:readiness
+```
+
+Readiness prints nine PASS/FAIL checks without identifiers or secrets and waits
+up to `PILOT_READINESS_TIMEOUT_SECONDS` for the synthetic webhook projection.
+It exits non-zero with one actionable recovery message if any check fails and
+exits zero only when the projected order is available to the Telegram order
+flow. It is safe to rerun.
+
 ## 2. Start the Docker Stack
 
 ```bash
@@ -224,4 +304,5 @@ docker compose down --volumes
 ```
 
 `docker compose down --volumes` permanently deletes local database, Redis, and
-Caddy state. Use it only when a clean environment is intended.
+Caddy state. It is prohibited for the M12-V private-pilot workflow, which has no
+destructive teardown.

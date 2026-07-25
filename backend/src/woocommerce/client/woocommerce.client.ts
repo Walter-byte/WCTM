@@ -20,6 +20,21 @@ export interface WooCommerceValidationResult {
   storeName?: string;
 }
 
+export const REQUIRED_ORDER_WEBHOOK_TOPICS = [
+  'order.created',
+  'order.updated',
+  'order.deleted',
+  'order.restored',
+] as const;
+
+interface WooCommerceWebhook {
+  id: number;
+  name: string;
+  status: string;
+  topic: string;
+  deliveryUrl: string;
+}
+
 export type WooCommerceErrorCategory =
   | 'auth'
   | 'not-found'
@@ -75,8 +90,68 @@ export class WooCommerceClient {
 
   updateOrderStatus(wcOrderId: string, status: string): Promise<unknown> {
     return this.writeWithTotalTimeout<unknown>(
+      'put',
       `${this.ordersUrl}/${encodeURIComponent(wcOrderId)}`,
       { status }
+    );
+  }
+
+  async ensureRequiredOrderWebhooks(
+    deliveryUrl: string,
+    webhookSecret: string
+  ): Promise<void> {
+    const existing = await this.listWebhooks();
+
+    for (const topic of REQUIRED_ORDER_WEBHOOK_TOPICS) {
+      const name = this.managedWebhookName(topic);
+      const webhook =
+        existing.find(
+          (candidate) =>
+            candidate.topic === topic && candidate.deliveryUrl === deliveryUrl
+        ) ?? existing.find((candidate) => candidate.name === name);
+      const body = {
+        name,
+        status: 'active',
+        topic,
+        delivery_url: deliveryUrl,
+        secret: webhookSecret,
+      };
+
+      if (
+        webhook?.name === name &&
+        webhook.status === 'active' &&
+        webhook.topic === topic &&
+        webhook.deliveryUrl === deliveryUrl
+      ) {
+        continue;
+      }
+
+      if (webhook) {
+        await this.writeWithTotalTimeout(
+          'put',
+          `${this.webhooksUrl}/${webhook.id}`,
+          body
+        );
+      } else {
+        await this.writeWithTotalTimeout('post', this.webhooksUrl, body);
+      }
+    }
+
+    if (!(await this.hasRequiredOrderWebhooks(deliveryUrl))) {
+      throw new WooCommerceClientError('unexpected');
+    }
+  }
+
+  async hasRequiredOrderWebhooks(deliveryUrl: string): Promise<boolean> {
+    const webhooks = await this.listWebhooks();
+
+    return REQUIRED_ORDER_WEBHOOK_TOPICS.every((topic) =>
+      webhooks.some(
+        (webhook) =>
+          webhook.topic === topic &&
+          webhook.deliveryUrl === deliveryUrl &&
+          webhook.status === 'active'
+      )
     );
   }
 
@@ -125,6 +200,7 @@ export class WooCommerceClient {
   }
 
   private async writeWithTotalTimeout<T>(
+    method: 'post' | 'put',
     url: string,
     body: Readonly<Record<string, string>>
   ): Promise<T> {
@@ -135,14 +211,18 @@ export class WooCommerceClient {
     );
 
     try {
-      const response = await axios.put<T>(url, body, {
+      const request = {
         auth: {
           username: this.options.consumerKey,
           password: this.options.consumerSecret,
         },
         signal: controller.signal,
         timeout: this.options.resilience.attemptTimeoutMs,
-      });
+      };
+      const response =
+        method === 'put'
+          ? await axios.put<T>(url, body, request)
+          : await axios.post<T>(url, body, request);
 
       return response.data;
     } catch (error: unknown) {
@@ -284,6 +364,46 @@ export class WooCommerceClient {
 
   private get ordersUrl(): string {
     return `${this.options.storeUrl.replace(/\/+$/, '')}/wp-json/wc/v3/orders`;
+  }
+
+  private get webhooksUrl(): string {
+    return `${this.options.storeUrl.replace(/\/+$/, '')}/wp-json/wc/v3/webhooks`;
+  }
+
+  private async listWebhooks(): Promise<WooCommerceWebhook[]> {
+    const data = await this.requestWithTotalTimeout<unknown>(
+      `${this.webhooksUrl}?per_page=100`
+    );
+
+    if (!Array.isArray(data)) {
+      throw new WooCommerceClientError('unexpected');
+    }
+
+    return data.flatMap((candidate) => {
+      if (candidate === null || typeof candidate !== 'object') {
+        return [];
+      }
+
+      const value = candidate as Record<string, unknown>;
+      const id = value['id'];
+      const name = value['name'];
+      const status = value['status'];
+      const topic = value['topic'];
+      const deliveryUrl = value['delivery_url'];
+
+      return typeof id === 'number' &&
+        Number.isSafeInteger(id) &&
+        typeof name === 'string' &&
+        typeof status === 'string' &&
+        typeof topic === 'string' &&
+        typeof deliveryUrl === 'string'
+        ? [{ id, name, status, topic, deliveryUrl }]
+        : [];
+    });
+  }
+
+  private managedWebhookName(topic: string): string {
+    return `WC Telegram private pilot: ${topic}`;
   }
 
   private readStoreName(value: unknown): string | undefined {

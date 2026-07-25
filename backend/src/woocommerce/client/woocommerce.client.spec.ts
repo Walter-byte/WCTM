@@ -189,6 +189,76 @@ describe('WooCommerceClient', () => {
     );
   });
 
+  it('creates the four required order webhooks and verifies their public destination', async () => {
+    const deliveryUrl =
+      'https://pilot.example/api/webhooks/woocommerce/whk_endpoint';
+    const topics = [
+      'order.created',
+      'order.updated',
+      'order.deleted',
+      'order.restored',
+    ];
+    const get = jest
+      .spyOn(axios, 'get')
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({
+        data: topics.map((topic, index) => ({
+          id: index + 1,
+          name: `WC Telegram private pilot: ${topic}`,
+          status: 'active',
+          topic,
+          delivery_url: deliveryUrl,
+        })),
+      });
+    const post = jest
+      .spyOn(axios, 'post')
+      .mockResolvedValue({ data: { id: 1 } });
+
+    await expect(
+      client().ensureRequiredOrderWebhooks(deliveryUrl, 'webhook-secret-value')
+    ).resolves.toBeUndefined();
+
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(post).toHaveBeenCalledTimes(4);
+    expect(post.mock.calls.map((call) => call[1])).toEqual(
+      topics.map((topic) =>
+        expect.objectContaining({
+          topic,
+          delivery_url: deliveryUrl,
+          secret: 'webhook-secret-value',
+        })
+      )
+    );
+  });
+
+  it('leaves already-correct managed webhooks unchanged on an idempotent rerun', async () => {
+    const deliveryUrl =
+      'https://pilot.example/api/webhooks/woocommerce/whk_endpoint';
+    const data = [
+      'order.created',
+      'order.updated',
+      'order.deleted',
+      'order.restored',
+    ].map((topic, index) => ({
+      id: index + 1,
+      name: `WC Telegram private pilot: ${topic}`,
+      status: 'active',
+      topic,
+      delivery_url: deliveryUrl,
+    }));
+    jest.spyOn(axios, 'get').mockResolvedValue({ data });
+    const post = jest.spyOn(axios, 'post');
+    const put = jest.spyOn(axios, 'put');
+
+    await client().ensureRequiredOrderWebhooks(
+      deliveryUrl,
+      'webhook-secret-value'
+    );
+
+    expect(post).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
+  });
+
   it('enforces the total operation hard cap and aborts the active request', async () => {
     jest.useFakeTimers();
     const request = jest

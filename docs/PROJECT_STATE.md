@@ -6,16 +6,17 @@ Version: 1.0
 
 Current Phase
 
-Phase 4 — Telegram Platform active. M12 is complete and merged to main;
-awaiting A's real-store validation before Phase 4 closure review.
+Phase 4 — Telegram Platform active. M12 is complete and merged; M12-V private
+pilot tooling is implemented as the gate immediately preceding real-store
+validation.
 
 ---
 
 Current Task
 
-M12 — Telegram Order Status Update is merged. No next milestone is assigned;
-the only active gate is A's validation against a real WooCommerce store before
-Phase 4 closure review.
+M12-V — Pilot Onboarding & Validation Bootstrap is implemented for review.
+After approval/deployment, A runs `pilot:setup`, links Telegram, creates the
+manual synthetic order, runs `pilot:readiness`, and begins M12 V1–V14.
 
 ---
 
@@ -265,6 +266,32 @@ emit secret-safe audit records. The grammY bot only renders backend targets and
 forwards callbacks; it remains free of Prisma, database, WooCommerce, and
 transition-policy logic.
 
+M12-V adds two standalone Nest application-context commands:
+`pilot:setup` and `pilot:readiness`. Both require `PILOT_MODE=true`; the setup
+also requires an approved public `PILOT_WEBHOOK_BASE_URL` using HTTPS and
+refuses localhost, private-address, and non-origin URLs.
+
+The setup command transactionally creates the first User, Tenant, and OWNER
+Membership only in an empty bootstrap database. It is idempotent for that same
+sole identity and refuses unrelated bootstrap data. It signs a legitimate
+access token with the existing `AuthService` and keeps it in memory. Hidden
+WooCommerce credential prompts feed the existing M4 fail-closed validation and
+AES-256-GCM Store persistence.
+
+M8 provisions the dedicated webhook secret and endpoint key. The existing
+WooCommerce REST client now creates or updates the required `order.created`,
+`order.updated`, `order.deleted`, and `order.restored` webhooks at the public
+Caddy route, then verifies their active remote configuration before the pilot
+Store is promoted from `PENDING` to `ACTIVE`. No plugin registration or
+connector capability is claimed.
+
+The final setup step uses the existing Telegram link-token service and prints
+only the one-time `/start <token>` handoff. The operator creates the synthetic
+order manually. Readiness reports nine secret-safe checks, polls within a
+configured bound for the projected order, and exits successfully only when the
+order is also available through the Telegram order flow. M12-V has no reset,
+force, overwrite, deletion, public onboarding, plugin UI, billing, or teardown.
+
 ---
 
 Infrastructure
@@ -326,21 +353,22 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-A's validation of M12 against a real WooCommerce store is the only active gate
-before Phase 4 closure review.
+No implementation blocker remains for supported pilot bootstrap. A's execution
+of M12-V setup/readiness and M12 real-store validation is the remaining Phase 4
+gate.
 
 ---
 
 Next Milestone
 
-None assigned. M12 is merged; the only outstanding gate before Phase 4 closure
-review is real-WooCommerce-store validation and A's acceptance.
+No next product milestone is assigned. Run and review M12-V, then execute M12
+real-store validation before Phase 4 closure review.
 
 ---
 
 Last Completed
 
-M12 — Telegram Order Status Update.
+M12-V — Pilot Onboarding & Validation Bootstrap.
 
 ---
 
@@ -352,4 +380,4 @@ Excellent
 
 Last Updated
 
-2026-07-23
+2026-07-25

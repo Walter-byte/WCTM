@@ -18,5 +18,6 @@ import { StoreService } from './store.service';
     StoreRegistrationService,
     PluginRegistrationRateLimiter,
   ],
+  exports: [StoreService, StoreRegistrationService],
 })
 export class StoreModule {}

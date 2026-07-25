@@ -1,8 +1,8 @@
 # M12 Real-Store Validation Operator Guide
 
-Status: BLOCKED AT R1 — SUPPORTED ONBOARDING IS MISSING
+Status: M12-V IMPLEMENTED — RUN PILOT READINESS BEFORE V1
 
-Environment: Local Docker Compose validation environment
+Environment: Approved VPS Docker Compose validation environment behind Caddy
 
 Scope: M12 Telegram order-status write path
 Production data: PROHIBITED
@@ -24,59 +24,26 @@ acceptable operator for this guide.
 
 ### Current result
 
-- Infrastructure and migrations: `PASS`
-- Telegram bot runtime: `PASS`
-- Supported first-user onboarding: `BLOCKED`
-- WordPress connector registration/webhook setup: `BLOCKED`
-- V1–V14 real-store execution: cannot start until both blockers are resolved
+- Infrastructure and migrations: recheck on the approved VPS
+- Telegram bot runtime: recheck on the approved VPS
+- M12-V supported private-pilot bootstrap: implemented
+- WordPress connector: remains a stub and is not used or claimed by M12-V
+- V1–V14 real-store execution: begins only after `pilot:readiness` passes
 
 ### What Walter must do now
 
-Nothing in Telegram, WooCommerce REST API settings, PostgreSQL, or `.env`.
+1. Deploy/rebuild the approved VPS stack with `PILOT_MODE=true` and the public
+   Caddy HTTPS origin in `PILOT_WEBHOOK_BASE_URL`.
+2. Run `docker compose exec backend npm run pilot:setup`.
+3. Enter WooCommerce credentials only in the hidden terminal prompts.
+4. Paste the one-time `/start <token>` output into the private bot chat.
+5. Create one clearly marked non-terminal synthetic order in WooCommerce admin,
+   using no real payment or customer.
+6. Run `docker compose exec backend npm run pilot:readiness`.
+7. Begin V1 only after all nine readiness checks pass.
 
-Do not:
-
-- create or sign a JWT manually;
-- insert User, Tenant, Membership, Store, Telegram, or Order rows manually;
-- install a plugin from an unverified URL;
-- paste WooCommerce keys or Telegram tokens into an AI chat;
-- continue V1 with an unlinked Telegram account.
-
-### Why validation is blocked
-
-The backend validates JWT access tokens but provides no supported first-user
-registration/login/bootstrap flow. The database is empty, so the protected
-Tenant, Store, and Telegram link-token routes cannot be reached legitimately.
-
-The repository WordPress connector is also a stub. It has no settings page,
-Store registration request, webhook creation, or Telegram-link workflow.
-
-### Required project action
-
-A must approve one implementation milestone that provides:
-
-1. a supported local/pilot bootstrap for the first User, Tenant, OWNER
-   Membership, and legitimate access token;
-2. a supported Store connection flow using privately entered WooCommerce REST
-   credentials;
-3. webhook setup for the connected Store, either through the connector plugin
-   or an explicitly approved pilot operator tool;
-4. Telegram link-token issuance and a clear `/start <token>` handoff;
-5. an automated readiness check proving one linked OWNER, one ACTIVE Store, and
-   one projected synthetic order.
-
-After that milestone merges, the Validation Operator should execute:
-
-1. bootstrap the pilot account;
-2. connect the WooCommerce test Store;
-3. link Telegram;
-4. create one synthetic order in WooCommerce;
-5. confirm `/orders` shows it;
-6. run V1, V9, V10, V13, and V14 first;
-7. run the remaining safe cases;
-8. leave unsupported fault-injection cases blocked with automated evidence.
-
-No additional documents-only testing chat is needed.
+Do not sign a JWT, run SQL, construct API calls, install an unverified plugin,
+expose PostgreSQL/Redis/internal services, or use a tunnel.
 
 ---
 
@@ -251,115 +218,62 @@ Evidence:
 - [ ] health responses
 - [ ] bot polling log
 
-## R1 — Supported Onboarding and Test-Data Gate
+## R1 — M12-V Pilot Setup and Readiness Gate
 
-Status: BLOCKED
+Status: READY TO EXECUTE
 
-### Verified current database state
+M12-V is the supported unblocking step immediately preceding V1. It does not
+use the connector stub and does not claim that the plugin implements onboarding
+or webhook setup.
 
-The local validation database was inspected read-only on 2026-07-24:
+Configure:
 
-| Table                          | Rows |
-| ------------------------------ | ---: |
-| `users`                        |    0 |
-| `tenants`                      |    0 |
-| `memberships`                  |    0 |
-| `stores`                       |    0 |
-| `orders`                       |    0 |
-| `telegram_accounts`            |    0 |
-| `telegram_chat_authorizations` |    0 |
-
-Recheck without exposing personal data:
-
-```bash
-docker compose exec -T postgres sh -c \
-  'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "
-  SELECT '\''users'\'', count(*) FROM users
-  UNION ALL SELECT '\''tenants'\'', count(*) FROM tenants
-  UNION ALL SELECT '\''memberships'\'', count(*) FROM memberships
-  UNION ALL SELECT '\''stores'\'', count(*) FROM stores
-  UNION ALL SELECT '\''orders'\'', count(*) FROM orders
-  UNION ALL SELECT '\''telegram_accounts'\'', count(*) FROM telegram_accounts
-  UNION ALL SELECT '\''telegram_chat_authorizations'\'', count(*) FROM telegram_chat_authorizations;
-  "'
+```dotenv
+PILOT_MODE=true
+PILOT_WEBHOOK_BASE_URL=https://pilot-api.example.com
+PILOT_READINESS_TIMEOUT_SECONDS=60
 ```
 
-### BLOCKER R1-A — No supported first-user authentication/onboarding
+The webhook origin must be the approved VPS Caddy HTTPS origin. Caddy is the
+only public entry point; PostgreSQL, Redis, the backend port, and other internal
+services remain unexposed.
 
-Repository facts:
+Run:
 
-- `AuthService` can sign and verify JWTs internally.
-- `JwtStrategy` validates Bearer JWTs.
-- There is no `AuthController`.
-- There is no implemented user registration, login, password, session, CLI,
-  seed, or documented development-fixture flow that creates the first `User`
-  and issues a supported access token.
-- Tenant creation, Store creation, Store registration-token issuance, and
-  Telegram link-token issuance all require an authenticated user.
+```bash
+docker compose exec backend npm run pilot:setup
+```
 
-Therefore, an operator cannot currently create the first SaaS user, tenant,
-OWNER membership, Store, or Telegram link token through a supported product
-flow.
+The command refuses non-pilot mode, non-public webhook origins, unrelated
+existing User/Tenant bootstrap data, multiple Stores, and disabled or
+disconnected Stores. It provides no force, reset, overwrite, delete, or teardown
+option. WooCommerce REST credentials are entered without echo and are never
+printed or written to a file.
 
-Prohibited workarounds:
+Paste the one-time `/start <token>` output into the intended private Telegram
+chat. Then create one clearly marked synthetic order in WooCommerce admin with
+no real customer/payment and a non-terminal status.
 
-- manually signing a JWT with `JWT_SECRET`;
-- manually inserting User/Tenant/Membership rows;
-- copying IDs from tests;
-- disabling auth or tenant guards.
+Run:
 
-Required resolution:
+```bash
+docker compose exec backend npm run pilot:readiness
+```
 
-> Implement and approve a minimal supported pilot-onboarding path (or an
-> explicitly approved local validation fixture) that creates the first User,
-> creates/joins a Tenant as OWNER, and issues a legitimate access token without
-> exposing secrets.
+R1 passes only when all nine command checks pass:
 
-Until that capability exists, R1 and V1–V14 remain `BLOCKED`.
+- [ ] pilot User exists;
+- [ ] Tenant exists;
+- [ ] OWNER Membership exists;
+- [ ] exactly one eligible `ACTIVE` Store exists;
+- [ ] Store REST connection succeeds;
+- [ ] all required order webhooks target the approved public HTTPS endpoint;
+- [ ] Telegram is linked and authorized;
+- [ ] the synthetic order is projected locally within the bounded wait;
+- [ ] the synthetic order is visible to the Telegram order flow.
 
-### BLOCKER R1-B — WordPress connector is a stub
-
-Repository facts:
-
-- The only connector source is
-  `wp-content/plugins/wc-telegram-connector.php`.
-- Version `0.1.0` implements activation, deactivation, and a WooCommerce
-  dependency notice only.
-- `wp-content/plugins/README.txt` explicitly says Store registration and webhook
-  management are not implemented.
-- The plugin provides no settings page, registration UI, SaaS request, webhook
-  creation, or Telegram-link flow.
-- No verified public plugin ZIP or release URL exists in this repository.
-
-Do not download or install a plugin from an URL found only in notes or AI output.
-
-Required resolution:
-
-- either implement the approved connector registration/webhook flow; or
-- explicitly approve and document a developer-operated pilot setup using the
-  existing backend APIs and WooCommerce admin, after R1-A is resolved.
-
-Installing the current connector stub does not resolve this blocker.
-
-### R1 completion criteria
-
-All must pass:
-
-- [ ] a supported access token can be obtained without a secret workaround;
-- [ ] one test `User` exists;
-- [ ] one test `Tenant` exists;
-- [ ] the User has one active `OWNER` or `ADMIN` Membership;
-- [ ] exactly one non-deleted `ACTIVE` Store exists for that Tenant;
-- [ ] Store connection health passes;
-- [ ] one Telegram link token is issued through
-      `POST /api/internal/telegram/link-tokens`;
-- [ ] `/start <token>` links the intended private Telegram account;
-- [ ] `/status` says the account is linked and authorized;
-- [ ] one synthetic WooCommerce order is projected into `orders`;
-- [ ] `/orders` displays that order.
-
-Record the supported setup procedure and evidence here after the blocker is
-fixed. Do not proceed based only on manually altered database state.
+Attach the secret-free readiness output as R1 evidence. Do not add manual SQL,
+JWT, curl, webhook, or Telegram-internal API evidence.
 
 ---
 
@@ -504,7 +418,7 @@ Classification:
 
 Type: MANUAL
 
-Status: BLOCKED BY R1
+Status: PENDING M12-V READINESS
 
 Steps:
 
@@ -602,7 +516,7 @@ Result:
 
 Type: MANUAL for expiry; automated evidence for tampering
 
-Status: BLOCKED BY R1
+Status: PENDING M12-V READINESS
 
 Safe manual path:
 
@@ -635,7 +549,7 @@ Result:
 
 Type: AUTOMATED EVIDENCE; manual only if Telegram preserves the same button
 
-Status: BLOCKED BY R1
+Status: PENDING M12-V READINESS
 
 Repository safety boundary:
 
@@ -671,7 +585,7 @@ Result:
 
 Type: MANUAL
 
-Status: BLOCKED BY R1
+Status: PENDING M12-V READINESS
 
 Use the same safe procedure as V3, once inside the TTL and once after expiry.
 
@@ -747,7 +661,7 @@ Result:
 
 Type: MANUAL, observed as part of V1
 
-Status: BLOCKED BY R1
+Status: PENDING M12-V READINESS
 
 After V1:
 
@@ -768,7 +682,7 @@ Result:
 
 Type: MANUAL, observed as part of V1
 
-Status: BLOCKED BY R1
+Status: PENDING M12-V READINESS
 
 Use the V1 Order query. Pass when the projected Order matches WooCommerce and
 has a new `last_synced_at`.
@@ -807,7 +721,7 @@ Result:
 
 Type: MANUAL, safe after V1 passes
 
-Status: BLOCKED BY R1
+Status: PENDING M12-V READINESS
 
 Procedure:
 
@@ -942,12 +856,10 @@ missing product/test capabilities are implemented.
 ## Overall result
 
 - Runtime readiness: PASS
-- Supported onboarding readiness: BLOCKED
+- M12-V private-pilot readiness: PENDING OPERATOR EXECUTION
 - Real-store M12 validation: NOT STARTED
 - Confirmed defects:
 - Product/test blockers:
-  - R1-A: no supported first-user authentication/onboarding path
-  - R1-B: WordPress connector registration/webhook flow is only a stub
   - V6: no supported active-context switching flow
   - V7/V8: no approved fault-injection mechanism
 - Phase 4 closure recommendation: DO NOT CLOSE
@@ -964,14 +876,10 @@ missing product/test capabilities are implemented.
 - Secret-safe evidence:
 - Scope recommendation:
 
-## Blocker handoff
+## Validation handoff
 
-Send B and A only this concise finding:
+Send B and A only this concise finding after running M12-V:
 
-> M12 runtime and migrations are healthy, but real-store validation is blocked
-> before V1. The clean local database has zero Users, Tenants, Memberships,
-> Stores, Orders, and Telegram links. The backend validates JWTs but exposes no
-> supported first-user registration/login/token-issuance flow. The WordPress
-> connector is a stub with no registration or webhook setup. No manual JWT
-> signing or database inserts were used. A must approve a minimal supported
-> pilot-onboarding/validation-fixture task before testing resumes.
+> M12-V pilot setup/readiness: PASS or FAIL. No manual SQL, JWT signing, secret
+> copying, plugin claim, or tunnel was used. If PASS, V1 may begin. If FAIL,
+> include only the command's single actionable failure and secret-free evidence.
