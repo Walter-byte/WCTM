@@ -6,17 +6,16 @@ Version: 1.0
 
 Current Phase
 
-Phase 4 — Telegram Platform active. M12 is complete and merged; M12-V private
-pilot tooling is implemented as the gate immediately preceding real-store
-validation.
+Phase 4 — Telegram Platform remains In Progress. M12 and M12-V are complete and
+merged to `main`; M12 real-store validation has not yet been executed.
 
 ---
 
 Current Task
 
-M12-V — Pilot Onboarding & Validation Bootstrap is implemented for review.
-After approval/deployment, A runs `pilot:setup`, links Telegram, creates the
-manual synthetic order, runs `pilot:readiness`, and begins M12 V1–V14.
+M12 real-store validation. Deploy current `main` to the approved VPS, run
+`pilot:setup`, complete Telegram linking, create one synthetic WooCommerce
+order, then run `pilot:readiness` before beginning M12 V1–V14.
 
 ---
 
@@ -266,7 +265,8 @@ emit secret-safe audit records. The grammY bot only renders backend targets and
 forwards callbacks; it remains free of Prisma, database, WooCommerce, and
 transition-policy logic.
 
-M12-V adds two standalone Nest application-context commands:
+M12-V is complete and merged. It adds two standalone Nest application-context
+commands:
 `pilot:setup` and `pilot:readiness`. Both require `PILOT_MODE=true`; the setup
 also requires an approved public `PILOT_WEBHOOK_BASE_URL` using HTTPS and
 refuses localhost, private-address, and non-origin URLs.
@@ -353,16 +353,15 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No implementation blocker remains for supported pilot bootstrap. A's execution
-of M12-V setup/readiness and M12 real-store validation is the remaining Phase 4
-gate.
+No implementation blocker remains for supported pilot bootstrap. M12 real-store
+validation has not yet been executed and remains the Phase 4 gate.
 
 ---
 
 Next Milestone
 
-No next product milestone is assigned. Run and review M12-V, then execute M12
-real-store validation before Phase 4 closure review.
+No M13 or other product milestone is assigned. Execute M12 real-store
+validation before Phase 4 closure review.
 
 ---
 

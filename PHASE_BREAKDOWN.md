@@ -306,7 +306,7 @@ satisfied. No next milestone is assigned.
 - Stateless grammY target rendering and forwarding with edit-to-reply fallback
 - Migration `20260724090000_telegram_order_status_write`
 
-### M12-V — Pilot Onboarding & Validation Bootstrap ✅ Implemented
+### M12-V — Pilot Onboarding & Validation Bootstrap ✅ Complete / Merged
 
 - Two private-pilot workspace commands: `pilot:setup` and `pilot:readiness`
 - Explicit `PILOT_MODE=true` guard, same-identity idempotency, and refusal of
@@ -324,8 +324,11 @@ satisfied. No next milestone is assigned.
 - No reset, force, overwrite, data deletion, public onboarding, connector UI,
   billing, or Phase 5 work
 
-Phase 4 remains In Progress. M12-V is the validation-gate task immediately
-preceding M12 V1; closure remains pending A's real-store validation and review.
+Phase 4 remains In Progress. M12-V is complete and merged to `main`; M12
+real-store validation has not yet been executed. No M13 or other product
+milestone is assigned. The next operator action is to deploy current `main` to
+the approved VPS, run `pilot:setup`, complete Telegram linking, create one
+synthetic WooCommerce order, and run `pilot:readiness`.
 
 ## Phase 5 — Core Store Management (MVP) ⬜ Planned
 

@@ -2,7 +2,7 @@
 
 **Generated:** 2026-07-19
 
-**Updated:** 2026-07-23
+**Updated:** 2026-07-25
 
 **Reason:** Transitioning implementation agent from GapCode to Codex GPT
 
@@ -43,7 +43,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-021)
+## 3. Architectural Decisions (D-001–D-022)
 
 | ID    | Decision                                                                                                                                                                                            | Status   |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -68,8 +68,9 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-019 | Backend-owned one-time Telegram linking, bot-key internal API, private-chat-only authorization, update idempotency, exact-one context resolution, and soft unlinking                                | Accepted |
 | D-020 | Read-only M9 Order access with bounded keyset pagination, `lastSyncedAt` freshness, and expiring HMAC-authenticated callback references bound to current Telegram context                           | Accepted |
 | D-021 | OWNER/ADMIN Telegram order-status writes using server-derived targets, single-effect HMAC references, durable idempotency, one WooCommerce dispatch, and authoritative/lost-response reconciliation | Accepted |
+| D-022 | Private-pilot setup/readiness tooling with no reset or force path, hidden JWT internals, a public Caddy HTTPS gate, manual synthetic-order creation, and no public onboarding claim                 | Accepted |
 
-Next decision number: **D-022**, if a future task produces a genuine
+Next decision number: **D-023**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -595,6 +596,22 @@ Bot transport:
   technically implemented; the only active gate before closure review is A's
   validation against a real WooCommerce store.
 
+#### M12-V — Pilot Onboarding & Validation Bootstrap (complete and merged)
+
+- `pilot:setup` and `pilot:readiness` provide the supported private-pilot
+  validation bootstrap under the explicit `PILOT_MODE` guard.
+- Setup atomically provisions the first User, Tenant, and OWNER Membership,
+  keeps the `AuthService` access token in memory, validates and encrypts
+  WooCommerce credentials fail-closed, activates exactly one Store, configures
+  the required order webhooks at the approved public Caddy HTTPS origin, and
+  issues the one-time Telegram `/start` handoff.
+- Readiness reports nine secret-safe checks and polls within a bounded timeout
+  for the manually created synthetic order and Telegram order-flow visibility.
+- D-022 is Accepted. M12-V has no reset, force, overwrite, data deletion,
+  public onboarding, plugin UI, billing, or Phase 5 scope.
+- M12-V is merged to `main`. M12 real-store validation has not yet been
+  executed, so Phase 4 remains In Progress.
+
 ---
 
 ## 5. Current Repository Structure
@@ -604,21 +621,25 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
+Current canonical branch: `main`.
+
 ---
 
 ## 6. Current Blockers
 
-A's validation of M12 against a real WooCommerce store is the only active gate
+M12 real-store validation has not yet been executed and is the only active gate
 before Phase 4 closure review.
 
 ---
 
 ## 7. Current Task
 
-M12 — Telegram Order Status Update is merged and awaiting real-store
-validation. Phase 4 stays In Progress, no next milestone is assigned or may
-begin, and A's validation against a real WooCommerce store is the only active
-gate before closure review.
+M12 real-store validation. Phase 4 stays In Progress. No M13 or other product
+milestone is assigned. Deploy current `main` to the approved VPS, run
+`pilot:setup`, complete Telegram linking, create one synthetic WooCommerce
+order, then run `pilot:readiness` before beginning V1–V14.
+
+Last completed implementation: M12-V — Pilot Onboarding & Validation Bootstrap.
 
 ---
 

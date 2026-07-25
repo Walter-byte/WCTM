@@ -114,8 +114,7 @@ Status:
 
 Current Milestone:
 
-M12-V — Pilot Onboarding & Validation Bootstrap (validation-gate tooling for
-M12 real-store validation)
+M12 real-store validation (not yet executed)
 
 Deliverables
 
@@ -170,9 +169,18 @@ M12-V scope:
 - No public onboarding, completed connector UI, billing, reset, force, or
   destructive teardown
 
-M12 is merged. M12-V is the approved unblocking task immediately preceding V1;
-the remaining gate before Phase 4 closure review is A's real-store execution of
-the M12 validation guide.
+M12 and M12-V are complete and merged to `main`. D-022 is Accepted. Phase 4
+remains In Progress; M12 real-store validation has not yet been executed. No M13
+or other product milestone is assigned.
+
+Next operator action:
+
+- Deploy current `main` to the approved VPS
+- Run `pilot:setup`
+- Complete Telegram linking
+- Create one synthetic WooCommerce order
+- Run `pilot:readiness`
+- Begin M12 V1–V14 only after readiness passes
 
 Exit Criteria
 
