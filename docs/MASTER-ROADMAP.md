@@ -114,7 +114,8 @@ Status:
 
 Current Milestone:
 
-M12 — Telegram Order Status Update (merged; awaiting real-store validation)
+M12-V — Pilot Onboarding & Validation Bootstrap (validation-gate tooling for
+M12 real-store validation)
 
 Deliverables
 
@@ -155,8 +156,23 @@ M12 scope:
   authoritative M9 projection updates
 - Stateless grammY rendering/forwarding with no Prisma or database access
 
-M12 is merged; the sole remaining gate before Phase 4 closure review is A's
-validation against a real WooCommerce store.
+M12-V scope:
+
+- Private-pilot-only `pilot:setup` and `pilot:readiness` workspace commands
+- Explicit `PILOT_MODE` guard and refusal of unrelated existing bootstrap data
+- Atomic first User, Tenant, and OWNER Membership provisioning
+- In-memory `AuthService` access token issuance with no JWT operator handling
+- Fail-closed encrypted Store connection and exactly one `ACTIVE` pilot Store
+- Backend-owned webhook credentials plus WooCommerce-side required order
+  webhook registration to an approved public Caddy HTTPS origin
+- One-time Telegram `/start` handoff, manual synthetic-order creation, and nine
+  bounded PASS/FAIL readiness checks
+- No public onboarding, completed connector UI, billing, reset, force, or
+  destructive teardown
+
+M12 is merged. M12-V is the approved unblocking task immediately preceding V1;
+the remaining gate before Phase 4 closure review is A's real-store execution of
+the M12 validation guide.
 
 Exit Criteria
 

@@ -11,5 +11,6 @@ import { TelegramOrderService } from './telegram-order.service';
   imports: [EncryptionModule, OrdersModule],
   controllers: [TelegramInternalController],
   providers: [BotApiKeyGuard, TelegramLinkingService, TelegramOrderService],
+  exports: [TelegramLinkingService, TelegramOrderService],
 })
 export class TelegramModule {}

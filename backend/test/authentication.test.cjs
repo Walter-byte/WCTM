@@ -37,6 +37,17 @@ test('AuthService signs and verifies an access-token payload', async () => {
   assert.equal(typeof payload.exp, 'number');
 });
 
+test('AuthService access tokens honor the configured accessTokenTtl', async () => {
+  const authService = createAuthService('1h');
+  const token = await authService.signAccessToken({
+    sub: 'usr_pilot',
+    tenantId: 'ten_pilot',
+  });
+  const payload = await authService.verifyAccessToken(token);
+
+  assert.equal(payload.exp - payload.iat, 3600);
+});
+
 test('AuthService rejects tampered and expired access tokens', async () => {
   const authService = createAuthService();
   const token = await authService.signAccessToken({ sub: 'usr_test' });

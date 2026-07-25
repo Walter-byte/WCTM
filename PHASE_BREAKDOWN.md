@@ -306,9 +306,26 @@ satisfied. No next milestone is assigned.
 - Stateless grammY target rendering and forwarding with edit-to-reply fallback
 - Migration `20260724090000_telegram_order_status_write`
 
-Phase 4 remains In Progress; M12 is merged and the minimum exit criterion is
-technically implemented. Closure is blocked pending A's validation against a
-real WooCommerce store.
+### M12-V — Pilot Onboarding & Validation Bootstrap ✅ Implemented
+
+- Two private-pilot workspace commands: `pilot:setup` and `pilot:readiness`
+- Explicit `PILOT_MODE=true` guard, same-identity idempotency, and refusal of
+  unrelated existing User/Tenant bootstrap data
+- Atomic first User, Tenant, and OWNER Membership creation with in-memory
+  `AuthService` access-token handling
+- Hidden WooCommerce credential prompts, fail-closed encrypted Store creation,
+  and exactly one `ACTIVE` pilot Store
+- Server-generated encrypted webhook secret and endpoint key plus remote
+  WooCommerce registration of the four required order topics
+- Approved public Caddy HTTPS endpoint gate; localhost, private, non-HTTPS, and
+  tunnel-based delivery are unsupported
+- One-time Telegram `/start` handoff, manual synthetic-order step, and nine
+  bounded readiness checks
+- No reset, force, overwrite, data deletion, public onboarding, connector UI,
+  billing, or Phase 5 work
+
+Phase 4 remains In Progress. M12-V is the validation-gate task immediately
+preceding M12 V1; closure remains pending A's real-store validation and review.
 
 ## Phase 5 — Core Store Management (MVP) ⬜ Planned
 

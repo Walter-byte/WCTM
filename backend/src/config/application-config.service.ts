@@ -6,6 +6,7 @@ import {
   type ApplicationSettings,
   type EncryptionSettings,
   type JwtSettings,
+  type PilotSettings,
   type PluginRegistrationSettings,
   type PostgreSqlSettings,
   type RedisSettings,
@@ -25,6 +26,7 @@ export class ApplicationConfigService {
   readonly telegram: Readonly<TelegramSettings>;
   readonly woocommerce: Readonly<WooCommerceSettings>;
   readonly pluginRegistration: Readonly<PluginRegistrationSettings>;
+  readonly pilot: Readonly<PilotSettings>;
 
   constructor(
     private readonly configService: ConfigService<ValidatedEnvironment, true>
@@ -117,6 +119,16 @@ export class ApplicationConfigService {
         { infer: true }
       ),
     });
+    this.pilot = Object.freeze({
+      enabled: this.configService.get('PILOT_MODE', { infer: true }),
+      webhookBaseUrl: this.configService.get('PILOT_WEBHOOK_BASE_URL', {
+        infer: true,
+      }),
+      readinessTimeoutSeconds: this.configService.get(
+        'PILOT_READINESS_TIMEOUT_SECONDS',
+        { infer: true }
+      ),
+    });
   }
 
   toJSON(): unknown {
@@ -129,6 +141,7 @@ export class ApplicationConfigService {
       telegram: this.telegram,
       woocommerce: this.woocommerce,
       pluginRegistration: this.pluginRegistration,
+      pilot: this.pilot,
     });
   }
 

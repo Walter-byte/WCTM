@@ -224,6 +224,17 @@ function createEnvironmentSchema(
       .integer()
       .min(1)
       .default(60),
+    PILOT_MODE: Joi.boolean().truthy('true').falsy('false').default(false),
+    PILOT_WEBHOOK_BASE_URL: Joi.string()
+      .trim()
+      .empty('')
+      .uri({ scheme: ['https'] })
+      .optional(),
+    PILOT_READINESS_TIMEOUT_SECONDS: Joi.number()
+      .integer()
+      .min(1)
+      .max(300)
+      .default(60),
     POSTGRES_DB: Joi.string().trim().min(1).optional(),
     POSTGRES_USER: Joi.string().trim().min(1).optional(),
     POSTGRES_PASSWORD: postgresPassword,

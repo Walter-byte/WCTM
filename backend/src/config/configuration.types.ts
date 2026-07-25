@@ -30,6 +30,9 @@ export interface ValidatedEnvironment {
   PLUGIN_REGISTRATION_TOKEN_TTL_SECONDS: number;
   PLUGIN_REGISTRATION_RATE_LIMIT: number;
   PLUGIN_REGISTRATION_RATE_WINDOW_SECONDS: number;
+  PILOT_MODE: boolean;
+  PILOT_WEBHOOK_BASE_URL?: string;
+  PILOT_READINESS_TIMEOUT_SECONDS: number;
   POSTGRES_DB?: string;
   POSTGRES_USER?: string;
   POSTGRES_PASSWORD?: string;
@@ -63,6 +66,9 @@ export const CONFIG_ENV_KEYS = [
   'PLUGIN_REGISTRATION_TOKEN_TTL_SECONDS',
   'PLUGIN_REGISTRATION_RATE_LIMIT',
   'PLUGIN_REGISTRATION_RATE_WINDOW_SECONDS',
+  'PILOT_MODE',
+  'PILOT_WEBHOOK_BASE_URL',
+  'PILOT_READINESS_TIMEOUT_SECONDS',
   'POSTGRES_DB',
   'POSTGRES_USER',
   'POSTGRES_PASSWORD',
@@ -121,4 +127,10 @@ export interface PluginRegistrationSettings {
   tokenTtlSeconds: number;
   rateLimit: number;
   rateWindowSeconds: number;
+}
+
+export interface PilotSettings {
+  enabled: boolean;
+  webhookBaseUrl?: string;
+  readinessTimeoutSeconds: number;
 }

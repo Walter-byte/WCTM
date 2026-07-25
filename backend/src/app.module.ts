@@ -15,6 +15,7 @@ import { RequestContextModule } from './common/request-context/request-context.m
 import { ApplicationConfigModule } from './config/application-config.module';
 import { HealthModule } from './health/health.module';
 import { MembershipsModule } from './memberships/memberships.module';
+import { PilotModule } from './pilot/pilot.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { StoreModule } from './store/store.module';
 import { TenantContextGuard } from './tenant/guards/tenant-context.guard';
@@ -37,6 +38,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     UsersModule,
     TenantsModule,
     MembershipsModule,
+    PilotModule,
     WebhooksModule,
     TelegramModule,
   ],

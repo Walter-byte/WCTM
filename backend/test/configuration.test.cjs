@@ -77,6 +77,11 @@ test('valid environment loads typed configuration values', () => {
     rateLimit: 10,
     rateWindowSeconds: 60,
   });
+  assert.deepEqual(configuration.pilot, {
+    enabled: false,
+    webhookBaseUrl: undefined,
+    readinessTimeoutSeconds: 60,
+  });
   assert.equal(
     configuration.telegram.backendInternalUrl,
     'http://backend:3000/api'
@@ -97,6 +102,15 @@ test('test environment supplies isolated safe defaults', () => {
   assert.equal(validated.PORT, 3000);
   assert.equal(validated.LOG_LEVEL, 'error');
   assert.match(validated.DATABASE_URL, /wc_telegram_test/);
+});
+
+test('disabled pilot tooling accepts an omitted public webhook origin', () => {
+  const configuration = createConfiguration(
+    validEnvironment({ PILOT_WEBHOOK_BASE_URL: '' })
+  );
+
+  assert.equal(configuration.pilot.enabled, false);
+  assert.equal(configuration.pilot.webhookBaseUrl, undefined);
 });
 
 test('WooCommerce REST resilience limits accept typed configuration overrides', () => {
