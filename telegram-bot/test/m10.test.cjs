@@ -16,12 +16,24 @@ test('bot configuration validates all internal transport values without exposing
   });
 
   assert.equal(configuration.backendInternalUrl, 'http://backend:3000/api');
+  assert.equal(configuration.backendTimeoutMs, 5000);
+  assert.equal(configuration.statusWriteTimeoutMs, 50000);
   assert.throws(
     () =>
       loadBotConfiguration({
         TELEGRAM_BOT_TOKEN: BOT_TOKEN,
       }),
     /BOT_INTERNAL_API_KEY, BACKEND_INTERNAL_URL/
+  );
+  assert.throws(
+    () =>
+      loadBotConfiguration({
+        TELEGRAM_BOT_TOKEN: BOT_TOKEN,
+        BOT_INTERNAL_API_KEY: 'internal-secret',
+        BACKEND_INTERNAL_URL: 'http://backend:3000/api',
+        BOT_STATUS_WRITE_TIMEOUT_MS: '0',
+      }),
+    /BOT_STATUS_WRITE_TIMEOUT_MS/
   );
 });
 

@@ -4,7 +4,10 @@ const { resolve } = require('node:path');
 const { test } = require('node:test');
 
 const { createBot } = require('../dist/bot');
-const { InternalBackendClient } = require('../dist/internal-backend.client');
+const {
+  BackendUnavailableError,
+  InternalBackendClient,
+} = require('../dist/internal-backend.client');
 
 const BOT_TOKEN = '1234567890:test-token-value-for-adapter';
 const DETAIL_REF = `d.${'a'.repeat(16)}.${'b'.repeat(16)}`;
@@ -148,6 +151,7 @@ test('internal client sends transition and status contracts with bot headers', a
       internalApiKey: 'internal-secret',
       backendInternalUrl: 'http://backend:3000/api',
       backendTimeoutMs: 5000,
+      statusWriteTimeoutMs: 50000,
     },
     request
   );
@@ -175,6 +179,110 @@ test('internal client sends transition and status contracts with bot headers', a
     observed[1].init.headers['x-correlation-id'],
     'telegram-update-6001'
   );
+});
+
+test('normal requests keep the short timeout while status writes use the longer timeout', async () => {
+  const observed = [];
+  const request = (url, init) =>
+    new Promise((resolve, reject) => {
+      observed.push(url);
+      const timer = setTimeout(
+        () =>
+          resolve({
+            ok: true,
+            json: async () =>
+              url.endsWith('/orders/status')
+                ? {
+                    ...detail({
+                      order: { ...detail().order, status: 'completed' },
+                    }),
+                    state: 'OK',
+                    transitionsRef: undefined,
+                  }
+                : {
+                    linked: true,
+                    authorized: true,
+                    membershipState: 'active',
+                    activeTenantId: 'ten_a',
+                    activeStoreId: 'sto_a',
+                    tenantSelectionRequired: false,
+                    storeSelectionRequired: false,
+                    selectionRequired: false,
+                  },
+          }),
+        25
+      );
+      init.signal.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer);
+          reject(new Error('aborted'));
+        },
+        { once: true }
+      );
+    });
+  const client = new InternalBackendClient(
+    {
+      internalApiKey: 'internal-secret',
+      backendInternalUrl: 'http://backend:3000/api',
+      backendTimeoutMs: 5,
+      statusWriteTimeoutMs: 100,
+    },
+    request
+  );
+  const identity = {
+    telegramUserId: '1001',
+    telegramChatId: '1001',
+    updateId: '6002',
+  };
+
+  await assert.rejects(client.status(identity), BackendUnavailableError);
+  await client.updateOrderStatus(identity, WRITE_REF, 'completed');
+
+  assert.equal(
+    observed.filter((url) => url.endsWith('/internal/telegram/status')).length,
+    1
+  );
+  assert.equal(
+    observed.filter((url) => url.endsWith('/orders/status')).length,
+    1
+  );
+});
+
+test('status-write timeout fails safely after one backend request', async () => {
+  let requestCount = 0;
+  const client = new InternalBackendClient(
+    {
+      internalApiKey: 'internal-secret',
+      backendInternalUrl: 'http://backend:3000/api',
+      backendTimeoutMs: 5000,
+      statusWriteTimeoutMs: 1,
+    },
+    (_url, init) => {
+      requestCount += 1;
+      return new Promise((_resolve, reject) => {
+        init.signal.addEventListener(
+          'abort',
+          () => reject(new Error('aborted')),
+          { once: true }
+        );
+      });
+    }
+  );
+
+  await assert.rejects(
+    client.updateOrderStatus(
+      {
+        telegramUserId: '1001',
+        telegramChatId: '1001',
+        updateId: '6003',
+      },
+      WRITE_REF,
+      'completed'
+    ),
+    BackendUnavailableError
+  );
+  assert.equal(requestCount, 1);
 });
 
 test('bot transport remains free of Prisma and database access', () => {

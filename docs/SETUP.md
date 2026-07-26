@@ -47,7 +47,13 @@ M11 callback data uses a dedicated `TELEGRAM_CALLBACK_SIGNING_KEY` (minimum 32
 characters), with reference lifetime controlled by
 `TELEGRAM_CALLBACK_REF_TTL_SECONDS`. Projected-order freshness is considered
 delayed after `TELEGRAM_ORDER_FRESHNESS_THRESHOLD_SECONDS`. The bot-to-backend
-deadline is configured through `BOT_BACKEND_TIMEOUT_MS`.
+deadline for read-only and short operations is configured through
+`BOT_BACKEND_TIMEOUT_MS` and defaults to 5,000ms. M12 order-status writes alone
+use `BOT_STATUS_WRITE_TIMEOUT_MS`, which defaults to 50,000ms. That bounded
+deadline covers an authoritative read, one WooCommerce write, and a possible
+lost-response reconciliation read at the existing 15,000ms hard operation cap,
+plus 5,000ms for projection, audit, database, and HTTP processing. It does not
+add a backend request retry or a WooCommerce write retry.
 
 WooCommerce REST credential validation defaults to three total attempts, a
 5,000ms timeout per attempt, and a 15,000ms hard operation cap. Retry delays use

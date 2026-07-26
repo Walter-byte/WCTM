@@ -16,6 +16,7 @@ export interface ValidatedEnvironment {
   BOT_INTERNAL_API_KEY: string;
   BACKEND_INTERNAL_URL: string;
   BOT_BACKEND_TIMEOUT_MS: number;
+  BOT_STATUS_WRITE_TIMEOUT_MS: number;
   TELEGRAM_LINK_TOKEN_TTL_SECONDS: number;
   TELEGRAM_CALLBACK_SIGNING_KEY: string;
   TELEGRAM_CALLBACK_REF_TTL_SECONDS: number;
@@ -52,6 +53,7 @@ export const CONFIG_ENV_KEYS = [
   'BOT_INTERNAL_API_KEY',
   'BACKEND_INTERNAL_URL',
   'BOT_BACKEND_TIMEOUT_MS',
+  'BOT_STATUS_WRITE_TIMEOUT_MS',
   'TELEGRAM_LINK_TOKEN_TTL_SECONDS',
   'TELEGRAM_CALLBACK_SIGNING_KEY',
   'TELEGRAM_CALLBACK_REF_TTL_SECONDS',
@@ -103,6 +105,7 @@ export interface TelegramSettings {
   internalApiKey: string;
   backendInternalUrl: string;
   backendTimeoutMs: number;
+  statusWriteTimeoutMs: number;
   linkTokenTtlSeconds: number;
   callbackSigningKey: string;
   callbackRefTtlSeconds: number;

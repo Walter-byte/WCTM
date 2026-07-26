@@ -133,7 +133,10 @@ export class InternalBackendClient {
   constructor(
     private readonly configuration: Pick<
       BotConfiguration,
-      'internalApiKey' | 'backendInternalUrl' | 'backendTimeoutMs'
+      | 'internalApiKey'
+      | 'backendInternalUrl'
+      | 'backendTimeoutMs'
+      | 'statusWriteTimeoutMs'
     >,
     private readonly request: typeof fetch = fetch
   ) {}
@@ -213,14 +216,19 @@ export class InternalBackendClient {
     ref: string,
     target: string
   ): Promise<OrderStatusUpdateResult> {
-    const value = await this.post<unknown>('orders/status', identity, {
-      telegram: {
-        userId: identity.telegramUserId,
-        chatId: identity.telegramChatId,
+    const value = await this.post<unknown>(
+      'orders/status',
+      identity,
+      {
+        telegram: {
+          userId: identity.telegramUserId,
+          chatId: identity.telegramChatId,
+        },
+        ref,
+        target,
       },
-      ref,
-      target,
-    });
+      this.configuration.statusWriteTimeoutMs ?? 50_000
+    );
 
     return parseOrderStatusUpdateResult(value);
   }
@@ -228,14 +236,12 @@ export class InternalBackendClient {
   private async post<T>(
     path: string,
     identity: TelegramIdentity,
-    body: object
+    body: object,
+    timeoutMs = this.configuration.backendTimeoutMs ?? 5_000
   ): Promise<T> {
     const correlationId = `telegram-update-${identity.updateId}`;
     const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      this.configuration.backendTimeoutMs ?? 5_000
-    );
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
       const response = await this.request(

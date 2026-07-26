@@ -60,6 +60,10 @@ export class ApplicationConfigService {
       backendTimeoutMs: this.configService.get('BOT_BACKEND_TIMEOUT_MS', {
         infer: true,
       }),
+      statusWriteTimeoutMs: this.configService.get(
+        'BOT_STATUS_WRITE_TIMEOUT_MS',
+        { infer: true }
+      ),
       linkTokenTtlSeconds: this.configService.get(
         'TELEGRAM_LINK_TOKEN_TTL_SECONDS',
         { infer: true }
