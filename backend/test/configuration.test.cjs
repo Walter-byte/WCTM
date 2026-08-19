@@ -88,6 +88,7 @@ test('valid environment loads typed configuration values', () => {
   );
   assert.equal(configuration.telegram.linkTokenTtlSeconds, 900);
   assert.equal(configuration.telegram.backendTimeoutMs, 5000);
+  assert.equal(configuration.telegram.statusWriteTimeoutMs, 50000);
   assert.equal(configuration.telegram.callbackRefTtlSeconds, 900);
   assert.equal(configuration.telegram.orderFreshnessThresholdSeconds, 300);
 });
@@ -133,6 +134,25 @@ test('WooCommerce REST resilience limits accept typed configuration overrides', 
     backoffFactor: 3,
     jitterRatio: 0.1,
   });
+});
+
+test('Telegram transport timeouts accept typed configuration overrides', () => {
+  const configuration = createConfiguration(
+    validEnvironment({
+      BOT_BACKEND_TIMEOUT_MS: '4500',
+      BOT_STATUS_WRITE_TIMEOUT_MS: '49000',
+    })
+  );
+
+  assert.equal(configuration.telegram.backendTimeoutMs, 4500);
+  assert.equal(configuration.telegram.statusWriteTimeoutMs, 49000);
+  assert.throws(
+    () =>
+      validateEnvironment(
+        validEnvironment({ BOT_STATUS_WRITE_TIMEOUT_MS: '0' })
+      ),
+    /BOT_STATUS_WRITE_TIMEOUT_MS/
+  );
 });
 
 test('plugin registration limits accept typed configuration overrides', () => {

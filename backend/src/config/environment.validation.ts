@@ -189,6 +189,7 @@ function createEnvironmentSchema(
     BOT_INTERNAL_API_KEY: botInternalApiKey,
     BACKEND_INTERNAL_URL: backendInternalUrl,
     BOT_BACKEND_TIMEOUT_MS: Joi.number().integer().min(1).default(5000),
+    BOT_STATUS_WRITE_TIMEOUT_MS: Joi.number().integer().min(1).default(50000),
     TELEGRAM_LINK_TOKEN_TTL_SECONDS: Joi.number().integer().min(1).default(900),
     TELEGRAM_CALLBACK_SIGNING_KEY: telegramCallbackSigningKey,
     TELEGRAM_CALLBACK_REF_TTL_SECONDS: Joi.number()

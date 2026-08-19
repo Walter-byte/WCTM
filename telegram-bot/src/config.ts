@@ -5,6 +5,7 @@ export interface BotConfiguration {
   internalApiKey: string;
   backendInternalUrl: string;
   backendTimeoutMs: number;
+  statusWriteTimeoutMs: number;
 }
 
 const botEnvironmentSchema = Joi.object({
@@ -17,6 +18,7 @@ const botEnvironmentSchema = Joi.object({
     .uri({ scheme: ['http', 'https'] })
     .required(),
   BOT_BACKEND_TIMEOUT_MS: Joi.number().integer().min(1).default(5000),
+  BOT_STATUS_WRITE_TIMEOUT_MS: Joi.number().integer().min(1).default(50000),
 }).unknown(true);
 
 export function loadBotConfiguration(
@@ -39,5 +41,6 @@ export function loadBotConfiguration(
     internalApiKey: String(value.BOT_INTERNAL_API_KEY),
     backendInternalUrl: String(value.BACKEND_INTERNAL_URL).replace(/\/+$/, ''),
     backendTimeoutMs: Number(value.BOT_BACKEND_TIMEOUT_MS),
+    statusWriteTimeoutMs: Number(value.BOT_STATUS_WRITE_TIMEOUT_MS),
   });
 }
