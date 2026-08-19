@@ -312,3 +312,12 @@ docker compose down --volumes
 `docker compose down --volumes` permanently deletes local database, Redis, and
 Caddy state. It is prohibited for the M12-V private-pilot workflow, which has no
 destructive teardown.
+
+
+Production VPS uses host-level Caddy.
+
+WCTM backend is bound to 127.0.0.1:${PORT}.
+Host Caddy terminates HTTPS and reverse-proxies
+wctm.walterbyte.com to localhost:${PORT}.
+
+The Docker Compose Caddy service is not used on the shared VPS.
