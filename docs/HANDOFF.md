@@ -2,7 +2,7 @@
 
 **Generated:** 2026-07-19
 
-**Updated:** 2026-07-25
+**Updated:** 2026-08-19
 
 **Reason:** Transitioning implementation agent from GapCode to Codex GPT
 
@@ -566,7 +566,7 @@ Bot transport:
 - The bot has no Prisma import, database connection, WooCommerce call, filtering,
   ownership parsing, or domain mutation.
 
-#### M12 — Telegram Order Status Update (merged; awaiting real-store validation)
+#### M12 — Telegram Order Status Update (complete, merged, and validated)
 
 - `POST /api/internal/telegram/orders/transitions` accepts an M11 detail
   reference, revalidates current context and OWNER/ADMIN role, derives a
@@ -592,9 +592,17 @@ Bot transport:
 - The grammY bot renders only backend-provided targets, forwards the selected
   target, and retains M11 edit-to-reply fallback. It has no Prisma, database,
   WooCommerce, or status-policy logic.
-- Phase 4 stays In Progress. M12 is merged and the minimum exit criterion is
-  technically implemented; the only active gate before closure review is A's
-  validation against a real WooCommerce store.
+- Real-store validation found that WooCommerce could complete the selected
+  status change after the bot's general 5,000ms backend deadline, causing a
+  false temporary-unavailability response in Telegram.
+- Commit `fe36ab2` added a dedicated bounded status-write deadline without a
+  backend request retry or WooCommerce write retry. The post-fix real-store
+  regression completed in approximately 7–13 seconds, WooCommerce reached the
+  selected target state, and Telegram no longer returned the unavailable
+  message.
+- M12 real-store validation is complete to the extent recorded in
+  `docs/validation/M12_REAL_STORE_VALIDATION.md`. Manual, automated-only, and
+  blocked evidence remain explicitly distinguished there.
 
 #### M12-V — Pilot Onboarding & Validation Bootstrap (complete and merged)
 
@@ -609,8 +617,8 @@ Bot transport:
   for the manually created synthetic order and Telegram order-flow visibility.
 - D-022 is Accepted. M12-V has no reset, force, overwrite, data deletion,
   public onboarding, plugin UI, billing, or Phase 5 scope.
-- M12-V is merged to `main`. M12 real-store validation has not yet been
-  executed, so Phase 4 remains In Progress.
+- M12-V is merged to `main`. Phase 4 remains In Progress pending A/B closure
+  review, not a new implementation milestone.
 
 ---
 
@@ -627,19 +635,18 @@ Current canonical branch: `main`.
 
 ## 6. Current Blockers
 
-M12 real-store validation has not yet been executed and is the only active gate
-before Phase 4 closure review.
+No M12 implementation blocker remains. Validation cases V2 and V6–V8 remain
+blocked or not safely executable under the documented validation constraints.
+See the canonical final validation record for their evidence boundaries.
 
 ---
 
 ## 7. Current Task
 
-M12 real-store validation. Phase 4 stays In Progress. No M13 or other product
-milestone is assigned. Deploy current `main` to the approved VPS, run
-`pilot:setup`, complete Telegram linking, create one synthetic WooCommerce
-order, then run `pilot:readiness` before beginning V1–V14.
+Phase 4 A/B closure review. No M13 or other product milestone is assigned.
 
-Last completed implementation: M12-V — Pilot Onboarding & Validation Bootstrap.
+Last completed implementation: M12 and M12-V, including the validated M12
+status-write timeout correction.
 
 ---
 

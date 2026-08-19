@@ -7,15 +7,16 @@ Version: 1.0
 Current Phase
 
 Phase 4 — Telegram Platform remains In Progress. M12 and M12-V are complete and
-merged to `main`; M12 real-store validation has not yet been executed.
+merged to `main`. M12 real-store validation is complete to the extent recorded
+in `docs/validation/M12_REAL_STORE_VALIDATION.md`; Phase 4 is awaiting A/B
+closure review.
 
 ---
 
 Current Task
 
-M12 real-store validation. Deploy current `main` to the approved VPS, run
-`pilot:setup`, complete Telegram linking, create one synthetic WooCommerce
-order, then run `pilot:readiness` before beginning M12 V1–V14.
+Phase 4 A/B closure review. No M13 or other implementation milestone is
+assigned.
 
 ---
 
@@ -265,6 +266,15 @@ emit secret-safe audit records. The grammY bot only renders backend targets and
 forwards callbacks; it remains free of Prisma, database, WooCommerce, and
 transition-policy logic.
 
+Real-store validation exposed a bot transport timeout mismatch: WooCommerce
+completed the selected status change, but Telegram's general 5,000ms backend
+deadline expired and produced a false temporary-unavailability response. Commit
+`fe36ab2` added a dedicated bounded status-write deadline without adding a
+backend or WooCommerce write retry. The post-fix real-store regression completed
+in approximately 7–13 seconds, WooCommerce reached the selected target state,
+and Telegram no longer returned the unavailable message. The defect is fixed
+and validated for the exercised real-store path.
+
 M12-V is complete and merged. It adds two standalone Nest application-context
 commands:
 `pilot:setup` and `pilot:readiness`. Both require `PILOT_MODE=true`; the setup
@@ -353,21 +363,24 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No implementation blocker remains for supported pilot bootstrap. M12 real-store
-validation has not yet been executed and remains the Phase 4 gate.
+No implementation blocker remains for M12. Validation cases V2 and V6–V8 remain
+blocked or not safely executable under the documented validation constraints;
+they do not create a new implementation milestone. Phase 4 awaits A/B closure
+review.
 
 ---
 
 Next Milestone
 
-No M13 or other product milestone is assigned. Execute M12 real-store
-validation before Phase 4 closure review.
+No M13 or other product milestone is assigned. Phase 4 is awaiting A/B closure
+review.
 
 ---
 
 Last Completed
 
-M12-V — Pilot Onboarding & Validation Bootstrap.
+M12 real-store validation final record and validated status-write timeout
+correction.
 
 ---
 
@@ -379,4 +392,4 @@ Excellent
 
 Last Updated
 
-2026-07-25
+2026-08-19
