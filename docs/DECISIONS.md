@@ -653,4 +653,59 @@ Accepted.
 
 ---
 
-Next decision number: D-023.
+## D-023
+
+Date
+
+2026-08-20
+
+Decision
+
+Successfully projected WooCommerce `order.created` events schedule one durable
+Telegram notification delivery per Order and authorized private-chat
+authorization. Recipient discovery and pre-dispatch revalidation reuse the
+existing M10/M11 exact-one-membership and exact-one-active-Store context
+behavior; M13 defines no independent role or Store-selection policy.
+
+The backend owns the delivery state machine (`PENDING`, `IN_FLIGHT`,
+`DELIVERED`, `RETRYABLE_FAILURE`, `TERMINAL_FAILURE`, and `AMBIGUOUS`), database
+uniqueness, deterministic jobs on the existing `operations` queue, sanitized
+content, and existing M11/M12 action creation. Confirmed delivery is never sent
+again, terminal or ambiguous outcomes are not retried, and an unresolved
+in-flight record becomes ambiguous rather than being blindly resent. Only a
+definitive no-delivery transient outcome uses M5's existing three bounded
+attempts.
+
+The grammY process remains the only Telegram API transport. It exposes one
+private prepared-message send operation on the internal Compose network,
+authenticated with the existing `BOT_INTERNAL_API_KEY`; the endpoint has no
+published host port or public Caddy route. The bot has no Prisma access, tenant
+or Store resolution, recipient/role policy, Order logic, or status-transition
+logic.
+
+Notification **View Order** buttons use native M11 `ORDER_DETAIL` references.
+**Change Status** appears only when the existing M12 capability permits it and
+enters the unchanged M12 transition callback.
+
+Reason
+
+The narrow durable record and conservative ambiguous-outcome handling provide
+restart-safe at-least-once processing without claiming exactly-once behavior
+across an unknowable Telegram network outcome. Keeping authorization,
+idempotency, content, and actions in the backend preserves tenant isolation and
+keeps the bot stateless.
+
+Boundary
+
+M13 adds new-order manager notifications only. It adds no preferences, other
+notification categories, search, analytics, AI, customer messaging, new RBAC,
+new status policy, Store selection, new queue/service, backend Telegram API
+client, or later milestone behavior.
+
+Status
+
+Accepted.
+
+---
+
+Next decision number: D-024.

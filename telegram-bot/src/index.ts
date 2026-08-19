@@ -1,6 +1,7 @@
 import { createBot } from './bot';
 import { loadBotConfiguration } from './config';
 import { InternalBackendClient } from './internal-backend.client';
+import { InternalDeliveryServer } from './internal-delivery.server';
 
 const shutdownSignals: NodeJS.Signals[] = ['SIGINT', 'SIGTERM'];
 const MAX_POLLING_ATTEMPTS = 3;
@@ -31,28 +32,35 @@ async function main(): Promise<void> {
       );
     },
   });
+  const deliveryServer = new InternalDeliveryServer(configuration, bot.api);
 
-  const polling = startPollingWithRetry(bot);
-  const outcome = await Promise.race([
-    waitForShutdown().then((signal) => ({ signal })),
-    polling.then(() => ({ signal: undefined })),
-  ]);
+  await deliveryServer.start();
 
-  if (!outcome.signal) {
-    throw new Error('Telegram polling stopped unexpectedly');
+  try {
+    const polling = startPollingWithRetry(bot);
+    const outcome = await Promise.race([
+      waitForShutdown().then((signal) => ({ signal })),
+      polling.then(() => ({ signal: undefined })),
+    ]);
+
+    if (!outcome.signal) {
+      throw new Error('Telegram polling stopped unexpectedly');
+    }
+
+    const shutdownSignal = outcome.signal;
+    bot.stop();
+    await polling;
+    process.stdout.write(
+      `${JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'log',
+        event: 'telegram_bot_stopping',
+        signal: shutdownSignal,
+      })}\n`
+    );
+  } finally {
+    await deliveryServer.close();
   }
-
-  const shutdownSignal = outcome.signal;
-  bot.stop();
-  await polling;
-  process.stdout.write(
-    `${JSON.stringify({
-      timestamp: new Date().toISOString(),
-      level: 'log',
-      event: 'telegram_bot_stopping',
-      signal: shutdownSignal,
-    })}\n`
-  );
 }
 
 void main().catch((error: unknown) => {

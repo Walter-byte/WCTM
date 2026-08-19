@@ -3,6 +3,7 @@ import {
   MembershipRole,
   Prisma,
   StoreStatus,
+  TelegramChatType,
   TelegramCallbackDirection,
   TelegramCallbackPurpose,
 } from '@prisma/client';
@@ -226,6 +227,26 @@ interface NewReference {
   data: Prisma.TelegramCallbackReferenceCreateManyInput;
 }
 
+export interface TelegramOrderNotificationRecipient {
+  telegramAccountId: string;
+  telegramChatAuthorizationId: string;
+  telegramUserId: string;
+  telegramChatId: string;
+}
+
+export type TelegramPreparedOrderNotification =
+  | { state: 'UNAUTHORIZED' | 'NOT_FOUND' | 'DELETED' }
+  | {
+      state: 'OK';
+      orderNumber: string;
+      status: string;
+      currency: string;
+      total: string;
+      customerDisplayName: string;
+      viewOrderRef: string;
+      changeStatusAvailable: boolean;
+    };
+
 @Injectable()
 export class TelegramOrderService {
   constructor(
@@ -234,6 +255,144 @@ export class TelegramOrderService {
     private readonly encryption: EncryptionService,
     private readonly orderProjection: OrderProjectionService
   ) {}
+
+  async eligibleNotificationRecipients(
+    tenantId: string,
+    storeId: string
+  ): Promise<TelegramOrderNotificationRecipient[]> {
+    const candidates = await this.prisma.telegramChatAuthorization.findMany({
+      where: {
+        chatType: TelegramChatType.PRIVATE,
+        revokedAt: null,
+        telegramAccount: {
+          deletedAt: null,
+          user: {
+            memberships: {
+              some: {
+                tenantId,
+                deletedAt: null,
+                tenant: { deletedAt: null },
+              },
+            },
+          },
+        },
+      },
+      select: {
+        id: true,
+        telegramAccountId: true,
+        telegramChatId: true,
+        telegramAccount: { select: { telegramUserId: true } },
+      },
+    });
+    const recipients: TelegramOrderNotificationRecipient[] = [];
+
+    for (const candidate of candidates) {
+      const resolution = await this.resolveContext({
+        userId: candidate.telegramAccount.telegramUserId.toString(),
+        chatId: candidate.telegramChatId.toString(),
+      });
+
+      if (
+        resolution.state === 'OK' &&
+        resolution.context.accountId === candidate.telegramAccountId &&
+        resolution.context.tenantId === tenantId &&
+        resolution.context.storeId === storeId
+      ) {
+        recipients.push({
+          telegramAccountId: candidate.telegramAccountId,
+          telegramChatAuthorizationId: candidate.id,
+          telegramUserId: candidate.telegramAccount.telegramUserId.toString(),
+          telegramChatId: candidate.telegramChatId.toString(),
+        });
+      }
+    }
+
+    return recipients;
+  }
+
+  async prepareOrderNotification(
+    recipient: TelegramOrderNotificationRecipient,
+    tenantId: string,
+    storeId: string,
+    wcOrderId: string
+  ): Promise<TelegramPreparedOrderNotification> {
+    const resolution = await this.resolveContext({
+      userId: recipient.telegramUserId,
+      chatId: recipient.telegramChatId,
+    });
+
+    if (
+      resolution.state !== 'OK' ||
+      resolution.context.accountId !== recipient.telegramAccountId ||
+      resolution.context.tenantId !== tenantId ||
+      resolution.context.storeId !== storeId
+    ) {
+      return { state: 'UNAUTHORIZED' };
+    }
+
+    const context = resolution.context;
+    const order = await this.prisma.order.findFirst({
+      where: {
+        tenantId,
+        storeId,
+        wcOrderId,
+        tenant: { deletedAt: null },
+        store: { deletedAt: null, status: StoreStatus.ACTIVE },
+      },
+      select: ORDER_LIST_SELECT,
+    });
+
+    if (!order) {
+      return { state: 'NOT_FOUND' };
+    }
+
+    if (order.remoteDeletedAt) {
+      return { state: 'DELETED' };
+    }
+
+    const expiresAt = new Date(
+      Date.now() + this.configuration.telegram.callbackRefTtlSeconds * 1000
+    );
+    const listReference = this.newReference(
+      'p',
+      context,
+      {
+        purpose: TelegramCallbackPurpose.LIST_PAGE,
+        direction: TelegramCallbackDirection.CURRENT,
+        reachableOffset: 0,
+      },
+      expiresAt
+    );
+    const detailReference = this.newReference(
+      'd',
+      context,
+      {
+        purpose: TelegramCallbackPurpose.ORDER_DETAIL,
+        targetWcOrderId: order.wcOrderId,
+        backReferenceId: listReference.data.id,
+      },
+      expiresAt
+    );
+
+    await this.prisma.telegramCallbackReference.createMany({
+      data: [listReference.data, detailReference.data],
+    });
+
+    const summary = this.toSummary(order, detailReference.token);
+
+    return {
+      state: 'OK',
+      orderNumber: summary.orderNumber,
+      status: summary.status,
+      currency: summary.currency,
+      total: summary.total,
+      customerDisplayName: summary.customerDisplayName,
+      viewOrderRef: summary.ref,
+      changeStatusAvailable:
+        context.role !== MembershipRole.MEMBER &&
+        (CORE_STATUS_TRANSITIONS[order.status]?.length ?? 0) > 0,
+    };
+  }
 
   async list(input: TelegramOrderListDto): Promise<TelegramOrderListResult> {
     const resolution = await this.resolveContext(input.telegram);

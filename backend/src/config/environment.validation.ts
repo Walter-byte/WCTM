@@ -15,6 +15,7 @@ const DEVELOPMENT_VALUES = {
   APP_ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
   TELEGRAM_BOT_TOKEN: '0000000000:development-placeholder-token',
   BOT_INTERNAL_API_KEY: 'development-only-bot-internal-api-key',
+  BOT_INTERNAL_URL: 'http://telegram-bot:3001',
   TELEGRAM_CALLBACK_SIGNING_KEY:
     'development-only-telegram-callback-signing-key',
   BACKEND_INTERNAL_URL: 'http://backend:3000/api',
@@ -29,6 +30,7 @@ const TEST_VALUES = {
   APP_ENCRYPTION_KEY: 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
   TELEGRAM_BOT_TOKEN: '0000000000:test-placeholder-token-value',
   BOT_INTERNAL_API_KEY: 'test-only-bot-internal-api-key',
+  BOT_INTERNAL_URL: 'http://localhost:3001',
   TELEGRAM_CALLBACK_SIGNING_KEY: 'test-only-telegram-callback-signing-key',
   BACKEND_INTERNAL_URL: 'http://localhost:3000/api',
   WOOCOMMERCE_WEBHOOK_SECRET: 'test-only-webhook-secret-not-for-production',
@@ -131,6 +133,13 @@ function createEnvironmentSchema(
     nodeEnvironment,
     TEST_VALUES.BACKEND_INTERNAL_URL
   );
+  const botInternalUrl = requiredOrTestDefault(
+    Joi.string()
+      .trim()
+      .uri({ scheme: ['http', 'https'] }),
+    nodeEnvironment,
+    TEST_VALUES.BOT_INTERNAL_URL
+  );
   let webhookSecret = requiredOrTestDefault(
     Joi.string().trim().min(32),
     nodeEnvironment,
@@ -187,6 +196,9 @@ function createEnvironmentSchema(
     APP_ENCRYPTION_KEY: encryptionKey,
     TELEGRAM_BOT_TOKEN: telegramBotToken,
     BOT_INTERNAL_API_KEY: botInternalApiKey,
+    BOT_INTERNAL_URL: botInternalUrl,
+    BOT_INTERNAL_PORT: Joi.number().integer().min(1).max(65535).default(3001),
+    BOT_DELIVERY_TIMEOUT_MS: Joi.number().integer().min(1).default(10000),
     BACKEND_INTERNAL_URL: backendInternalUrl,
     BOT_BACKEND_TIMEOUT_MS: Joi.number().integer().min(1).default(5000),
     BOT_STATUS_WRITE_TIMEOUT_MS: Joi.number().integer().min(1).default(50000),

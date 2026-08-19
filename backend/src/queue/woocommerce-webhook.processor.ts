@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { forwardRef, Inject, Injectable } from '@nestjs/common';
 import { WebhookEventStatus } from '@prisma/client';
 import { type Job, UnrecoverableError } from 'bullmq';
 
@@ -8,6 +8,7 @@ import {
 } from '../orders/order-projection.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WOOCOMMERCE_WEBHOOK_JOB_NAME } from './queue.constants';
+import { OrderNotificationScheduler } from './order-notification.scheduler';
 
 export interface WooCommerceWebhookJobData {
   webhookEventId: string;
@@ -97,7 +98,9 @@ export function validateWooCommerceWebhookJobData(
 export class WooCommerceWebhookProcessor {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly orderProjection: OrderProjectionService
+    private readonly orderProjection: OrderProjectionService,
+    @Inject(forwardRef(() => OrderNotificationScheduler))
+    private readonly notificationScheduler: OrderNotificationScheduler
   ) {}
 
   async process(
@@ -145,6 +148,7 @@ export class WooCommerceWebhookProcessor {
 
     try {
       await this.orderProjection.project(event);
+      await this.notificationScheduler.schedule(event);
     } catch (error: unknown) {
       const diagnostic = this.failureDiagnostic(error);
       const retryable =

@@ -6,17 +6,17 @@ Version: 1.0
 
 Current Phase
 
-Phase 4 — Telegram Platform remains In Progress. M12 and M12-V are complete and
-merged to `main`. M12 real-store validation is complete to the extent recorded
-in `docs/validation/M12_REAL_STORE_VALIDATION.md`; Phase 4 is awaiting A/B
-closure review.
+Phase 4 — Telegram Platform remains In Progress. M13 Order Event Notifications
+is implemented on `feat/m13-order-notifications` and awaits A/B review and
+merge. M12 real-store validation remains complete to the extent recorded in
+`docs/validation/M12_REAL_STORE_VALIDATION.md`.
 
 ---
 
 Current Task
 
-Phase 4 A/B closure review. No M13 or other implementation milestone is
-assigned.
+M13 implementation is complete and awaiting A/B review. Do not begin M14 or
+another milestone without approval.
 
 ---
 
@@ -302,6 +302,33 @@ configured bound for the projected order, and exits successfully only when the
 order is also available through the Telegram order flow. M12-V has no reset,
 force, overwrite, deletion, public onboarding, plugin UI, billing, or teardown.
 
+M13 hooks only the successful M9 `order.created` projection path. Current
+eligible recipients are derived through the existing M10/M11 linked-account,
+authorized-private-chat, active Membership, tenant, and exact-one-active-Store
+resolution. One `TelegramOrderNotificationDelivery` is persisted per Order and
+private-chat authorization, then scheduled with a deterministic job on the
+existing `operations` queue.
+
+Migration `20260820090000_order_event_notifications` adds the narrow delivery
+model and its `PENDING`, `IN_FLIGHT`, `DELIVERED`, `RETRYABLE_FAILURE`,
+`TERMINAL_FAILURE`, and `AMBIGUOUS` states. Delivered records are no-ops,
+terminal and ambiguous outcomes are not retried, and unresolved in-flight
+records become ambiguous. Only explicit Telegram rate-limit/server outcomes
+use the existing M5 bounded retry policy.
+
+The worker revalidates current context, loads the current tenant/Store-scoped
+Order projection, creates native M11 detail references, and exposes the M12
+transition entry only when the existing M12 capability permits it. The compact
+message contains only the already-approved sanitized order number, status,
+total/currency, and customer display name.
+
+The grammY process now exposes one `BOT_INTERNAL_API_KEY`-authenticated private
+prepared-message operation on the Compose network. It remains the sole Telegram
+API transport and has no Prisma/database, tenant/Store, recipient/role, Order,
+or status-policy access. `BOT_INTERNAL_URL`, `BOT_INTERNAL_PORT`, and
+`BOT_DELIVERY_TIMEOUT_MS` configure the private path; it has no Caddy route or
+published host port. D-023 is Accepted.
+
 ---
 
 Infrastructure
@@ -339,7 +366,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-main
+feat/m13-order-notifications
 
 ---
 
@@ -363,24 +390,23 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No implementation blocker remains for M12. Validation cases V2 and V6–V8 remain
-blocked or not safely executable under the documented validation constraints;
-they do not create a new implementation milestone. Phase 4 awaits A/B closure
-review.
+No M13 implementation blocker remains. The local Docker daemon was unavailable,
+so the committed migration still requires one apply/status check against an
+isolated PostgreSQL database before deployment. Live Telegram delivery also
+requires one synthetic `order.created` validation after deployment.
 
 ---
 
 Next Milestone
 
-No M13 or other product milestone is assigned. Phase 4 is awaiting A/B closure
-review.
+No M14 or other product milestone is assigned. Await M13 A/B review and manual
+validation; do not continue without approval.
 
 ---
 
 Last Completed
 
-M12 real-store validation final record and validated status-write timeout
-correction.
+M13 Order Event Notifications implementation and automated regression gates.
 
 ---
 
@@ -392,4 +418,4 @@ Excellent
 
 Last Updated
 
-2026-08-19
+2026-08-20

@@ -14,6 +14,8 @@ import {
   WOOCOMMERCE_WEBHOOK_JOB_NAME,
 } from './queue.constants';
 import { QueueRuntimeService } from './queue-runtime.service';
+import type { OrderNotificationProcessor } from './order-notification.processor';
+import type { OrderNotificationScheduler } from './order-notification.scheduler';
 import { ReferenceProcessor } from './reference.processor';
 import {
   WEBHOOK_PROCESSING_LEASE_TTL_MS,
@@ -143,14 +145,16 @@ function setup(
   );
   const findUnique = jest.fn(async () => event);
   const project = jest.fn(async () => undefined);
+  const schedule = jest.fn(async () => undefined);
   const processor = new WooCommerceWebhookProcessor(
     {
       webhookEvent: { updateMany, findUnique },
     } as unknown as PrismaService,
-    { project } as unknown as OrderProjectionService
+    { project } as unknown as OrderProjectionService,
+    { schedule } as unknown as OrderNotificationScheduler
   );
 
-  return { event, processor, project, updateMany };
+  return { event, processor, project, schedule, updateMany };
 }
 
 describe('WooCommerce order webhook worker lifecycle', () => {
@@ -171,6 +175,9 @@ describe('WooCommerce order webhook worker lifecycle', () => {
           tenantId: 'ten_a',
         }),
       })
+    );
+    expect(fixture.schedule).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'evt_a', topic: 'order.created' })
     );
     expect(fixture.event.status).toBe(WebhookEventStatus.COMPLETED);
     expect(fixture.event.processingAttemptCount).toBe(1);
@@ -243,6 +250,9 @@ describe('WooCommerce order webhook worker lifecycle', () => {
       } as ApplicationConfigService,
       new ReferenceProcessor(),
       fixture.processor,
+      {
+        markFailed: jest.fn().mockResolvedValue(undefined as never),
+      } as unknown as OrderNotificationProcessor,
       { error } as unknown as StructuredLoggerService
     );
     const safeFailure = new OrderProjectionFailure(

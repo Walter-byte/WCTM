@@ -3,6 +3,7 @@ import Joi from 'joi';
 export interface BotConfiguration {
   botToken: string;
   internalApiKey: string;
+  internalPort: number;
   backendInternalUrl: string;
   backendTimeoutMs: number;
   statusWriteTimeoutMs: number;
@@ -13,6 +14,7 @@ const botEnvironmentSchema = Joi.object({
     .pattern(/^\d+:[A-Za-z0-9_-]{20,}$/)
     .required(),
   BOT_INTERNAL_API_KEY: Joi.string().trim().min(1).required(),
+  BOT_INTERNAL_PORT: Joi.number().integer().min(1).max(65535).default(3001),
   BACKEND_INTERNAL_URL: Joi.string()
     .trim()
     .uri({ scheme: ['http', 'https'] })
@@ -39,6 +41,7 @@ export function loadBotConfiguration(
   return Object.freeze({
     botToken: String(value.TELEGRAM_BOT_TOKEN),
     internalApiKey: String(value.BOT_INTERNAL_API_KEY),
+    internalPort: Number(value.BOT_INTERNAL_PORT),
     backendInternalUrl: String(value.BACKEND_INTERNAL_URL).replace(/\/+$/, ''),
     backendTimeoutMs: Number(value.BOT_BACKEND_TIMEOUT_MS),
     statusWriteTimeoutMs: Number(value.BOT_STATUS_WRITE_TIMEOUT_MS),
