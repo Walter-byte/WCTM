@@ -101,7 +101,7 @@ services:
     networks:
       - wc-telegram-net
 
-  networks:
+networks:
   wc-telegram-net: {}
 
 volumes:
