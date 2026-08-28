@@ -114,7 +114,7 @@ Status:
 
 Current Milestone:
 
-M12 real-store validation (not yet executed)
+M13 Order Event Notifications (implemented; awaiting review and validation)
 
 Deliverables
 
@@ -169,18 +169,30 @@ M12-V scope:
 - No public onboarding, completed connector UI, billing, reset, force, or
   destructive teardown
 
-M12 and M12-V are complete and merged to `main`. D-022 is Accepted. Phase 4
-remains In Progress; M12 real-store validation has not yet been executed. No M13
-or other product milestone is assigned.
+M13 scope:
+
+- Backend-owned recipient discovery, durable per-Order/private-chat delivery
+  state, idempotency, deterministic `operations`-queue scheduling, sanitized
+  content, existing M11/M12 actions, and bounded outcome persistence
+- Current M10/M11 authorization/context revalidation before dispatch; no new
+  RBAC or Store-selection policy
+- Stateless grammY-only Telegram API transport through one private
+  `BOT_INTERNAL_API_KEY`-authenticated prepared-message operation
+- Delivered no-op, terminal no-retry, ambiguous no-blind-resend, and existing
+  M5 bounded retries only for definitive transient no-delivery outcomes
+
+M12 and M12-V are complete and merged to `main`. M13 is implemented on
+`feat/m13-order-notifications` and D-023 is Accepted. Phase 4 remains In
+Progress pending A/B review and manual M13 validation. No M14 or other product
+milestone is assigned.
 
 Next operator action:
 
-- Deploy current `main` to the approved VPS
-- Run `pilot:setup`
-- Complete Telegram linking
-- Create one synthetic WooCommerce order
-- Run `pilot:readiness`
-- Begin M12 V1–V14 only after readiness passes
+- Review and merge M13
+- Apply migration `20260820090000_order_event_notifications`
+- Configure the private bot transport variables from `.env.example`
+- Create one synthetic WooCommerce order and confirm one proactive Telegram
+  notification plus its existing View Order and Change Status entries
 
 Exit Criteria
 

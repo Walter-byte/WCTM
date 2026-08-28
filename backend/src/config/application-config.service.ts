@@ -54,6 +54,15 @@ export class ApplicationConfigService {
       internalApiKey: this.configService.get('BOT_INTERNAL_API_KEY', {
         infer: true,
       }),
+      botInternalUrl: this.configService.get('BOT_INTERNAL_URL', {
+        infer: true,
+      }),
+      internalPort: this.configService.get('BOT_INTERNAL_PORT', {
+        infer: true,
+      }),
+      deliveryTimeoutMs: this.configService.get('BOT_DELIVERY_TIMEOUT_MS', {
+        infer: true,
+      }),
       backendInternalUrl: this.configService.get('BACKEND_INTERNAL_URL', {
         infer: true,
       }),

@@ -116,6 +116,20 @@ function createFixture(orderCount = 18) {
   };
 
   const prisma = {
+    telegramChatAuthorization: {
+      findMany: jest.fn(async () =>
+        state.chatRevoked
+          ? []
+          : [
+              {
+                id: 'tca_a',
+                telegramAccountId: 'tga_a',
+                telegramChatId: BigInt(1001),
+                telegramAccount: { telegramUserId: BigInt(1001) },
+              },
+            ]
+      ),
+    },
     telegramAccount: {
       findUnique: jest.fn(
         async ({ where }: { where: { telegramUserId: bigint } }) =>
@@ -380,6 +394,109 @@ function createFixture(orderCount = 18) {
     identity,
   };
 }
+
+describe('M13 recipient and existing action reuse', () => {
+  it('discovers only recipients whose current M11 context matches the Order', async () => {
+    const fixture = createFixture(1);
+
+    await expect(
+      fixture.service.eligibleNotificationRecipients('ten_a', 'sto_a')
+    ).resolves.toEqual([
+      {
+        telegramAccountId: 'tga_a',
+        telegramChatAuthorizationId: 'tca_a',
+        telegramUserId: '1001',
+        telegramChatId: '1001',
+      },
+    ]);
+
+    fixture.state.activeStoreId = 'sto_changed';
+    await expect(
+      fixture.service.eligibleNotificationRecipients('ten_a', 'sto_a')
+    ).resolves.toEqual([]);
+
+    fixture.state.activeStoreId = 'sto_a';
+    fixture.state.membershipCount = 2;
+    await expect(
+      fixture.service.eligibleNotificationRecipients('ten_a', 'sto_a')
+    ).resolves.toEqual([]);
+
+    fixture.state.membershipCount = 1;
+    fixture.state.chatRevoked = true;
+    await expect(
+      fixture.service.eligibleNotificationRecipients('ten_a', 'sto_a')
+    ).resolves.toEqual([]);
+  });
+
+  it('creates a native M11 detail reference and enters the unchanged M12 flow', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.OWNER;
+    const recipient = {
+      telegramAccountId: 'tga_a',
+      telegramChatAuthorizationId: 'tca_a',
+      telegramUserId: '1001',
+      telegramChatId: '1001',
+    };
+    const prepared = await fixture.service.prepareOrderNotification(
+      recipient,
+      'ten_a',
+      'sto_a',
+      '1001'
+    );
+
+    expect(prepared).toMatchObject({
+      state: 'OK',
+      viewOrderRef: expect.stringMatching(/^d\./),
+      changeStatusAvailable: true,
+    });
+
+    if (prepared.state !== 'OK') {
+      throw new Error('Expected a prepared notification');
+    }
+
+    await expect(
+      fixture.service.detail({
+        telegram: fixture.identity,
+        ref: prepared.viewOrderRef,
+      })
+    ).resolves.toMatchObject({
+      state: 'OK',
+      transitionsRef: prepared.viewOrderRef,
+    });
+    await expect(
+      fixture.service.transitions({
+        telegram: fixture.identity,
+        ref: prepared.viewOrderRef,
+      })
+    ).resolves.toMatchObject({
+      state: 'OK',
+      ref: expect.stringMatching(/^s\./),
+      targets: ['on-hold', 'completed', 'cancelled', 'refunded'],
+    });
+  });
+
+  it('uses the same M12 capability boundary for MEMBER recipients', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.MEMBER;
+
+    await expect(
+      fixture.service.prepareOrderNotification(
+        {
+          telegramAccountId: 'tga_a',
+          telegramChatAuthorizationId: 'tca_a',
+          telegramUserId: '1001',
+          telegramChatId: '1001',
+        },
+        'ten_a',
+        'sto_a',
+        '1001'
+      )
+    ).resolves.toMatchObject({
+      state: 'OK',
+      changeStatusAvailable: false,
+    });
+  });
+});
 
 function wooPayload(status: string) {
   return {

@@ -41,8 +41,14 @@ The Telegram transport and backend share `BOT_INTERNAL_API_KEY` as a dedicated
 service credential. Generate a strong random value outside local development;
 never reuse the Telegram bot token or a user JWT. `BACKEND_INTERNAL_URL` is the
 backend API base URL used only by the bot (the Compose default is
-`http://backend:3000/api`). Telegram account-link tokens default to a
-900-second lifetime through `TELEGRAM_LINK_TOKEN_TTL_SECONDS`.
+`http://backend:3000/api`). `BOT_INTERNAL_URL` is the private bot transport base
+URL used only by the backend (the Compose default is
+`http://telegram-bot:3001`), and `BOT_INTERNAL_PORT` selects that bot listener.
+The bot listener has no published host port and no Caddy route. Prepared-message
+requests use the bounded `BOT_DELIVERY_TIMEOUT_MS`, which defaults to 10,000ms;
+an unconfirmed response is treated as ambiguous and is not blindly resent.
+Telegram account-link tokens default to a 900-second lifetime through
+`TELEGRAM_LINK_TOKEN_TTL_SECONDS`.
 M11 callback data uses a dedicated `TELEGRAM_CALLBACK_SIGNING_KEY` (minimum 32
 characters), with reference lifetime controlled by
 `TELEGRAM_CALLBACK_REF_TTL_SECONDS`. Projected-order freshness is considered
@@ -312,7 +318,6 @@ docker compose down --volumes
 `docker compose down --volumes` permanently deletes local database, Redis, and
 Caddy state. It is prohibited for the M12-V private-pilot workflow, which has no
 destructive teardown.
-
 
 Production VPS uses host-level Caddy.
 

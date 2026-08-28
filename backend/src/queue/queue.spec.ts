@@ -6,6 +6,7 @@ import type { ApplicationConfigService } from '../config/application-config.serv
 import type { TenantContextService } from '../tenant/tenant-context.service';
 import { REFERENCE_JOB_ATTEMPTS, REFERENCE_JOB_NAME } from './queue.constants';
 import { QueueRuntimeService } from './queue-runtime.service';
+import type { OrderNotificationProcessor } from './order-notification.processor';
 import { ReferenceJobProducer } from './reference-job.producer';
 import {
   type ReferenceJobData,
@@ -34,6 +35,11 @@ const webhookProcessor = (): WooCommerceWebhookProcessor =>
   ({
     markFailed: jest.fn().mockResolvedValue(undefined as never),
   }) as unknown as WooCommerceWebhookProcessor;
+
+const notificationProcessor = (): OrderNotificationProcessor =>
+  ({
+    markFailed: jest.fn().mockResolvedValue(undefined as never),
+  }) as unknown as OrderNotificationProcessor;
 
 describe('M5 operations queue', () => {
   it('enqueues a reference job with tenant identity from server context', async () => {
@@ -94,6 +100,7 @@ describe('M5 operations queue', () => {
       configuration,
       new ReferenceProcessor(),
       webhookProcessor(),
+      notificationProcessor(),
       logger
     );
 
@@ -136,6 +143,7 @@ describe('M5 operations queue', () => {
       } as ApplicationConfigService,
       new ReferenceProcessor(),
       webhookProcessor(),
+      notificationProcessor(),
       { error: jest.fn() } as unknown as StructuredLoggerService
     );
 
@@ -164,6 +172,7 @@ describe('M5 operations queue', () => {
       } as ApplicationConfigService,
       new ReferenceProcessor(),
       webhookProcessor(),
+      notificationProcessor(),
       { error: jest.fn() } as unknown as StructuredLoggerService
     );
 

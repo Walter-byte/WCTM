@@ -14,6 +14,9 @@ export interface ValidatedEnvironment {
   APP_ENCRYPTION_KEY: string;
   TELEGRAM_BOT_TOKEN: string;
   BOT_INTERNAL_API_KEY: string;
+  BOT_INTERNAL_URL: string;
+  BOT_INTERNAL_PORT: number;
+  BOT_DELIVERY_TIMEOUT_MS: number;
   BACKEND_INTERNAL_URL: string;
   BOT_BACKEND_TIMEOUT_MS: number;
   BOT_STATUS_WRITE_TIMEOUT_MS: number;
@@ -51,6 +54,9 @@ export const CONFIG_ENV_KEYS = [
   'APP_ENCRYPTION_KEY',
   'TELEGRAM_BOT_TOKEN',
   'BOT_INTERNAL_API_KEY',
+  'BOT_INTERNAL_URL',
+  'BOT_INTERNAL_PORT',
+  'BOT_DELIVERY_TIMEOUT_MS',
   'BACKEND_INTERNAL_URL',
   'BOT_BACKEND_TIMEOUT_MS',
   'BOT_STATUS_WRITE_TIMEOUT_MS',
@@ -103,6 +109,9 @@ export interface EncryptionSettings {
 export interface TelegramSettings {
   botToken: string;
   internalApiKey: string;
+  botInternalUrl: string;
+  internalPort: number;
+  deliveryTimeoutMs: number;
   backendInternalUrl: string;
   backendTimeoutMs: number;
   statusWriteTimeoutMs: number;

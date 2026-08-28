@@ -4,13 +4,23 @@ import { EncryptionModule } from '../common/encryption/encryption.module';
 import { OrdersModule } from '../orders/orders.module';
 import { BotApiKeyGuard } from './guards/bot-api-key.guard';
 import { TelegramInternalController } from './telegram-internal.controller';
+import { TelegramDeliveryClient } from './telegram-delivery.client';
 import { TelegramLinkingService } from './telegram-linking.service';
 import { TelegramOrderService } from './telegram-order.service';
 
 @Module({
   imports: [EncryptionModule, OrdersModule],
   controllers: [TelegramInternalController],
-  providers: [BotApiKeyGuard, TelegramLinkingService, TelegramOrderService],
-  exports: [TelegramLinkingService, TelegramOrderService],
+  providers: [
+    BotApiKeyGuard,
+    TelegramDeliveryClient,
+    TelegramLinkingService,
+    TelegramOrderService,
+  ],
+  exports: [
+    TelegramDeliveryClient,
+    TelegramLinkingService,
+    TelegramOrderService,
+  ],
 })
 export class TelegramModule {}

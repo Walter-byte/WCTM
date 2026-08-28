@@ -324,11 +324,26 @@ satisfied. No next milestone is assigned.
 - No reset, force, overwrite, data deletion, public onboarding, connector UI,
   billing, or Phase 5 work
 
-Phase 4 remains In Progress. M12-V is complete and merged to `main`; M12
-real-store validation has not yet been executed. No M13 or other product
-milestone is assigned. The next operator action is to deploy current `main` to
-the approved VPS, run `pilot:setup`, complete Telegram linking, create one
-synthetic WooCommerce order, and run `pilot:readiness`.
+### M13 — Order Event Notifications ✅ Implemented / Awaiting Review
+
+- Successfully projected `order.created` events discover recipients through
+  the existing M10/M11 exact-context authorization behavior
+- One durable delivery per Order/private-chat authorization with explicit
+  pending, in-flight, delivered, retryable, terminal, and ambiguous states
+- Deterministic delivery jobs reuse the M5 `operations` queue and bounded retry
+  policy only for definitive transient no-delivery outcomes
+- Pre-dispatch authorization and tenant/Store context are revalidated from
+  current backend state
+- Compact sanitized new-order messages create native M11 View Order references
+  and expose the unchanged M12 Change Status entry only when permitted
+- The stateless grammY process remains the sole Telegram API transport through
+  one private `BOT_INTERNAL_API_KEY`-authenticated prepared-message operation
+- Migration `20260820090000_order_event_notifications`; D-023 Accepted
+
+Phase 4 remains In Progress. M13 is implemented on
+`feat/m13-order-notifications` and awaits A/B review, isolated PostgreSQL
+migration verification, and one deployed synthetic-order delivery validation.
+No M14 or other product milestone is assigned.
 
 ## Phase 5 — Core Store Management (MVP) ⬜ Planned
 

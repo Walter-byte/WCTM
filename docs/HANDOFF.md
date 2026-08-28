@@ -43,7 +43,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-022)
+## 3. Architectural Decisions (D-001–D-023)
 
 | ID    | Decision                                                                                                                                                                                            | Status   |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -69,8 +69,9 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-020 | Read-only M9 Order access with bounded keyset pagination, `lastSyncedAt` freshness, and expiring HMAC-authenticated callback references bound to current Telegram context                           | Accepted |
 | D-021 | OWNER/ADMIN Telegram order-status writes using server-derived targets, single-effect HMAC references, durable idempotency, one WooCommerce dispatch, and authoritative/lost-response reconciliation | Accepted |
 | D-022 | Private-pilot setup/readiness tooling with no reset or force path, hidden JWT internals, a public Caddy HTTPS gate, manual synthetic-order creation, and no public onboarding claim                 | Accepted |
+| D-023 | Backend-owned durable new-order notification delivery with existing M10/M11 authorization, M11/M12 actions, deterministic M5 jobs, conservative ambiguous outcomes, and stateless bot-only transport | Accepted |
 
-Next decision number: **D-023**, if a future task produces a genuine
+Next decision number: **D-024**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -620,6 +621,35 @@ Bot transport:
 - M12-V is merged to `main`. Phase 4 remains In Progress pending A/B closure
   review, not a new implementation milestone.
 
+#### M13 — Order Event Notifications (implemented; awaiting review)
+
+- M13 schedules only after a successful M9 `order.created` projection and
+  never from an unverified webhook payload.
+- Recipient discovery and worker-time revalidation reuse the existing M10/M11
+  linked account, private-chat authorization, active Membership, tenant, and
+  exact-one-active-Store context behavior.
+- Migration `20260820090000_order_event_notifications` adds one narrow
+  `TelegramOrderNotificationDelivery` model unique by Order and private-chat
+  authorization. States are `PENDING`, `IN_FLIGHT`, `DELIVERED`,
+  `RETRYABLE_FAILURE`, `TERMINAL_FAILURE`, and `AMBIGUOUS`.
+- Deterministic `telegram.order-notification.send` jobs run on the existing M5
+  `operations` queue. Delivered, terminal, and ambiguous records do not resend;
+  unresolved in-flight work becomes ambiguous; only definitive transient
+  no-delivery outcomes use the existing three attempts.
+- The worker loads the current tenant/Store-scoped Order, emits only the compact
+  approved sanitized summary, creates a native M11 detail reference, and adds
+  the unchanged M12 transition entry only when the existing capability permits.
+- The grammY process remains the sole Telegram API transport through one
+  private `BOT_INTERNAL_API_KEY`-authenticated prepared-message endpoint. It has
+  no published host port, Caddy route, Prisma/database access, authorization
+  policy, or Order/status business logic.
+- New configuration: `BOT_INTERNAL_URL`, `BOT_INTERNAL_PORT`, and
+  `BOT_DELIVERY_TIMEOUT_MS`. D-023 is Accepted.
+- Automated backend, bot, M8-M12 regression, build, type, lint, formatting,
+  Prisma validation/generation, and migration-structure tests pass. The local
+  Docker daemon was unavailable, so an isolated PostgreSQL migration apply and
+  one deployed synthetic-order delivery remain manual validation steps.
+
 ---
 
 ## 5. Current Repository Structure
@@ -629,24 +659,22 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current canonical branch: `main`.
+Current implementation branch: `feat/m13-order-notifications`.
 
 ---
 
 ## 6. Current Blockers
 
-No M12 implementation blocker remains. Validation cases V2 and V6–V8 remain
-blocked or not safely executable under the documented validation constraints.
-See the canonical final validation record for their evidence boundaries.
+No M13 implementation blocker remains. Before deployment, apply and verify the
+new migration against isolated PostgreSQL. After deployment, validate one
+synthetic `order.created` notification and both existing action entries.
 
 ---
 
 ## 7. Current Task
 
-Phase 4 A/B closure review. No M13 or other product milestone is assigned.
-
-Last completed implementation: M12 and M12-V, including the validated M12
-status-write timeout correction.
+M13 implementation is complete on `feat/m13-order-notifications` and awaits A/B
+review and manual validation. No M14 or other product milestone is assigned.
 
 ---
 

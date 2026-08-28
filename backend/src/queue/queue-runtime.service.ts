@@ -1,4 +1,6 @@
 import {
+  forwardRef,
+  Inject,
   Injectable,
   type OnApplicationShutdown,
   type OnModuleInit,
@@ -9,11 +11,17 @@ import { StructuredLoggerService } from '../common/logging/structured-logger.ser
 import { ApplicationConfigService } from '../config/application-config.service';
 import {
   OPERATIONS_QUEUE_NAME,
+  ORDER_NOTIFICATION_JOB_NAME,
   REFERENCE_JOB_ATTEMPTS,
   REFERENCE_JOB_BACKOFF_MS,
   REFERENCE_JOB_NAME,
   WOOCOMMERCE_WEBHOOK_JOB_NAME,
 } from './queue.constants';
+import {
+  type OrderNotificationJobData,
+  type OrderNotificationJobResult,
+  OrderNotificationProcessor,
+} from './order-notification.processor';
 import {
   type ReferenceJobData,
   type ReferenceJobResult,
@@ -35,11 +43,21 @@ type WooCommerceWebhookJob = Job<
   WooCommerceWebhookJobResult,
   typeof WOOCOMMERCE_WEBHOOK_JOB_NAME
 >;
-type OperationsJob = ReferenceJob | WooCommerceWebhookJob;
-type OperationsJobData = ReferenceJobData | WooCommerceWebhookJobData;
-type OperationsJobResult = ReferenceJobResult | WooCommerceWebhookJobResult;
+type OrderNotificationJob = Job<
+  OrderNotificationJobData,
+  OrderNotificationJobResult,
+  typeof ORDER_NOTIFICATION_JOB_NAME
+>;
+type OperationsJob =
+  ReferenceJob | WooCommerceWebhookJob | OrderNotificationJob;
+type OperationsJobData =
+  ReferenceJobData | WooCommerceWebhookJobData | OrderNotificationJobData;
+type OperationsJobResult =
+  ReferenceJobResult | WooCommerceWebhookJobResult | OrderNotificationJobResult;
 type OperationsJobName =
-  typeof REFERENCE_JOB_NAME | typeof WOOCOMMERCE_WEBHOOK_JOB_NAME;
+  | typeof REFERENCE_JOB_NAME
+  | typeof WOOCOMMERCE_WEBHOOK_JOB_NAME
+  | typeof ORDER_NOTIFICATION_JOB_NAME;
 
 @Injectable()
 export class QueueRuntimeService
@@ -60,7 +78,9 @@ export class QueueRuntimeService
   constructor(
     private readonly configuration: ApplicationConfigService,
     private readonly processor: ReferenceProcessor,
+    @Inject(forwardRef(() => WooCommerceWebhookProcessor))
     private readonly webhookProcessor: WooCommerceWebhookProcessor,
+    private readonly notificationProcessor: OrderNotificationProcessor,
     private readonly logger: StructuredLoggerService
   ) {}
 
@@ -121,6 +141,15 @@ export class QueueRuntimeService
     return this.requiredQueue().add(WOOCOMMERCE_WEBHOOK_JOB_NAME, data, {
       jobId,
     }) as Promise<WooCommerceWebhookJob>;
+  }
+
+  addOrderNotificationJob(
+    data: OrderNotificationJobData,
+    jobId: string
+  ): Promise<OrderNotificationJob> {
+    return this.requiredQueue().add(ORDER_NOTIFICATION_JOB_NAME, data, {
+      jobId,
+    }) as Promise<OrderNotificationJob>;
   }
 
   async ping(): Promise<void> {
@@ -198,6 +227,21 @@ export class QueueRuntimeService
       }
     }
 
+    if (job.name === ORDER_NOTIFICATION_JOB_NAME) {
+      try {
+        await this.notificationProcessor.markFailed(job.data);
+      } catch {
+        this.logger.error(
+          'Telegram notification dead-letter state update failed',
+          {
+            queue: OPERATIONS_QUEUE_NAME,
+            jobId: job.id ?? null,
+          },
+          QueueRuntimeService.name
+        );
+      }
+    }
+
     const tenantId =
       typeof job.data?.tenantId === 'string' &&
       job.data.tenantId.startsWith('ten_')
@@ -252,6 +296,10 @@ export class QueueRuntimeService
   private process(job: OperationsJob): Promise<OperationsJobResult> {
     if (job.name === WOOCOMMERCE_WEBHOOK_JOB_NAME) {
       return this.webhookProcessor.process(job as WooCommerceWebhookJob);
+    }
+
+    if (job.name === ORDER_NOTIFICATION_JOB_NAME) {
+      return this.notificationProcessor.process(job as OrderNotificationJob);
     }
 
     return this.processor.process(job as ReferenceJob);
