@@ -9,6 +9,7 @@ import {
   type PilotSettings,
   type PluginRegistrationSettings,
   type PostgreSqlSettings,
+  type PublicAuthSettings,
   type RedisSettings,
   type TelegramSettings,
   type ValidatedEnvironment,
@@ -26,6 +27,7 @@ export class ApplicationConfigService {
   readonly telegram: Readonly<TelegramSettings>;
   readonly woocommerce: Readonly<WooCommerceSettings>;
   readonly pluginRegistration: Readonly<PluginRegistrationSettings>;
+  readonly publicAuth: Readonly<PublicAuthSettings>;
   readonly pilot: Readonly<PilotSettings>;
 
   constructor(
@@ -132,6 +134,22 @@ export class ApplicationConfigService {
         { infer: true }
       ),
     });
+    this.publicAuth = Object.freeze({
+      registerRateLimit: this.configService.get('AUTH_REGISTER_RATE_LIMIT', {
+        infer: true,
+      }),
+      registerRateWindowSeconds: this.configService.get(
+        'AUTH_REGISTER_RATE_WINDOW_SECONDS',
+        { infer: true }
+      ),
+      loginRateLimit: this.configService.get('AUTH_LOGIN_RATE_LIMIT', {
+        infer: true,
+      }),
+      loginRateWindowSeconds: this.configService.get(
+        'AUTH_LOGIN_RATE_WINDOW_SECONDS',
+        { infer: true }
+      ),
+    });
     this.pilot = Object.freeze({
       enabled: this.configService.get('PILOT_MODE', { infer: true }),
       webhookBaseUrl: this.configService.get('PILOT_WEBHOOK_BASE_URL', {
@@ -154,6 +172,7 @@ export class ApplicationConfigService {
       telegram: this.telegram,
       woocommerce: this.woocommerce,
       pluginRegistration: this.pluginRegistration,
+      publicAuth: this.publicAuth,
       pilot: this.pilot,
     });
   }

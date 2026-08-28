@@ -11,6 +11,7 @@ const {
 } = require('../dist/auth/decorators/current-user.decorator');
 const { Public } = require('../dist/auth/decorators/public.decorator');
 const { JwtStrategy } = require('../dist/auth/strategies/jwt.strategy');
+const { QueueRuntimeService } = require('../dist/queue/queue-runtime.service');
 const {
   TenantContextService,
 } = require('../dist/tenant/tenant-context.service');
@@ -133,6 +134,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
   try {
     application = await NestFactory.create(AuthTestModule, { logger: false });
     const prisma = application.get(PrismaService);
+    const queueRuntime = application.get(QueueRuntimeService);
     prisma.membership.findFirst = async ({ where }) =>
       where.userId === 'usr_test' && where.tenantId === 'ten_test'
         ? { tenantId: 'ten_test', userId: 'usr_test', role: 'OWNER' }
@@ -181,6 +183,123 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
     );
 
     const authService = application.get(AuthService);
+    let registeredUser;
+    let registeredPasswordHash;
+    queueRuntime.incrementFixedWindow = async () => 1;
+    prisma.$queryRaw = async () => [];
+    prisma.user.create = async ({ data }) => {
+      registeredPasswordHash = data.passwordHash;
+      registeredUser = {
+        id: data.id,
+        email: data.email,
+        displayName: null,
+        createdAt: new Date('2026-08-28T08:00:00.000Z'),
+        updatedAt: new Date('2026-08-28T08:00:00.000Z'),
+      };
+      return registeredUser;
+    };
+
+    const registrationPassword = 'correct horse battery staple';
+    const registrationResponse = await fetch(`${baseUrl}/auth/register`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: ' Public.User@Example.COM ',
+        password: registrationPassword,
+      }),
+    });
+    assert.equal(registrationResponse.status, 201);
+    const registrationBody = await registrationResponse.json();
+    assert.equal(registrationBody.user.email, 'public.user@example.com');
+    assert.match(
+      registeredPasswordHash,
+      /^\$argon2id\$v=19\$m=19456,p=1,t=2\$/
+    );
+    assert.doesNotMatch(registeredPasswordHash, /correct horse/);
+    assert.doesNotMatch(
+      JSON.stringify(registrationBody.user),
+      /password|hash/i
+    );
+    const registrationPayload = await authService.verifyAccessToken(
+      registrationBody.accessToken
+    );
+    assert.equal(registrationPayload.sub, registeredUser.id);
+    assert.equal(registrationPayload.tenantId, undefined);
+    assert.equal(registrationPayload.passwordHash, undefined);
+
+    prisma.$queryRaw = async () => [
+      { ...registeredUser, passwordHash: registeredPasswordHash },
+    ];
+    const loginResponse = await fetch(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'PUBLIC.USER@example.com',
+        password: registrationPassword,
+      }),
+    });
+    assert.equal(loginResponse.status, 200);
+    const loginBody = await loginResponse.json();
+    assert.equal(
+      (await authService.verifyAccessToken(loginBody.accessToken)).sub,
+      registeredUser.id
+    );
+    assert.doesNotMatch(JSON.stringify(loginBody.user), /password|hash/i);
+
+    const wrongPasswordResponse = await fetch(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: registeredUser.email,
+        password: 'incorrect password value',
+      }),
+    });
+    prisma.$queryRaw = async () => [];
+    const unknownEmailResponse = await fetch(`${baseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        email: 'unknown@example.com',
+        password: 'incorrect password value',
+      }),
+    });
+    assert.equal(wrongPasswordResponse.status, 401);
+    assert.equal(unknownEmailResponse.status, 401);
+    const wrongPasswordBody = await wrongPasswordResponse.json();
+    const unknownEmailBody = await unknownEmailResponse.json();
+    delete wrongPasswordBody.requestId;
+    delete unknownEmailBody.requestId;
+    assert.deepEqual(unknownEmailBody, wrongPasswordBody);
+
+    prisma.user.findUnique = async ({ where }) =>
+      where.id === registeredUser.id ? registeredUser : null;
+    const profileResponse = await fetch(`${baseUrl}/users/me`, {
+      headers: { Authorization: `Bearer ${registrationBody.accessToken}` },
+    });
+    assert.equal(profileResponse.status, 200);
+    assert.equal((await profileResponse.json()).id, registeredUser.id);
+
+    prisma.tenant.create = async ({ data }) => ({
+      id: data.id,
+      name: data.name,
+      plan: 'FREE',
+      createdAt: new Date('2026-08-28T08:00:00.000Z'),
+      updatedAt: new Date('2026-08-28T08:00:00.000Z'),
+      memberships: [data.memberships.create],
+    });
+    const tenantResponse = await fetch(`${baseUrl}/tenants`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${registrationBody.accessToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ name: 'First Tenant' }),
+    });
+    assert.equal(tenantResponse.status, 201);
+    const tenantBody = await tenantResponse.json();
+    assert.equal(tenantBody.memberships[0].userId, registeredUser.id);
+    assert.equal(tenantBody.memberships[0].role, 'OWNER');
+
     const noMembershipToken = await authService.signAccessToken({
       sub: 'usr_missing',
       tenantId: 'ten_test',

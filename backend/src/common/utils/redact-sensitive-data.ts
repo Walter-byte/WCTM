@@ -10,6 +10,7 @@ const SENSITIVE_KEYS = new Set([
   'encryptionkey',
   'key',
   'password',
+  'passwordhash',
   'privatekey',
   'redisurl',
   'secret',
@@ -18,7 +19,7 @@ const SENSITIVE_KEYS = new Set([
 ]);
 
 const SENSITIVE_TEXT_PATTERN =
-  /((?:api[_ -]?key|authorization|credentials?|encryption[_ -]?key|password|secret|token)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi;
+  /((?:api[_ -]?key|authorization|credentials?|encryption[_ -]?key|password[_ -]?hash|password|secret|token)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi;
 const BEARER_TOKEN_PATTERN = /\b(Bearer)\s+[^\s,;]+/gi;
 
 function isSensitiveKey(key: string): boolean {
@@ -29,6 +30,7 @@ function isSensitiveKey(key: string): boolean {
     normalized.endsWith('credential') ||
     normalized.endsWith('credentials') ||
     normalized.endsWith('key') ||
+    normalized.endsWith('passwordhash') ||
     normalized.endsWith('password') ||
     normalized.endsWith('secret') ||
     normalized.endsWith('token')

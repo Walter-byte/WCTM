@@ -47,7 +47,8 @@ describe('GlobalExceptionFilter', () => {
       filter.catch(
         new BadRequestException({
           error: 'Bad Request',
-          message: 'Invalid token=raw-token password=raw-password',
+          message:
+            'Invalid token=raw-token password=raw-password password_hash=raw-hash',
           credentials: 'raw-credentials',
         }),
         hostFor(response)
@@ -58,13 +59,14 @@ describe('GlobalExceptionFilter', () => {
     expect(response.json).toHaveBeenCalledWith({
       statusCode: HttpStatus.BAD_REQUEST,
       error: 'Bad Request',
-      message: 'Invalid token=**** password=****',
+      message: 'Invalid token=**** password=**** password_hash=****',
       requestId: 'req-http-error',
     });
     expect(JSON.stringify(response.json.mock.calls)).not.toContain('raw-token');
     expect(JSON.stringify(response.json.mock.calls)).not.toContain(
       'raw-password'
     );
+    expect(JSON.stringify(response.json.mock.calls)).not.toContain('raw-hash');
     expect(JSON.stringify(response.json.mock.calls)).not.toContain(
       'raw-credentials'
     );

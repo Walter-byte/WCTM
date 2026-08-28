@@ -97,6 +97,7 @@ model Tenant {
 model User {
   id                 String              @id @map("id") @db.VarChar(64)
   email              String              @unique @map("email") @db.VarChar(320)
+  passwordHash       String?             @map("password_hash") @db.Text
   displayName        String?             @map("display_name") @db.VarChar(255)
   createdAt          DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
