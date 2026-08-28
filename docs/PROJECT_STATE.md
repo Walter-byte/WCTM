@@ -17,10 +17,10 @@ complete to the extent recorded in
 
 Current Task
 
-M15 implementation and automated gates are complete. Isolated PostgreSQL
-migration apply/status verification is blocked locally because the Docker
-daemon and a host PostgreSQL server are unavailable. Do not begin Store
-onboarding or a later milestone without approval.
+M15 implementation and automated gates are complete. The Alpine Argon2 native
+build blocker is fixed and a clean backend image build is verified. Rebuild the
+backend on the VPS, then resume the isolated PostgreSQL migration apply/status
+gate. Do not begin Store onboarding or a later milestone without approval.
 
 ---
 
@@ -372,8 +372,11 @@ M15 adds typed independent registration/login limit configuration and the
 approved `argon2` runtime dependency. Focused M15 tests plus the full M3–M14
 regression suite pass: 243 backend tests and 32 Telegram bot tests. Prisma
 validate/generate, build, typecheck, formatting, and migration-structure checks
-pass. Live migration apply/status remains unverified locally because no
-PostgreSQL runtime is available.
+pass. The backend Dockerfile installs `python3`, `make`, and `g++` as a temporary
+Alpine virtual package in both dependency-install stages, removes the package
+after `npm ci`, and retains a working Argon2id addon without Python or compiler
+tools in the runtime image. A clean no-cache image build and runtime Argon2id
+verification pass. VPS migration apply/status remains pending.
 
 ---
 
@@ -444,11 +447,11 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-M15 code and automated verification have no implementation blocker. The local
-Docker daemon and a host PostgreSQL server are unavailable, so normalized-email
-collision audit plus full migration apply/status verification must run against
-isolated PostgreSQL before deployment. The existing bounded M14 manual Telegram
-UX pass and M13 deployed synthetic-notification check also remain separate.
+M15 code, automated verification, and clean backend image build have no
+implementation blocker. The VPS must rebuild the backend from the Docker fix,
+then run the normalized-email collision audit plus full migration apply/status
+verification. The existing bounded M14 manual Telegram UX pass and M13 deployed
+synthetic-notification check also remain separate.
 
 ---
 

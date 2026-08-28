@@ -6,7 +6,9 @@ COPY package.json package-lock.json ./
 COPY backend/package.json ./backend/package.json
 COPY telegram-bot/package.json ./telegram-bot/package.json
 
-RUN npm ci
+RUN apk add --no-cache --virtual .native-build-deps python3 make g++ \
+  && npm ci \
+  && apk del .native-build-deps
 
 FROM dependencies AS builder
 
@@ -24,7 +26,9 @@ COPY package.json package-lock.json /app/
 COPY backend/package.json /app/backend/package.json
 COPY telegram-bot/package.json /app/telegram-bot/package.json
 
-RUN npm ci --workspace=@wc-telegram/backend \
+RUN apk add --no-cache --virtual .native-build-deps python3 make g++ \
+  && npm ci --workspace=@wc-telegram/backend \
+  && apk del .native-build-deps \
   && npm cache clean --force
 
 COPY --from=builder --chown=node:node /app/backend/dist ./dist

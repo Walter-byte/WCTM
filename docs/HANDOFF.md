@@ -700,9 +700,12 @@ Bot transport:
   settings.
 - Focused M15 tests and the complete regressions pass: 243 backend and 32 bot
   tests, plus Prisma validate/generate, build, typecheck, lint, format, and diff
-  gates. The Docker daemon and host PostgreSQL are unavailable locally, so the
-  migration collision audit/apply/status check remains required before
-  deployment.
+  gates.
+- The backend Dockerfile installs `python3`, `make`, and `g++` as a temporary
+  Alpine virtual package in both `npm ci` stages, then removes them. A clean
+  no-cache backend image build succeeds, the runtime image executes Argon2id,
+  and Python/compiler tools are absent. Rebuild on the VPS before resuming the
+  migration collision audit/apply/status gate.
 
 ---
 
@@ -719,20 +722,20 @@ Current implementation branch: `feat/m15-public-account-auth`.
 
 ## 6. Current Blockers
 
-No M15 code blocker remains. Before deployment, use isolated PostgreSQL to run
-the normalized-email collision audit and apply/status verification for the full
-migration chain; the local Docker daemon and host PostgreSQL are unavailable.
-The bounded M14 manual Telegram UX pass and deployed M13 synthetic-notification
-check remain separate.
+No M15 code or Docker build blocker remains. Rebuild the backend on the VPS,
+then use isolated PostgreSQL to run the normalized-email collision audit and
+apply/status verification for the full migration chain. The bounded M14 manual
+Telegram UX pass and deployed M13 synthetic-notification check remain separate.
 
 ---
 
 ## 7. Current Task
 
 M15 implementation and automated gates are complete on
-`feat/m15-public-account-auth`. Isolated PostgreSQL migration verification is
-still required. Do not begin Store onboarding or any later milestone without A
-approval.
+`feat/m15-public-account-auth`; the Argon2 Alpine image-build blocker is fixed
+and clean-build verified. VPS rebuild and isolated PostgreSQL migration
+verification are still required. Do not begin Store onboarding or any later
+milestone without A approval.
 
 ---
 
