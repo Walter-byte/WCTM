@@ -1,4 +1,4 @@
-import { createBot } from './bot';
+import { BOT_COMMANDS, createBot } from './bot';
 import { loadBotConfiguration } from './config';
 import { InternalBackendClient } from './internal-backend.client';
 import { InternalDeliveryServer } from './internal-delivery.server';
@@ -37,6 +37,7 @@ async function main(): Promise<void> {
   await deliveryServer.start();
 
   try {
+    await configureCommandMenu(bot);
     const polling = startPollingWithRetry(bot);
     const outcome = await Promise.race([
       waitForShutdown().then((signal) => ({ signal })),
@@ -60,6 +61,23 @@ async function main(): Promise<void> {
     );
   } finally {
     await deliveryServer.close();
+  }
+}
+
+async function configureCommandMenu(
+  bot: ReturnType<typeof createBot>
+): Promise<void> {
+  try {
+    await bot.api.setMyCommands([...BOT_COMMANDS]);
+  } catch (error: unknown) {
+    process.stderr.write(
+      `${JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'warn',
+        event: 'telegram_command_menu_configuration_failed',
+        errorName: error instanceof Error ? error.name : 'UnknownError',
+      })}\n`
+    );
   }
 }
 

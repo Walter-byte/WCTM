@@ -8,22 +8,45 @@ import type {
   OrderStatusUpdateResult,
   OrderSummary,
   OrderTransitionsResult,
+  TelegramAuthorizationStatus,
+  TelegramIdentity,
 } from './internal-backend.client';
 import { UpdateDeduplicator } from './update-deduplicator';
 
 const PRIVATE_ONLY_MESSAGE =
   'This bot can only be used in a private Telegram chat.';
 const TRANSIENT_FAILURE_MESSAGE =
-  'The service is temporarily unavailable. Please try again.';
+  'The service is temporarily unavailable. Return Home or try again shortly.';
 const INVALID_TOKEN_MESSAGE =
   'This link token is invalid or expired. Request a new token and try again.';
-const EXPIRED_LIST_MESSAGE = 'This order list expired. Send /orders again.';
+const EXPIRED_LIST_MESSAGE =
+  'This order view expired or the active context changed. Refresh Recent Orders to continue.';
 const UNAUTHORIZED_ORDERS_MESSAGE =
-  'This chat is not authorized to view orders.';
+  'This chat is not authorized to view orders. Check Status for recovery details.';
 const NO_ACTIVE_STORE_MESSAGE =
-  'No single active store is available for this chat.';
+  'No single active store is available for this chat. Check Status before trying again.';
 const MALFORMED_RESPONSE_MESSAGE =
-  'The service returned an unexpected response. Please try again.';
+  'The service returned an unexpected response. Return Home or try again shortly.';
+
+const NAVIGATION_CALLBACKS = {
+  home: 'nav:home',
+  orders: 'nav:orders',
+  status: 'nav:status',
+  help: 'nav:help',
+} as const;
+
+export const BOT_COMMANDS = [
+  { command: 'start', description: 'Open Home or link your account' },
+  { command: 'orders', description: 'Open recent orders' },
+  { command: 'status', description: 'Check account and store access' },
+  { command: 'help', description: 'Show available commands' },
+  { command: 'unlink', description: 'Unlink this Telegram account' },
+] as const;
+
+interface RenderedView {
+  text: string;
+  keyboard: InlineKeyboard;
+}
 
 export interface BotAdapterDependencies {
   backend: InternalBackendClient;
@@ -73,20 +96,22 @@ export function createBot(
           identity,
           tokenArgument
         );
-
-        await context.reply(
+        const rendered =
           result.status === 'invalid_or_expired'
-            ? INVALID_TOKEN_MESSAGE
-            : renderStatus(result)
-        );
+            ? renderRecoveryView(INVALID_TOKEN_MESSAGE, 'help')
+            : renderLanding(result, 'Account linked successfully.');
+
+        await replyView(context, rendered);
         return;
       }
 
-      await context.reply(
-        renderStatus(await dependencies.backend.status(identity))
+      await replyView(
+        context,
+        renderLanding(await dependencies.backend.status(identity))
       );
-    } catch {
-      await context.reply(TRANSIENT_FAILURE_MESSAGE);
+    } catch (error: unknown) {
+      logTransportFailure(log, identity.updateId, error);
+      await replyView(context, renderTransportFailure(error, 'status'));
     }
   });
 
@@ -98,12 +123,22 @@ export function createBot(
     }
 
     try {
-      await context.reply(
-        renderStatus(await dependencies.backend.status(identity))
+      await replyView(
+        context,
+        renderStatusView(await dependencies.backend.status(identity))
       );
-    } catch {
-      await context.reply(TRANSIENT_FAILURE_MESSAGE);
+    } catch (error: unknown) {
+      logTransportFailure(log, identity.updateId, error);
+      await replyView(context, renderTransportFailure(error, 'status'));
     }
+  });
+
+  bot.command('help', async (context) => {
+    if (!privateIdentity(context)) {
+      return;
+    }
+
+    await replyView(context, renderHelp());
   });
 
   bot.command('unlink', async (context) => {
@@ -111,15 +146,13 @@ export function createBot(
       return;
     }
 
-    await context.reply(
-      'Unlink this Telegram account? You will need a new token to link again.',
-      {
-        reply_markup: new InlineKeyboard().text(
-          'Confirm unlink',
-          'unlink:confirm'
-        ),
-      }
-    );
+    await replyView(context, {
+      text: 'Unlink this Telegram account? You will need a new token to link again.',
+      keyboard: new InlineKeyboard()
+        .text('Confirm Unlink', 'unlink:confirm')
+        .row()
+        .text('Home', NAVIGATION_CALLBACKS.home),
+    });
   });
 
   bot.command('orders', async (context) => {
@@ -131,14 +164,10 @@ export function createBot(
 
     try {
       const result = await dependencies.backend.listOrders(identity);
-      const rendered = renderOrderList(result);
-
-      await context.reply(rendered.text, {
-        reply_markup: rendered.keyboard,
-      });
+      await replyView(context, renderOrderList(result));
     } catch (error: unknown) {
       logTransportFailure(log, identity.updateId, error);
-      await context.reply(transportFailureMessage(error));
+      await replyView(context, renderTransportFailure(error, 'orders'));
     }
   });
 
@@ -155,15 +184,53 @@ export function createBot(
 
       await context.answerCallbackQuery();
       await context.editMessageReplyMarkup();
-      await context.reply(
+      await replyView(
+        context,
         result.status === 'unlinked'
-          ? 'Your Telegram account has been unlinked.'
-          : 'This chat is not authorized.'
+          ? renderRecoveryView(
+              'Your Telegram account has been unlinked.',
+              'help'
+            )
+          : renderRecoveryView('This chat is not authorized.', 'status')
       );
-    } catch {
-      await context.answerCallbackQuery();
-      await context.reply(TRANSIENT_FAILURE_MESSAGE);
+    } catch (error: unknown) {
+      logTransportFailure(log, identity.updateId, error);
+      await safeAnswerCallback(context);
+      await replyView(context, renderTransportFailure(error, 'status'));
     }
+  });
+
+  bot.callbackQuery(NAVIGATION_CALLBACKS.home, async (context) => {
+    await handleViewCallback(
+      context,
+      async (identity) =>
+        renderLanding(await dependencies.backend.status(identity)),
+      log
+    );
+  });
+
+  bot.callbackQuery(NAVIGATION_CALLBACKS.orders, async (context) => {
+    await handleViewCallback(
+      context,
+      async (identity) =>
+        renderOrderList(await dependencies.backend.listOrders(identity)),
+      log,
+      'orders'
+    );
+  });
+
+  bot.callbackQuery(NAVIGATION_CALLBACKS.status, async (context) => {
+    await handleViewCallback(
+      context,
+      async (identity) =>
+        renderStatusView(await dependencies.backend.status(identity)),
+      log,
+      'status'
+    );
+  });
+
+  bot.callbackQuery(NAVIGATION_CALLBACKS.help, async (context) => {
+    await handleViewCallback(context, async () => renderHelp(), log);
   });
 
   bot.callbackQuery(
@@ -188,7 +255,8 @@ export function createBot(
       } catch (error: unknown) {
         logTransportFailure(log, identity.updateId, error);
         await safeAnswerCallback(context);
-        await context.reply(transportFailureMessage(error));
+        const rendered = renderTransportFailure(error, 'orders');
+        await editOrReply(context, rendered.text, rendered.keyboard);
       }
     }
   );
@@ -215,7 +283,8 @@ export function createBot(
       } catch (error: unknown) {
         logTransportFailure(log, identity.updateId, error);
         await safeAnswerCallback(context);
-        await context.reply(transportFailureMessage(error));
+        const rendered = renderTransportFailure(error, 'orders');
+        await editOrReply(context, rendered.text, rendered.keyboard);
       }
     }
   );
@@ -243,7 +312,8 @@ export function createBot(
       } catch (error: unknown) {
         logTransportFailure(log, identity.updateId, error);
         await safeAnswerCallback(context);
-        await context.reply(transportFailureMessage(error));
+        const rendered = renderTransportFailure(error, 'orders');
+        await editOrReply(context, rendered.text, rendered.keyboard);
       }
     }
   );
@@ -275,7 +345,8 @@ export function createBot(
       } catch (error: unknown) {
         logTransportFailure(log, identity.updateId, error);
         await safeAnswerCallback(context);
-        await context.reply(transportFailureMessage(error));
+        const rendered = renderTransportFailure(error, 'orders');
+        await editOrReply(context, rendered.text, rendered.keyboard);
       }
     }
   );
@@ -299,6 +370,108 @@ function privateIdentity(context: Context):
     telegramChatId: context.chat.id.toString(),
     updateId: context.update.update_id.toString(),
   };
+}
+
+function renderLanding(
+  status: TelegramAuthorizationStatus,
+  notice?: string
+): RenderedView {
+  if (!isReadyStatus(status)) {
+    const statusView = renderStatusView(status);
+
+    return {
+      text: notice ? `${notice}\n\n${statusView.text}` : statusView.text,
+      keyboard: statusView.keyboard,
+    };
+  }
+
+  return {
+    text: [notice, 'WooCommerce Management', '', 'Choose an action.']
+      .filter((line): line is string => line !== undefined)
+      .join('\n'),
+    keyboard: homeKeyboard(),
+  };
+}
+
+function renderStatusView(status: TelegramAuthorizationStatus): RenderedView {
+  const keyboard = new InlineKeyboard();
+
+  if (isReadyStatus(status)) {
+    keyboard.text('Recent Orders', NAVIGATION_CALLBACKS.orders).row();
+  } else {
+    keyboard.text('Help', NAVIGATION_CALLBACKS.help).row();
+  }
+
+  keyboard.text('Home', NAVIGATION_CALLBACKS.home);
+
+  return {
+    text: ['Account Status', '', renderStatus(status)].join('\n'),
+    keyboard,
+  };
+}
+
+function renderHelp(): RenderedView {
+  return {
+    text: [
+      'Help',
+      '',
+      '/start — Open Home or link with a token',
+      '/orders — Browse recent orders',
+      '/status — Check account and store access',
+      '/help — Show this command list',
+      '/unlink — Unlink this Telegram account',
+      '',
+      'Order details and status actions are available only through the secure buttons shown by the bot.',
+    ].join('\n'),
+    keyboard: new InlineKeyboard()
+      .text('Recent Orders', NAVIGATION_CALLBACKS.orders)
+      .row()
+      .text('Home', NAVIGATION_CALLBACKS.home),
+  };
+}
+
+function renderRecoveryView(
+  text: string,
+  primary: 'orders' | 'status' | 'help'
+): RenderedView {
+  const labels = {
+    orders: 'Refresh Recent Orders',
+    status: 'Check Status',
+    help: 'Help',
+  } as const;
+
+  return {
+    text,
+    keyboard: new InlineKeyboard()
+      .text(labels[primary], NAVIGATION_CALLBACKS[primary])
+      .row()
+      .text('Home', NAVIGATION_CALLBACKS.home),
+  };
+}
+
+function renderTransportFailure(
+  error: unknown,
+  primary: 'orders' | 'status' | 'help' = 'help'
+): RenderedView {
+  return renderRecoveryView(transportFailureMessage(error), primary);
+}
+
+function homeKeyboard(): InlineKeyboard {
+  return new InlineKeyboard()
+    .text('Recent Orders', NAVIGATION_CALLBACKS.orders)
+    .row()
+    .text('Status', NAVIGATION_CALLBACKS.status)
+    .text('Help', NAVIGATION_CALLBACKS.help);
+}
+
+function isReadyStatus(status: TelegramAuthorizationStatus): boolean {
+  return Boolean(
+    status.linked &&
+    status.authorized &&
+    !status.selectionRequired &&
+    status.activeTenantId &&
+    status.activeStoreId
+  );
 }
 
 export function renderStatus(status: {
@@ -332,18 +505,15 @@ export function renderOrderList(result: OrderListResult): {
   keyboard: InlineKeyboard;
 } {
   if (result.state === 'CONTEXT_CHANGED') {
-    return { text: EXPIRED_LIST_MESSAGE, keyboard: new InlineKeyboard() };
+    return renderRecoveryView(EXPIRED_LIST_MESSAGE, 'orders');
   }
 
   if (result.state === 'UNAUTHORIZED') {
-    return {
-      text: UNAUTHORIZED_ORDERS_MESSAGE,
-      keyboard: new InlineKeyboard(),
-    };
+    return renderRecoveryView(UNAUTHORIZED_ORDERS_MESSAGE, 'status');
   }
 
   if (result.state === 'NO_ACTIVE_STORE') {
-    return { text: NO_ACTIVE_STORE_MESSAGE, keyboard: new InlineKeyboard() };
+    return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
   }
 
   const keyboard = new InlineKeyboard();
@@ -360,11 +530,18 @@ export function renderOrderList(result: OrderListResult): {
     keyboard.text('Next', result.nextCursor);
   }
 
+  keyboard.row().text('Home', NAVIGATION_CALLBACKS.home);
+
   const text =
     result.orders.length === 0
-      ? 'No projected orders are available.'
+      ? [
+          'Recent Orders',
+          '',
+          'No recent orders are available yet.',
+          'New orders will appear here after they are received.',
+        ].join('\n')
       : [
-          'Recent orders',
+          'Recent Orders',
           '',
           ...result.orders.map(
             (order) =>
@@ -381,33 +558,28 @@ export function renderOrderDetail(result: OrderDetailResult): {
   text: string;
   keyboard: InlineKeyboard;
 } {
-  const keyboard = new InlineKeyboard();
-
-  if (result.backCursor) {
-    keyboard.text('Back to orders', result.backCursor);
-  }
-
-  if (result.transitionsRef) {
-    keyboard.row().text('Change status', `t:${result.transitionsRef}`);
-  }
-
   if (result.state === 'CONTEXT_CHANGED') {
-    return { text: EXPIRED_LIST_MESSAGE, keyboard: new InlineKeyboard() };
+    return renderRecoveryView(EXPIRED_LIST_MESSAGE, 'orders');
   }
 
   if (result.state === 'UNAUTHORIZED') {
-    return {
-      text: UNAUTHORIZED_ORDERS_MESSAGE,
-      keyboard: new InlineKeyboard(),
-    };
+    return renderRecoveryView(UNAUTHORIZED_ORDERS_MESSAGE, 'status');
   }
 
   if (result.state === 'NO_ACTIVE_STORE') {
-    return { text: NO_ACTIVE_STORE_MESSAGE, keyboard: new InlineKeyboard() };
+    return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
   }
 
+  const keyboard = orderDetailKeyboard(
+    result.backCursor,
+    result.transitionsRef
+  );
+
   if (result.state === 'NOT_FOUND' || !result.order) {
-    return { text: 'This order is no longer available.', keyboard };
+    return {
+      text: 'This order is no longer available. Return to Recent Orders to continue.',
+      keyboard,
+    };
   }
 
   if (result.state === 'DELETED' || result.order.remoteDeleted) {
@@ -433,26 +605,48 @@ export function renderOrderTransitions(
   result: OrderTransitionsResult,
   detailRef: string
 ): { text: string; keyboard: InlineKeyboard } {
-  const keyboard = new InlineKeyboard();
-
   if (result.state !== 'OK' || !result.ref || !result.targets) {
+    if (result.state === 'CONTEXT_CHANGED') {
+      return renderRecoveryView(EXPIRED_LIST_MESSAGE, 'orders');
+    }
+
+    if (result.state === 'UNAUTHORIZED') {
+      return renderRecoveryView(UNAUTHORIZED_ORDERS_MESSAGE, 'status');
+    }
+
+    if (result.state === 'NO_ACTIVE_STORE') {
+      return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
+    }
+
+    if (result.state === 'NOT_FOUND' || result.state === 'DELETED') {
+      return renderRecoveryView(orderWriteStateMessage(result.state), 'orders');
+    }
+
     return {
       text: orderWriteStateMessage(result.state),
-      keyboard: new InlineKeyboard().text('Back to order', detailRef),
+      keyboard: new InlineKeyboard()
+        .text('Back to Order', detailRef)
+        .row()
+        .text('Home', NAVIGATION_CALLBACKS.home),
     };
   }
 
+  const keyboard = new InlineKeyboard();
+
   for (const target of result.targets) {
-    keyboard.text(target, `${result.ref}:${target}`).row();
+    keyboard.text(statusLabel(target), `${result.ref}:${target}`).row();
   }
 
-  keyboard.text('Back to order', detailRef);
+  keyboard
+    .text('Back to Order', detailRef)
+    .row()
+    .text('Home', NAVIGATION_CALLBACKS.home);
 
   return {
     text:
       result.targets.length === 0
-        ? `No supported transitions are available from ${result.currentStatus ?? 'the current status'}.`
-        : `Change status from ${result.currentStatus ?? 'the current status'}:`,
+        ? `No supported status changes are available from ${statusLabel(result.currentStatus ?? 'the current status')}.`
+        : `Change Status\n\nCurrent status: ${statusLabel(result.currentStatus ?? 'the current status')}\nChoose the new status:`,
     keyboard,
   };
 }
@@ -462,17 +656,20 @@ export function renderOrderStatusUpdate(result: OrderStatusUpdateResult): {
   keyboard: InlineKeyboard;
 } {
   if (result.order && result.freshness) {
+    const completed = result.state === 'OK' || result.state === 'NO_OP';
     const rendered = renderOrderDetail({
       state: 'OK',
       order: result.order,
-      ...(result.backCursor ? { backCursor: result.backCursor } : {}),
+      ...(completed && result.backCursor
+        ? { backCursor: result.backCursor }
+        : {}),
       freshness: result.freshness,
     });
 
     return {
       text: `${
         result.state === 'OK'
-          ? 'Status updated.'
+          ? 'Status updated successfully.'
           : result.state === 'NO_OP'
             ? 'The order already has that status.'
             : orderWriteStateMessage(result.state)
@@ -481,13 +678,11 @@ export function renderOrderStatusUpdate(result: OrderStatusUpdateResult): {
     };
   }
 
-  const keyboard = new InlineKeyboard();
-
-  if (result.backCursor) {
-    keyboard.text('Back to orders', result.backCursor);
+  if (result.state === 'UNAUTHORIZED' || result.state === 'NO_ACTIVE_STORE') {
+    return renderRecoveryView(orderWriteStateMessage(result.state), 'status');
   }
 
-  return { text: orderWriteStateMessage(result.state), keyboard };
+  return renderRecoveryView(orderWriteStateMessage(result.state), 'orders');
 }
 
 function orderWriteStateMessage(
@@ -503,13 +698,13 @@ function orderWriteStateMessage(
     case 'CONTEXT_CHANGED':
       return EXPIRED_LIST_MESSAGE;
     case 'EXPIRED_REF':
-      return 'This status action expired. Open the order again to retry.';
+      return 'This status action expired. No change was made. Refresh Recent Orders and open the order again.';
     case 'INVALID_TARGET':
-      return 'That status is not available for this order.';
+      return 'That status is no longer available for this order. No change was made.';
     case 'RETRYABLE':
-      return 'WooCommerce could not confirm the change. Please check the order and try again.';
+      return 'WooCommerce could not confirm the change. Refresh Recent Orders and verify the current status before trying again.';
     case 'FAILED':
-      return 'WooCommerce did not accept the status change.';
+      return 'WooCommerce did not accept the status change. Refresh Recent Orders to continue.';
     case 'DELETED':
       return 'This order was deleted in WooCommerce.';
     case 'NOT_FOUND':
@@ -517,6 +712,63 @@ function orderWriteStateMessage(
     default:
       return 'No status change is available.';
   }
+}
+
+function orderDetailKeyboard(
+  backCursor?: string,
+  transitionsRef?: string
+): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+
+  if (backCursor) {
+    keyboard.text('Back to Orders', backCursor);
+  } else {
+    keyboard.text('Recent Orders', NAVIGATION_CALLBACKS.orders);
+  }
+
+  if (transitionsRef) {
+    keyboard.row().text('Change Status', `t:${transitionsRef}`);
+  }
+
+  keyboard.row().text('Home', NAVIGATION_CALLBACKS.home);
+  return keyboard;
+}
+
+function statusLabel(status: string): string {
+  const words = status.replace(/-/g, ' ');
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
+}
+
+async function handleViewCallback(
+  context: Context,
+  render: (identity: TelegramIdentity) => Promise<RenderedView>,
+  log: (record: Readonly<Record<string, unknown>>) => void,
+  recovery: 'orders' | 'status' | 'help' = 'help'
+): Promise<void> {
+  const identity = privateIdentity(context);
+
+  if (!identity) {
+    await safeAnswerCallback(context);
+    return;
+  }
+
+  try {
+    const rendered = await render(identity);
+    await safeAnswerCallback(context);
+    await editOrReply(context, rendered.text, rendered.keyboard);
+  } catch (error: unknown) {
+    logTransportFailure(log, identity.updateId, error);
+    await safeAnswerCallback(context);
+    const rendered = renderTransportFailure(error, recovery);
+    await editOrReply(context, rendered.text, rendered.keyboard);
+  }
+}
+
+async function replyView(
+  context: Context,
+  rendered: RenderedView
+): Promise<void> {
+  await context.reply(rendered.text, { reply_markup: rendered.keyboard });
 }
 
 async function editOrReply(
@@ -535,7 +787,7 @@ async function safeAnswerCallback(context: Context): Promise<void> {
   try {
     await context.answerCallbackQuery();
   } catch {
-    // Callback acknowledgement failure is harmless for read-only actions.
+    // Acknowledgement failure does not change the backend operation outcome.
   }
 }
 

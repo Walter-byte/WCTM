@@ -6,17 +6,19 @@ Version: 1.0
 
 Current Phase
 
-Phase 4 — Telegram Platform remains In Progress. M13 Order Event Notifications
-is implemented on `feat/m13-order-notifications` and awaits A/B review and
-merge. M12 real-store validation remains complete to the extent recorded in
+Phase 4 — Telegram Platform remains In Progress. M14 Practical Telegram
+Management UX is implemented on `feat/m14-telegram-management-ux` and awaits
+A/B review plus bounded manual Telegram validation. M13 is merged to `main`;
+its deployment validation remains separate. M12 real-store validation remains
+complete to the extent recorded in
 `docs/validation/M12_REAL_STORE_VALIDATION.md`.
 
 ---
 
 Current Task
 
-M13 implementation is complete and awaiting A/B review. Do not begin M14 or
-another milestone without approval.
+M14 implementation is complete and awaiting A/B review and manual UX
+validation. Do not begin a later milestone without approval.
 
 ---
 
@@ -329,6 +331,23 @@ or status-policy access. `BOT_INTERNAL_URL`, `BOT_INTERNAL_PORT`, and
 `BOT_DELIVERY_TIMEOUT_MS` configure the private path; it has no Caddy route or
 published host port. D-023 is Accepted.
 
+M14 adds one stateless Telegram navigation and rendering layer over the existing
+M10–M13 contracts. Home connects Recent Orders, Status, and Help; `/start`,
+`/status`, `/orders`, `/help`, and the Telegram command menu expose existing
+functionality consistently. Order list/detail Back actions still use M11's
+signed, expiring references, while fixed Home/Recent Orders/Status/Help
+callbacks re-enter the existing backend authorization endpoints and carry no
+tenant, Store, order, role, or mutation state.
+
+M13 notification detail and status callbacks remain native M11/M12 references.
+Their presentation now continues through consistent detail, status-selection,
+status-result, Back, and Home screens. Empty, expired, context-changed,
+unauthorized, no-active-Store, malformed-response, transport-failure, deleted,
+not-found, and status-write outcome screens provide explicit safe recovery.
+Message edits retain the existing reply fallback. M14 adds no schema,
+persistence, backend contract, business command, authorization, callback
+security, order, delivery, or mutation behavior.
+
 ---
 
 Infrastructure
@@ -366,7 +385,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-feat/m13-order-notifications
+feat/m14-telegram-management-ux
 
 ---
 
@@ -398,23 +417,24 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No M13 implementation blocker remains. The local Docker daemon was unavailable,
-so the committed migration still requires one apply/status check against an
-isolated PostgreSQL database before deployment. Live Telegram delivery also
-requires one synthetic `order.created` validation after deployment.
+No M14 implementation blocker remains. One bounded manual Telegram UX pass is
+required after review. Separately, the M13 migration still requires one
+apply/status check against isolated PostgreSQL before deployment, and live
+delivery requires one synthetic `order.created` validation after deployment.
 
 ---
 
 Next Milestone
 
-No M14 or other product milestone is assigned. Await M13 A/B review and manual
-validation; do not continue without approval.
+No later product milestone is assigned. Await M14 A/B review and bounded manual
+Telegram UX validation; do not continue without approval.
 
 ---
 
 Last Completed
 
-M13 Order Event Notifications implementation and automated regression gates.
+M14 Practical Telegram Management UX implementation and automated regression
+gates.
 
 ---
 

@@ -114,7 +114,8 @@ Status:
 
 Current Milestone:
 
-M13 Order Event Notifications (implemented; awaiting review and validation)
+M14 Practical Telegram Management UX (implemented; awaiting review and manual
+validation)
 
 Deliverables
 
@@ -181,18 +182,31 @@ M13 scope:
 - Delivered no-op, terminal no-retry, ambiguous no-blind-resend, and existing
   M5 bounded retries only for definitive transient no-delivery outcomes
 
-M12 and M12-V are complete and merged to `main`. M13 is implemented on
-`feat/m13-order-notifications` and D-023 is Accepted. Phase 4 remains In
-Progress pending A/B review and manual M13 validation. No M14 or other product
-milestone is assigned.
+M14 scope:
+
+- Stateless Home, Recent Orders, Status, Help, and consistent Back navigation
+  across the existing M10–M13 Telegram flows
+- `/start`, `/status`, `/orders`, `/help`, and Telegram command-menu cleanup for
+  existing functionality only
+- Clear empty, expired, stale/context-changed, unauthorized, no-active-Store,
+  transport-failure, and status-result recovery presentation
+- Native M13 notification references continue through unchanged M11 detail and
+  M12 status flows, with edit-to-reply fallback preserved
+- No backend contract, authorization, callback-security, persistence, schema,
+  order, notification-delivery, or status-write behavior change
+
+M12, M12-V, and M13 are complete and merged to `main`; D-023 is Accepted. M14
+is implemented on `feat/m14-telegram-management-ux` with automated gates
+passing and awaits A/B review plus one bounded manual Telegram UX validation.
+Phase 4 remains In Progress. No later product milestone is assigned.
 
 Next operator action:
 
-- Review and merge M13
-- Apply migration `20260820090000_order_event_notifications`
-- Configure the private bot transport variables from `.env.example`
-- Create one synthetic WooCommerce order and confirm one proactive Telegram
-  notification plus its existing View Order and Change Status entries
+- Review M14 and run the bounded manual Telegram navigation checklist
+- Retain the pending M13 deployment checks: apply migration
+  `20260820090000_order_event_notifications`, configure the private bot
+  transport, and validate one synthetic notification delivery without repeated
+  real-store testing
 
 Exit Criteria
 

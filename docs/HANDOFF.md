@@ -2,7 +2,7 @@
 
 **Generated:** 2026-07-19
 
-**Updated:** 2026-08-19
+**Updated:** 2026-08-28
 
 **Reason:** Transitioning implementation agent from GapCode to Codex GPT
 
@@ -621,7 +621,7 @@ Bot transport:
 - M12-V is merged to `main`. Phase 4 remains In Progress pending A/B closure
   review, not a new implementation milestone.
 
-#### M13 — Order Event Notifications (implemented; awaiting review)
+#### M13 — Order Event Notifications (complete and merged)
 
 - M13 schedules only after a successful M9 `order.created` projection and
   never from an unverified webhook payload.
@@ -650,6 +650,32 @@ Bot transport:
   Docker daemon was unavailable, so an isolated PostgreSQL migration apply and
   one deployed synthetic-order delivery remain manual validation steps.
 
+#### M14 — Practical Telegram Management UX (implemented; awaiting review)
+
+- One stateless Home surface connects Recent Orders, Status, and Help. Fixed
+  navigation callbacks carry no protected or business state and re-enter the
+  existing backend authorization endpoints before protected data is rendered.
+- `/start`, `/status`, `/orders`, `/help`, and the Telegram command menu now
+  present only the functionality already implemented by M10–M13.
+- M11 signed and expiring list/detail references remain the sole order
+  navigation state. Existing Back references are preserved from M13
+  notifications through M11 detail and M12 status actions.
+- M12 remains the sole status-capability and mutation authority. The bot only
+  humanizes backend-provided target labels and renders success, no-op, expired,
+  invalid-target, retryable, failed, deleted, and not-found outcomes with safe
+  recovery actions.
+- Empty, expired/context-changed, unauthorized, no-active-Store, malformed, and
+  transport-failure states now provide coherent Status, Recent Orders, Help,
+  and Home recovery as applicable.
+- Consistent labels and keyboards retain edit-first behavior with one reply
+  fallback when Telegram cannot edit the source message.
+- Eight focused M14 tests and the unchanged M10–M13 bot tests pass (32 bot tests
+  total). The full backend suite remains at 228 passing tests. Build, typecheck,
+  lint, format, and diff checks pass.
+- M14 adds no schema, persistence, backend contract, tenant/Store policy,
+  business command, order behavior, notification behavior, status-write
+  behavior, or dependency.
+
 ---
 
 ## 5. Current Repository Structure
@@ -659,22 +685,24 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current implementation branch: `feat/m13-order-notifications`.
+Current implementation branch: `feat/m14-telegram-management-ux`.
 
 ---
 
 ## 6. Current Blockers
 
-No M13 implementation blocker remains. Before deployment, apply and verify the
-new migration against isolated PostgreSQL. After deployment, validate one
-synthetic `order.created` notification and both existing action entries.
+No M14 implementation blocker remains. One bounded manual Telegram UX pass is
+required after review. Separately, before deployment, apply and verify the M13
+migration against isolated PostgreSQL; after deployment, validate one synthetic
+`order.created` notification and both existing action entries.
 
 ---
 
 ## 7. Current Task
 
-M13 implementation is complete on `feat/m13-order-notifications` and awaits A/B
-review and manual validation. No M14 or other product milestone is assigned.
+M14 implementation is complete on `feat/m14-telegram-management-ux` and awaits
+A/B review plus one bounded manual Telegram UX validation. No later product
+milestone is assigned.
 
 ---
 
