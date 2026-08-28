@@ -372,6 +372,14 @@ feat/m13-order-notifications
 
 Known Issues
 
+DATE-001 — WooCommerce admin mixed/invalid calendar display: some orders show
+Gregorian dates, some show Persian/Jalali dates, and one synthetic order showed
+the impossible date `دی 17, 2647`. Current evidence shows valid WCTM PostgreSQL
+Order, webhook, sync, and M13 notification timestamps, with no demonstrated
+impact on M13 or current WCTM processing. This is not an M13 blocker; investigate
+it before wider MVP pilot usage because date-dependent sorting or reporting may
+eventually be affected.
+
 AuditLog structural immutability is not yet enforced; the schema includes an
 updatable timestamp. A future approved decision must define enforcement.
 
@@ -418,4 +426,4 @@ Excellent
 
 Last Updated
 
-2026-08-20
+2026-08-28
