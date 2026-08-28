@@ -324,7 +324,7 @@ satisfied. No next milestone is assigned.
 - No reset, force, overwrite, data deletion, public onboarding, connector UI,
   billing, or Phase 5 work
 
-### M13 — Order Event Notifications ✅ Implemented / Awaiting Review
+### M13 — Order Event Notifications ✅ Complete / Merged
 
 - Successfully projected `order.created` events discover recipients through
   the existing M10/M11 exact-context authorization behavior
@@ -340,10 +340,26 @@ satisfied. No next milestone is assigned.
   one private `BOT_INTERNAL_API_KEY`-authenticated prepared-message operation
 - Migration `20260820090000_order_event_notifications`; D-023 Accepted
 
-Phase 4 remains In Progress. M13 is implemented on
-`feat/m13-order-notifications` and awaits A/B review, isolated PostgreSQL
-migration verification, and one deployed synthetic-order delivery validation.
-No M14 or other product milestone is assigned.
+### M14 — Practical Telegram Management UX ✅ Implemented / Awaiting Review
+
+- One stateless Home surface connects Recent Orders, Status, and Help without a
+  second navigation or business-state system
+- `/start`, `/status`, `/orders`, `/help`, and the Telegram command menu expose
+  only existing M10–M13 functionality
+- Existing signed list/detail/status references retain Back continuity from
+  M13 notifications through M11 detail and M12 status actions
+- Empty, expired, context-changed, unauthorized, no-active-Store, transport,
+  and status-result screens provide explicit safe recovery actions
+- Labels, keyboards, message editing, and edit-to-reply fallback are consistent
+  across command, notification, list, detail, and status surfaces
+- No schema, persistence, backend contract, authorization, callback-security,
+  order, notification, mutation, or Store-selection behavior changes
+- Focused M14 tests plus M10–M13 regressions and repository quality gates pass
+
+Phase 4 remains In Progress. M14 is implemented on
+`feat/m14-telegram-management-ux` and awaits A/B review plus one bounded manual
+Telegram UX validation. The pending M13 deployment validation remains separate.
+No later product milestone is assigned.
 
 ## Phase 5 — Core Store Management (MVP) ⬜ Planned
 
