@@ -410,11 +410,11 @@ Credential and verification boundaries:
 
 Atomic success consumes the token, stores the plugin credential hash, records
 registration/last-seen time and audit state, and provisions missing M8
-material. Under the M16 extension a fresh Store remains `PENDING`; verified
-connector webhook health later sets healthy timestamps and `ACTIVE`. Auth or
-transient failures preserve all credentials, token state, Store status, and
-health timestamps. Concurrent duplicate finalization commits exactly one
-credential.
+material while promoting the Store from `PENDING` to `ACTIVE`. Under the M16
+extension, verified connector webhook health separately sets healthy timestamps
+without owning that lifecycle transition. Auth or transient failures preserve
+all credentials, token state, Store status, and health timestamps. Concurrent
+duplicate finalization commits exactly one credential.
 
 #### M8 — WooCommerce Webhook Verification & Idempotent Ingestion (complete)
 
@@ -727,15 +727,17 @@ Bot transport:
   `{ pluginCredential, storeId, webhookSecret, webhookEndpointKey }`. The
   webhook fields remain conditional and appear only when M7 provisions missing
   M8 material; existing webhook secrets are never re-exposed.
-- Fresh M7 finalization now leaves a registered Store `PENDING`. The WordPress
-  connector persists only the response-derived Store identity and required
-  connector/webhook material with autoload disabled, creates or updates the
-  four required WooCommerce order webhooks, verifies them locally, and calls
+- Fresh M7 finalization preserves the established transition from `PENDING` to
+  `ACTIVE`. The WordPress connector persists only the response-derived Store
+  identity and required connector/webhook material with autoload disabled,
+  creates or updates the four required WooCommerce order webhooks, verifies
+  them locally, and calls
   `POST /api/plugin/connection-health` with the persistent plugin credential.
 - The backend derives Store identity from the credential, independently reads
   WooCommerce webhook configuration through the existing M6 client, and sets
-  `ACTIVE`, `lastSeenAt`, and `lastHealthyAt` only when all four active topics
-  share the exact HTTPS endpoint-key path. Retry and newly issued M7-token
+  `lastSeenAt` and `lastHealthyAt` only when all four active topics share the
+  exact HTTPS endpoint-key path. It requires an already-`ACTIVE` Store and does
+  not own the lifecycle transition. Retry and newly issued M7-token
   reconnect guidance never renders persisted secrets.
 - M10 link-token issuance now denies direct API requests unless current backend
   state resolves exactly one active Membership and exactly one ACTIVE/healthy
@@ -743,7 +745,7 @@ Bot transport:
   remain unchanged.
 - M16 adds no schema, migration, dependency, onboarding state, dashboard,
   selection/switching, billing, or order behavior. Automated gates pass with
-  257 backend tests and 32 bot tests. Host PHP and Docker are unavailable, so
+  258 backend tests and 32 bot tests. Host PHP and Docker are unavailable, so
   native PHP/WordPress validation remains in the controlled checklist below.
 
 Controlled A/B validation checklist (run once after automated review):
@@ -756,11 +758,12 @@ Controlled A/B validation checklist (run once after automated review):
 3. Submit one disposable WooCommerce REST key pair; verify invalid credentials
    create no Store, then valid credentials create one `PENDING` Store.
 4. Issue one M7 token, paste it into WooCommerce → WCTM Connector, and confirm
-   no secret is displayed after submission and sensitive WordPress options have
-   autoload disabled.
+   the Store transitions from `PENDING` to `ACTIVE`, no secret is displayed
+   after submission, and sensitive WordPress options have autoload disabled.
 5. Confirm exactly four active order webhooks use the public
    `/api/webhooks/woocommerce/<endpointKey>` destination and that backend
-   connection health becomes `ACTIVE`, registered, and healthy only afterward.
+   connection health remains `ACTIVE`, registered, and becomes healthy only
+   afterward.
 6. Before connector completion, verify a direct M10 link-token request returns
    403; afterward issue the link command, redeem it once in a private Telegram
    chat, and open Home → Recent Orders → an Order → unchanged status UX.

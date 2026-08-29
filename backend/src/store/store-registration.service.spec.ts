@@ -108,7 +108,8 @@ function setup(
     async ({ where }: { where: Record<string, unknown> }) =>
       store.deletedAt === null &&
       store.pluginSecretHash !== null &&
-      store.pluginSecretHash === where['pluginSecretHash']
+      store.pluginSecretHash === where['pluginSecretHash'] &&
+      (where['status'] === undefined || store.status === where['status'])
         ? [{ ...store }]
         : []
   );
@@ -148,6 +149,7 @@ function setup(
           store.tenantId === where['tenantId']) &&
         (where['pluginSecretHash'] === undefined ||
           store.pluginSecretHash === where['pluginSecretHash']) &&
+        (where['status'] === undefined || store.status === where['status']) &&
         registrationMatches &&
         webhookMatches &&
         store.deletedAt === null;
@@ -294,7 +296,7 @@ describe('StoreRegistrationService', () => {
     expect(fixture.auditRecord).not.toHaveBeenCalled();
   });
 
-  it('atomically consumes a valid token and returns one plugin credential', async () => {
+  it('atomically consumes a valid token, activates the Store, and returns one plugin credential', async () => {
     const fixture = setup();
 
     const result = await fixture.service.register(fixture.token, '203.0.113.5');
@@ -309,7 +311,7 @@ describe('StoreRegistrationService', () => {
     expect(fixture.store.pluginRegisteredAt).toBeInstanceOf(Date);
     expect(fixture.store.lastSeenAt).toBeInstanceOf(Date);
     expect(fixture.store.lastHealthyAt).toBeNull();
-    expect(fixture.store.status).toBe(StoreStatus.PENDING);
+    expect(fixture.store.status).toBe(StoreStatus.ACTIVE);
     expect(result.webhookSecret).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(result.webhookEndpointKey).toMatch(/^whk_[A-Za-z0-9_-]{43}$/);
     expect(
@@ -445,7 +447,7 @@ describe('StoreRegistrationService', () => {
 
     expect(fulfilled).toHaveLength(1);
     expect(rejected).toHaveLength(1);
-    expect(fixture.store.status).toBe(StoreStatus.PENDING);
+    expect(fixture.store.status).toBe(StoreStatus.ACTIVE);
     expect(fixture.store.pluginSecretHash).toMatch(/^[a-f0-9]{64}$/);
     expect(fixture.createAudit).toHaveBeenCalledTimes(1);
   });
@@ -469,7 +471,7 @@ describe('StoreRegistrationService', () => {
     );
   });
 
-  it('promotes a registered Store only after required order webhooks verify', async () => {
+  it('records health without owning the ACTIVE transition after required webhooks verify', async () => {
     const fixture = setup();
     const registration = await fixture.service.register(
       fixture.token,
@@ -488,10 +490,16 @@ describe('StoreRegistrationService', () => {
     expect(fixture.store.lastHealthyAt).toBeInstanceOf(Date);
     expect(fixture.store.lastSeenAt).toBeInstanceOf(Date);
     expect(fixture.createAudit).toHaveBeenCalledTimes(2);
+    expect(fixture.updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: StoreStatus.ACTIVE }),
+        data: expect.not.objectContaining({ status: expect.anything() }),
+      })
+    );
     expect(JSON.stringify(result)).not.toMatch(/secret|credential|token/i);
   });
 
-  it('keeps registration PENDING when required webhooks cannot be verified', async () => {
+  it('keeps the registered Store ACTIVE but unhealthy when webhooks cannot be verified', async () => {
     const fixture = setup();
     const registration = await fixture.service.register(
       fixture.token,
@@ -505,8 +513,29 @@ describe('StoreRegistrationService', () => {
       status: 400,
       message: 'Required WooCommerce webhooks could not be verified',
     });
+    expect(fixture.store.status).toBe(StoreStatus.ACTIVE);
+    expect(fixture.store.lastHealthyAt).toBeNull();
+  });
+
+  it('does not let webhook verification own an ACTIVE lifecycle transition', async () => {
+    const fixture = setup();
+    const registration = await fixture.service.register(
+      fixture.token,
+      '203.0.113.5'
+    );
+    fixture.store.status = StoreStatus.PENDING;
+
+    await expect(
+      fixture.service.confirmPluginConnection(registration.pluginCredential)
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Plugin credential is invalid',
+    });
     expect(fixture.store.status).toBe(StoreStatus.PENDING);
     expect(fixture.store.lastHealthyAt).toBeNull();
+    expect(
+      fixture.hasRequiredOrderWebhooksForEndpointKey
+    ).not.toHaveBeenCalled();
   });
 
   it('returns opaque 404 for unavailable connection health', async () => {

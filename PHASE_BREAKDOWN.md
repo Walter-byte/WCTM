@@ -154,9 +154,9 @@ Acceptance checklist:
   the M6 WooCommerce REST client.
 - Successful finalization atomically consumes the token, stores a hashed
   plugin→SaaS credential, records registration/last-seen time, and provisions
-  missing M8 material. Under the M16 extension, a fresh Store remains `PENDING`
-  until connector webhook verification establishes healthy state and promotes
-  it to `ACTIVE`.
+  missing M8 material while promoting the Store from `PENDING` to `ACTIVE`.
+  Under the M16 extension, connector webhook verification separately records
+  health evidence and does not own that lifecycle transition.
 - Authentication and transient verification failures preserve the token,
   WooCommerce credentials, plugin credential, status, and health state.
 - OWNER, ADMIN, and MEMBER may read tenant-scoped connection health without
@@ -374,10 +374,11 @@ satisfied. No next milestone is assigned.
 - Framework-free same-origin onboarding surface keeps JWTs in memory, submits
   WooCommerce credentials without browser persistence, and exposes only the
   approved account, Tenant, Store, M7, health, and M10 ceremony
-- Fresh M7 registration provisions the current M8 response material but leaves
-  the Store `PENDING`; the connector persists secrets with autoload disabled,
-  installs and verifies all four order webhooks, then authenticates a backend
-  verification that promotes the Store to `ACTIVE`/healthy
+- Fresh M7 registration provisions the current M8 response material and
+  preserves the established Store transition to `ACTIVE`; the connector
+  persists secrets with autoload disabled, installs and verifies all four order
+  webhooks, then authenticates a backend verification that records health
+  without owning the lifecycle transition
 - M10 token issuance is backend-denied until exact-one Tenant and exact-one
   ACTIVE/healthy Store eligibility is established
 - No onboarding persistence, general dashboard, selection/switching, billing,

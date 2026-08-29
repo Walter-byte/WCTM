@@ -344,8 +344,9 @@ administrator notice. A successful fresh M7 response provides
 `pluginCredential`, `storeId`, `webhookSecret`, and `webhookEndpointKey` once.
 The connector stores required material with autoload disabled, installs and
 verifies the four required order webhooks, and then confirms backend health.
-The Store remains `PENDING` and M10 link-token issuance remains forbidden until
-that confirmation succeeds and backend verification promotes it to `ACTIVE`.
+M7 registration promotes the Store from `PENDING` to `ACTIVE`, but M10
+link-token issuance remains forbidden until connector confirmation succeeds and
+backend verification records healthy webhook evidence.
 
 ## Common Commands
 

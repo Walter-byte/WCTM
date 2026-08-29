@@ -146,6 +146,7 @@ export class StoreRegistrationService {
       where: {
         pluginSecretHash,
         pluginRegisteredAt: { not: null },
+        status: StoreStatus.ACTIVE,
         deletedAt: null,
         tenant: { deletedAt: null },
       },
@@ -153,7 +154,6 @@ export class StoreRegistrationService {
         id: true,
         tenantId: true,
         baseUrl: true,
-        status: true,
         consumerKeyEncrypted: true,
         consumerSecretEncrypted: true,
         pluginSecretHash: true,
@@ -192,11 +192,11 @@ export class StoreRegistrationService {
           tenantId: store.tenantId,
           pluginSecretHash,
           pluginRegisteredAt: { not: null },
+          status: StoreStatus.ACTIVE,
           deletedAt: null,
           tenant: { deletedAt: null },
         },
         data: {
-          status: StoreStatus.ACTIVE,
           lastSeenAt: healthyAt,
           lastHealthyAt: healthyAt,
         },
@@ -214,7 +214,7 @@ export class StoreRegistrationService {
           action: 'store.plugin_connection_healthy',
           entityType: 'Store',
           entityId: store.id,
-          metadata: { status: StoreStatus.ACTIVE },
+          metadata: {},
         },
         select: { id: true },
       });
@@ -344,7 +344,6 @@ export class StoreRegistrationService {
         id: true,
         tenantId: true,
         baseUrl: true,
-        status: true,
         consumerKeyEncrypted: true,
         consumerSecretEncrypted: true,
         registrationTokenHash: true,
@@ -352,7 +351,6 @@ export class StoreRegistrationService {
         registrationTokenConsumedAt: true,
         webhookSecretEncrypted: true,
         webhookEndpointKey: true,
-        lastHealthyAt: true,
       },
     });
 
@@ -404,10 +402,7 @@ export class StoreRegistrationService {
         pluginRegisteredAt: finalizedAt,
         registrationTokenConsumedAt: finalizedAt,
         lastSeenAt: finalizedAt,
-        status:
-          store.status === StoreStatus.ACTIVE && store.lastHealthyAt
-            ? StoreStatus.ACTIVE
-            : StoreStatus.PENDING,
+        status: StoreStatus.ACTIVE,
         ...(webhookCredentials
           ? {
               webhookSecretEncrypted: this.encryption.encrypt(
@@ -431,12 +426,7 @@ export class StoreRegistrationService {
         action: 'store.plugin_registered',
         entityType: 'Store',
         entityId: store.id,
-        metadata: {
-          status:
-            store.status === StoreStatus.ACTIVE && store.lastHealthyAt
-              ? StoreStatus.ACTIVE
-              : StoreStatus.PENDING,
-        },
+        metadata: { status: StoreStatus.ACTIVE },
       },
       select: { id: true },
     });

@@ -32,6 +32,15 @@ interface ChatRow {
   activeStoreId: string | null;
 }
 
+interface StoreRow {
+  id: string;
+  status: StoreStatus;
+  deletedAt: Date | null;
+  lastHealthyAt?: Date | null;
+  webhookSecretEncrypted?: string | null;
+  webhookEndpointKey?: string | null;
+}
+
 function hash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
@@ -41,10 +50,7 @@ function setup() {
   const accounts: AccountRow[] = [];
   const chats: ChatRow[] = [];
   const memberships = new Map<string, string[]>();
-  const stores = new Map<
-    string,
-    Array<{ id: string; status: StoreStatus; deletedAt: Date | null }>
-  >();
+  const stores = new Map<string, StoreRow[]>();
   const tokenCreate = jest.fn(async ({ data }: { data: TokenRow }) => {
     tokens.push({ ...data, consumedAt: null });
     return { id: data.id };
@@ -214,11 +220,20 @@ function setup() {
           (store) => store.status === where.status && store.deletedAt === null
         )
         .slice(0, take)
-        .map(({ id }) => ({
-          id,
-          lastHealthyAt: new Date('2026-08-29T08:00:00.000Z'),
-          webhookSecretEncrypted: 'encrypted-webhook-secret',
-          webhookEndpointKey: 'whk_endpoint',
+        .map((store) => ({
+          id: store.id,
+          lastHealthyAt:
+            store.lastHealthyAt === undefined
+              ? new Date('2026-08-29T08:00:00.000Z')
+              : store.lastHealthyAt,
+          webhookSecretEncrypted:
+            store.webhookSecretEncrypted === undefined
+              ? 'encrypted-webhook-secret'
+              : store.webhookSecretEncrypted,
+          webhookEndpointKey:
+            store.webhookEndpointKey === undefined
+              ? 'whk_endpoint'
+              : store.webhookEndpointKey,
         }))
   );
   const transactionClient = {
@@ -341,6 +356,19 @@ describe('TelegramLinkingService', () => {
 
     fixture.stores.set('ten_a', [
       { id: 'sto_pending', status: StoreStatus.PENDING, deletedAt: null },
+    ]);
+    await expect(
+      fixture.service.issueToken({ sub: 'usr_a' })
+    ).rejects.toMatchObject({ status: 403 });
+    expect(fixture.tokens).toHaveLength(0);
+
+    fixture.stores.set('ten_a', [
+      {
+        id: 'sto_active_unhealthy',
+        status: StoreStatus.ACTIVE,
+        deletedAt: null,
+        lastHealthyAt: null,
+      },
     ]);
     await expect(
       fixture.service.issueToken({ sub: 'usr_a' })

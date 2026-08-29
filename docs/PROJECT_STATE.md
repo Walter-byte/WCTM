@@ -119,10 +119,10 @@ M6 WooCommerce REST test—there is no SaaS→plugin probe or plugin endpoint UR
 
 Successful registration atomically consumes the token, replaces the hashed
 persistent plugin→SaaS credential, records registration and last-seen time,
-creates an audit event, and provisions missing M8 material. As extended by
-M16, a fresh Store remains `PENDING` until connector webhook verification sets
-healthy timestamps and `ACTIVE`. Auth and transient failures leave all Store
-state unchanged. A
+creates an audit event, provisions missing M8 material, and promotes the Store
+from `PENDING` to `ACTIVE`. As extended by M16, connector webhook verification
+separately sets healthy timestamps without owning that lifecycle transition.
+Auth and transient failures leave all Store state unchanged. A
 tenant-scoped connection-health endpoint exposes only status, timestamps, and a
 registration boolean. A Redis fixed-window limiter applies only to public
 plugin registration.
@@ -402,12 +402,13 @@ token, plugin credential, or webhook secret in a URL or browser store.
 The current successful fresh M7 response remains authoritative:
 `{ pluginCredential, storeId, webhookSecret, webhookEndpointKey }`. Existing
 webhook material remains non-reexposable on re-registration. For a fresh Store,
-M7 now records registration and returns the one-time M8 material while leaving
-the Store `PENDING`. The connector installs/verifies `order.created`,
-`order.updated`, `order.deleted`, and `order.restored`, then authenticates with
-the plugin credential. The backend independently reads WooCommerce webhook
-configuration and promotes the Store to `ACTIVE` with healthy timestamps only
-when all required topics share the exact HTTPS endpoint-key destination.
+M7 records registration, returns the one-time M8 material, and preserves its
+established `PENDING` to `ACTIVE` transition. The connector installs/verifies
+`order.created`, `order.updated`, `order.deleted`, and `order.restored`, then
+authenticates with the plugin credential. The backend independently reads
+WooCommerce webhook configuration and records healthy timestamps only when all
+required topics share the exact HTTPS endpoint-key destination; it does not own
+Store activation.
 
 M10 link-token issuance now re-resolves exact-one active Membership and
 exact-one `ACTIVE` Store with webhook credentials and a healthy timestamp.
@@ -415,7 +416,7 @@ Ineligible direct API calls fail before token persistence; M10 redemption and
 the M11–M14 experience remain unchanged. M12-V remains functional by recording
 its already-verified pilot Store health when it activates that Store.
 
-M16 adds no schema migration or dependency. Backend tests now pass at 257 and
+M16 adds no schema migration or dependency. Backend tests now pass at 258 and
 bot tests remain at 32. Build, typecheck, lint, formatting, Prisma
 validate/generate, connector contract checks, and diff checks pass. Native PHP
 syntax/runtime validation remains part of the controlled WordPress validation

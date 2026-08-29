@@ -211,9 +211,9 @@ M16 scope:
 - Production WordPress connector redemption, non-autoloaded secret storage,
   required M8 order-webhook installation/verification, safe retry, and new-token
   reconnect guidance
-- Fresh M7 redemption remains `PENDING`; authenticated connector health is
-  promoted to `ACTIVE` only after the backend verifies the required remote
-  WooCommerce webhook configuration
+- Successful M7 redemption preserves the established `PENDING` → `ACTIVE`
+  transition; authenticated connector health separately verifies the required
+  remote WooCommerce webhook configuration without owning the Store lifecycle
 - No onboarding-state model, dashboard, Store/Tenant switching, billing, or
   later management behavior
 
