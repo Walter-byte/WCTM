@@ -12,8 +12,12 @@ $GLOBALS['wctm_options'] = array(
     'wc_telegram_connector_webhook_endpoint_key' => 'whk_' . str_repeat('e', 32),
 );
 $GLOBALS['wctm_runtime_base_url'] = 'https://connector.wctm.walterbyte.com';
+$GLOBALS['wctm_topics'] = array('order.created', 'order.updated', 'order.deleted', 'order.restored');
 $GLOBALS['wctm_webhooks'] = array();
 $GLOBALS['wctm_health_calls'] = 0;
+$GLOBALS['wctm_health_before_reconciliation'] = false;
+$GLOBALS['wctm_create_calls'] = 0;
+$GLOBALS['wctm_delete_calls'] = 0;
 
 function add_action(): void {}
 function register_activation_hook(): void {}
@@ -42,14 +46,38 @@ function update_option(string $name, $value): bool
 }
 function absint($value): int { return abs((int) $value); }
 function get_current_user_id(): int { return 7; }
-function wp_safe_remote_post(string $url, array $args): array
-{
-    ++$GLOBALS['wctm_health_calls'];
-    return array('response' => array('code' => 200), 'body' => '{"status":"ACTIVE","healthy":true}');
-}
 function is_wp_error($value): bool { return false; }
 function wp_remote_retrieve_response_code(array $response): int { return $response['response']['code']; }
 function wp_remote_retrieve_body(array $response): string { return $response['body']; }
+
+function wp_safe_remote_post(string $url, array $args): array
+{
+    ++$GLOBALS['wctm_health_calls'];
+    $expected_url = $GLOBALS['wctm_runtime_base_url'] . '/api/webhooks/woocommerce/' .
+        $GLOBALS['wctm_options']['wc_telegram_connector_webhook_endpoint_key'];
+    $expected_secret = $GLOBALS['wctm_options']['wc_telegram_connector_webhook_secret'];
+    foreach ($GLOBALS['wctm_topics'] as $topic) {
+        $matches = array_filter(
+            $GLOBALS['wctm_webhooks'],
+            static fn (array $webhook): bool => $webhook['name'] === 'WCTM Connector: ' . $topic
+        );
+        if (count($matches) !== 1) {
+            $GLOBALS['wctm_health_before_reconciliation'] = true;
+            break;
+        }
+        $webhook = array_values($matches)[0];
+        if ($webhook['topic'] !== $topic || $webhook['status'] !== 'active' ||
+            $webhook['delivery_url'] !== $expected_url || $webhook['secret'] !== $expected_secret) {
+            $GLOBALS['wctm_health_before_reconciliation'] = true;
+            break;
+        }
+    }
+    if (!str_ends_with($url, '/api/plugin/connection-health') ||
+        $GLOBALS['wctm_health_before_reconciliation']) {
+        return array('response' => array('code' => 500), 'body' => '{}');
+    }
+    return array('response' => array('code' => 200), 'body' => '{"status":"ACTIVE","healthy":true}');
+}
 
 final class WC_Webhook_Data_Store_Fixture
 {
@@ -61,12 +89,24 @@ final class WC_Webhook_Data_Store_Fixture
 
 final class WC_Data_Store
 {
-    public static function load(string $name): WC_Webhook_Data_Store_Fixture
+    private WC_Webhook_Data_Store_Fixture $data_store;
+
+    private function __construct()
+    {
+        $this->data_store = new WC_Webhook_Data_Store_Fixture();
+    }
+
+    public static function load(string $name): self
     {
         if ($name !== 'webhook') {
             throw new RuntimeException('Unexpected data store');
         }
-        return new WC_Webhook_Data_Store_Fixture();
+        return new self();
+    }
+
+    public function __call(string $name, array $arguments)
+    {
+        return $this->data_store->{$name}(...$arguments);
     }
 }
 
@@ -91,7 +131,6 @@ class WC_Webhook
     }
 
     public function get_id(): int { return $this->id; }
-    public function get_name(): string { return $this->data['name']; }
     public function get_data(): array { return $this->data; }
     public function set_name(string $value): void { $this->data['name'] = $value; }
     public function set_topic(string $value): void { $this->data['topic'] = $value; }
@@ -103,10 +142,18 @@ class WC_Webhook
     public function save(): int
     {
         if ($this->id === 0) {
-            $this->id = count($GLOBALS['wctm_webhooks']) + 1;
+            ++$GLOBALS['wctm_create_calls'];
+            $ids = array_keys($GLOBALS['wctm_webhooks']);
+            $this->id = $ids === array() ? 1 : max($ids) + 1;
         }
         $GLOBALS['wctm_webhooks'][$this->id] = $this->data;
         return $this->id;
+    }
+
+    public function delete(bool $force_delete = false): void
+    {
+        ++$GLOBALS['wctm_delete_calls'];
+        unset($GLOBALS['wctm_webhooks'][$this->id]);
     }
 }
 
@@ -115,44 +162,107 @@ function wc_get_webhook(int $id): ?WC_Webhook
     return isset($GLOBALS['wctm_webhooks'][$id]) ? new WC_Webhook($id) : null;
 }
 
-$topics = array('order.created', 'order.updated', 'order.deleted', 'order.restored');
-foreach ($topics as $index => $topic) {
-    $GLOBALS['wctm_webhooks'][$index + 11] = array(
-        'name' => 'WCTM Connector: ' . $topic,
-        'topic' => $topic,
+$unrelated = array(
+    1 => array(
+        'name' => 'Inventory integration',
+        'topic' => 'product.updated',
         'status' => 'active',
-        'delivery_url' => 'https://wctm.walterbyte.com/api/webhooks/woocommerce/' .
-            $GLOBALS['wctm_options']['wc_telegram_connector_webhook_endpoint_key'],
-        'secret' => 'admin-ui-regenerated-secret',
-        'user_id' => 7,
-    );
+        'delivery_url' => 'https://inventory.example.com/hooks/products',
+        'secret' => 'inventory-secret',
+        'user_id' => 3,
+    ),
+    2 => array(
+        'name' => 'Accounting integration',
+        'topic' => 'order.created',
+        'status' => 'paused',
+        'delivery_url' => 'https://accounting.example.com/hooks/orders',
+        'secret' => 'accounting-secret',
+        'user_id' => 4,
+    ),
+    3 => array(
+        'name' => 'Legacy custom delivery',
+        'topic' => 'order.updated',
+        'status' => 'active',
+        'delivery_url' => 'https://wctm.walterbyte.com/api/webhooks/woocommerce/unrelated',
+        'secret' => 'legacy-secret',
+        'user_id' => 5,
+    ),
+    4 => array(
+        'name' => 'Fulfilment integration',
+        'topic' => 'order.deleted',
+        'status' => 'disabled',
+        'delivery_url' => 'https://fulfilment.example.com/hooks/orders',
+        'secret' => 'fulfilment-secret',
+        'user_id' => 6,
+    ),
+);
+$GLOBALS['wctm_webhooks'] = $unrelated;
+$survivor_ids = array();
+$next_id = 11;
+foreach ($GLOBALS['wctm_topics'] as $topic) {
+    $survivor_ids[$topic] = $next_id;
+    for ($copy = 0; $copy < 3; ++$copy) {
+        $GLOBALS['wctm_webhooks'][$next_id] = array(
+            'name' => 'WCTM Connector: ' . $topic,
+            'topic' => $topic,
+            'status' => $copy === 0 ? 'paused' : 'active',
+            'delivery_url' => $copy === 2
+                ? 'https://connector.wctm.walterbyte.com/api/webhooks/woocommerce/stale-key'
+                : 'https://wctm.walterbyte.com/api/webhooks/woocommerce/old-key',
+            'secret' => $copy === 1 ? 'admin-ui-regenerated-secret' : 'stale-secret',
+            'user_id' => 7,
+        );
+        ++$next_id;
+    }
+}
+
+$proxy = WC_Data_Store::load('webhook');
+if (method_exists($proxy, 'get_webhooks_ids') || count($proxy->get_webhooks_ids()) !== 16) {
+    throw new RuntimeException('Fixture does not reproduce WooCommerce proxy enumeration');
 }
 
 require dirname(__DIR__, 3) . '/wp-content/plugins/wc-telegram-connector.php';
 
-$before_ids = array_keys($GLOBALS['wctm_webhooks']);
+if (count(wc_telegram_connector_load_webhooks()) !== 16) {
+    throw new RuntimeException('Connector loader did not enumerate through the WooCommerce proxy');
+}
+
 if (!wc_telegram_connector_install_and_confirm_webhooks()) {
-    throw new RuntimeException('Initial reconciliation did not become healthy');
+    throw new RuntimeException('Initial duplicate reconciliation did not become healthy');
 }
 
 $expected_url = 'https://connector.wctm.walterbyte.com/api/webhooks/woocommerce/' .
     $GLOBALS['wctm_options']['wc_telegram_connector_webhook_endpoint_key'];
 $expected_secret = $GLOBALS['wctm_options']['wc_telegram_connector_webhook_secret'];
-foreach ($topics as $index => $topic) {
-    $webhook = $GLOBALS['wctm_webhooks'][$index + 11] ?? null;
-    if (!is_array($webhook) || $webhook['name'] !== 'WCTM Connector: ' . $topic ||
-        $webhook['topic'] !== $topic || $webhook['status'] !== 'active' ||
+foreach ($GLOBALS['wctm_topics'] as $topic) {
+    $matches = array_filter(
+        $GLOBALS['wctm_webhooks'],
+        static fn (array $webhook): bool => $webhook['name'] === 'WCTM Connector: ' . $topic
+    );
+    if (count($matches) !== 1 || !isset($GLOBALS['wctm_webhooks'][$survivor_ids[$topic]])) {
+        throw new RuntimeException('Reconciliation did not retain the lowest connector webhook ID');
+    }
+    $webhook = array_values($matches)[0];
+    if ($webhook['topic'] !== $topic || $webhook['status'] !== 'active' ||
         $webhook['delivery_url'] !== $expected_url || $webhook['secret'] !== $expected_secret) {
-        throw new RuntimeException('A connector hook was not fully reconciled');
+        throw new RuntimeException('A connector survivor was not fully reconciled');
     }
 }
-if ($before_ids !== array_keys($GLOBALS['wctm_webhooks'])) {
-    throw new RuntimeException('Reconciliation created a duplicate hook');
+foreach ($unrelated as $id => $webhook) {
+    if (($GLOBALS['wctm_webhooks'][$id] ?? null) !== $webhook) {
+        throw new RuntimeException('An unrelated webhook was changed');
+    }
+}
+if (count($GLOBALS['wctm_webhooks']) !== 8 || $GLOBALS['wctm_create_calls'] !== 0 ||
+    $GLOBALS['wctm_delete_calls'] !== 8 || $GLOBALS['wctm_health_before_reconciliation']) {
+    throw new RuntimeException('Duplicate reconciliation did not reach the expected boundary');
 }
 
+$after_first_retry = $GLOBALS['wctm_webhooks'];
 if (!wc_telegram_connector_install_and_confirm_webhooks() ||
-    $before_ids !== array_keys($GLOBALS['wctm_webhooks']) || $GLOBALS['wctm_health_calls'] !== 2) {
-    throw new RuntimeException('Retry is not idempotent');
+    $after_first_retry !== $GLOBALS['wctm_webhooks'] || $GLOBALS['wctm_create_calls'] !== 0 ||
+    $GLOBALS['wctm_delete_calls'] !== 8 || $GLOBALS['wctm_health_calls'] !== 2) {
+    throw new RuntimeException('Second Retry changed webhook count or identity');
 }
 
 echo "PASS\n";

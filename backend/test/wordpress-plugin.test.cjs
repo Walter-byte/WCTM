@@ -48,10 +48,13 @@ test('connector installs and verifies every required order webhook before health
   assert.match(plugin, /set_secret\(\$secret\)/);
   assert.match(plugin, /WC_Data_Store::load\('webhook'\)/);
   assert.match(plugin, /get_webhooks_ids\(\)/);
+  assert.doesNotMatch(plugin, /method_exists\([^\n]*get_webhooks_ids/);
   assert.match(plugin, /wc_get_webhook\(\$webhook_id\)/);
   assert.doesNotMatch(plugin, /wc_get_webhooks\(/);
-  assert.match(plugin, /get_name\(\) === \$name/);
+  assert.match(plugin, /\(\$data\['name'\] \?\? null\) === \$name/);
   assert.match(plugin, /\$saved_webhook = wc_get_webhook\(\$webhook_id\)/);
+  assert.match(plugin, /\$duplicate->delete\(true\)/);
+  assert.match(plugin, /count\(\$owned\) !== 1/);
   assert.match(plugin, /hash_equals\(\$secret, \$data\['secret'\]\)/);
   assert.match(
     plugin,
@@ -72,7 +75,7 @@ test('connector declares a private Update URI without implementing an updater', 
 
 const php = spawnSync('php', ['-v'], { encoding: 'utf8' });
 test(
-  'retry reconciles old-host hooks in place and restores the persisted M8 secret',
+  'retry enumerates proxied hooks, collapses duplicates, and restores the persisted M8 secret',
   {
     skip: php.error || php.status !== 0 ? 'PHP runtime is unavailable' : false,
   },

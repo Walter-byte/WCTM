@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WC Telegram Connector
  * Description: Lightweight connector between WooCommerce stores and WCTM.
- * Version: 0.2.1
+ * Version: 0.2.2
  * Author: WC-Telegram-SaaS
  * Update URI: https://wctm.walterbyte.com/plugins/wc-telegram-connector/
  * Requires PHP: 8.0
@@ -11,7 +11,7 @@
 
 defined('ABSPATH') || exit;
 
-define('WC_TELEGRAM_CONNECTOR_VERSION', '0.2.1');
+define('WC_TELEGRAM_CONNECTOR_VERSION', '0.2.2');
 define('WC_TELEGRAM_CONNECTOR_FILE', __FILE__);
 define('WC_TELEGRAM_CONNECTOR_MENU_SLUG', 'wc-telegram-connector');
 define('WC_TELEGRAM_CONNECTOR_OPTION_PREFIX', 'wc_telegram_connector_');
@@ -302,18 +302,14 @@ function wc_telegram_connector_webhook_name(string $topic): string
 /** @return list<WC_Webhook> */
 function wc_telegram_connector_load_webhooks(): array
 {
-    if (!class_exists('WC_Data_Store') || !function_exists('wc_get_webhook')) {
-        return array();
+    if (!class_exists('WC_Data_Store') || !class_exists('WC_Webhook') || !function_exists('wc_get_webhook')) {
+        throw new RuntimeException('Required WooCommerce webhook APIs are unavailable.');
     }
 
     $data_store = WC_Data_Store::load('webhook');
-    if (!is_object($data_store) || !method_exists($data_store, 'get_webhooks_ids')) {
-        return array();
-    }
-
     $webhook_ids = $data_store->get_webhooks_ids();
     if (!is_array($webhook_ids)) {
-        return array();
+        throw new UnexpectedValueException('WooCommerce webhook IDs are unavailable.');
     }
 
     $webhook_ids = array_map('absint', $webhook_ids);
@@ -321,7 +317,7 @@ function wc_telegram_connector_load_webhooks(): array
     $webhooks = array();
     foreach ($webhook_ids as $webhook_id) {
         if ($webhook_id <= 0) {
-            continue;
+            throw new UnexpectedValueException('WooCommerce returned an invalid webhook ID.');
         }
         $webhook = wc_get_webhook($webhook_id);
         if ($webhook instanceof WC_Webhook) {
@@ -329,6 +325,26 @@ function wc_telegram_connector_load_webhooks(): array
         }
     }
     return $webhooks;
+}
+
+/**
+ * @param list<WC_Webhook> $webhooks
+ * @return list<WC_Webhook>
+ */
+function wc_telegram_connector_owned_webhooks_for_topic(array $webhooks, string $topic): array
+{
+    $name = wc_telegram_connector_webhook_name($topic);
+    $owned = array();
+    foreach ($webhooks as $webhook) {
+        $data = $webhook->get_data();
+        if (is_array($data) && ($data['name'] ?? null) === $name) {
+            $owned[] = $webhook;
+        }
+    }
+    usort($owned, static function (WC_Webhook $left, WC_Webhook $right): int {
+        return (int) $left->get_id() <=> (int) $right->get_id();
+    });
+    return $owned;
 }
 
 function wc_telegram_connector_webhook_has_expected_state(
@@ -358,13 +374,8 @@ function wc_telegram_connector_install_and_confirm_webhooks(): bool
         $webhooks = wc_telegram_connector_load_webhooks();
         foreach (wc_telegram_connector_required_topics() as $topic) {
             $name = wc_telegram_connector_webhook_name($topic);
-            $webhook = null;
-            foreach ($webhooks as $candidate) {
-                if ($candidate->get_name() === $name) {
-                    $webhook = $candidate;
-                    break;
-                }
-            }
+            $owned = wc_telegram_connector_owned_webhooks_for_topic($webhooks, $topic);
+            $webhook = array_shift($owned);
             if (!($webhook instanceof WC_Webhook)) {
                 $webhook = new WC_Webhook();
                 $webhook->set_user_id(get_current_user_id());
@@ -382,6 +393,16 @@ function wc_telegram_connector_install_and_confirm_webhooks(): bool
             if (!($saved_webhook instanceof WC_Webhook) ||
                 !wc_telegram_connector_webhook_has_expected_state($saved_webhook, $topic, $delivery_url, $secret)) {
                 return false;
+            }
+            foreach ($owned as $duplicate) {
+                $duplicate_id = (int) $duplicate->get_id();
+                if ($duplicate_id <= 0) {
+                    return false;
+                }
+                $duplicate->delete(true);
+                if (wc_get_webhook($duplicate_id) instanceof WC_Webhook) {
+                    return false;
+                }
             }
         }
     } catch (Throwable $error) {
@@ -404,14 +425,9 @@ function wc_telegram_connector_required_webhooks_are_healthy(): bool
     try {
         $webhooks = wc_telegram_connector_load_webhooks();
         foreach (wc_telegram_connector_required_topics() as $topic) {
-            $matched = false;
-            foreach ($webhooks as $webhook) {
-                if (wc_telegram_connector_webhook_has_expected_state($webhook, $topic, $delivery_url, $secret)) {
-                    $matched = true;
-                    break;
-                }
-            }
-            if (!$matched) {
+            $owned = wc_telegram_connector_owned_webhooks_for_topic($webhooks, $topic);
+            if (count($owned) !== 1 ||
+                !wc_telegram_connector_webhook_has_expected_state($owned[0], $topic, $delivery_url, $secret)) {
                 return false;
             }
         }
