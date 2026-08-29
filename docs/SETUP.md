@@ -37,6 +37,22 @@ canonical application value and rejects the documented development placeholders.
 Configuration validation reports all invalid variable names together without
 including their values.
 
+Public account authentication is available through `POST /api/auth/register`
+and `POST /api/auth/login`. Both accept only `email` and `password`; emails are
+trimmed and lowercased consistently, and passwords must contain 12–128
+characters. Registration persists an Argon2id hash and both operations return
+the existing access-token format plus the safe User profile. The token contains
+only the User subject until the client uses the existing authenticated
+`POST /api/tenants` bootstrap; registration and login do not create a Tenant,
+Membership, Store, or active tenant context.
+
+The two public endpoints use independent endpoint-scoped Redis fixed windows.
+Registration defaults to 5 attempts per 60 seconds through
+`AUTH_REGISTER_RATE_LIMIT` and `AUTH_REGISTER_RATE_WINDOW_SECONDS`; login
+defaults to 10 attempts per 60 seconds through `AUTH_LOGIN_RATE_LIMIT` and
+`AUTH_LOGIN_RATE_WINDOW_SECONDS`. Keys contain hashed IP and normalized-email
+components, not raw credentials. Redis failure closes the endpoint safely.
+
 The Telegram transport and backend share `BOT_INTERNAL_API_KEY` as a dedicated
 service credential. Generate a strong random value outside local development;
 never reuse the Telegram bot token or a user JWT. `BACKEND_INTERNAL_URL` is the
@@ -74,6 +90,13 @@ these limits with `PLUGIN_REGISTRATION_TOKEN_TTL_SECONDS`,
 `PLUGIN_REGISTRATION_RATE_LIMIT`, and
 `PLUGIN_REGISTRATION_RATE_WINDOW_SECONDS`. This limiter is endpoint-scoped and
 does not install a global throttling guard.
+
+Migration `20260828120000_public_account_authentication` adds only nullable
+`users.password_hash`, so existing pilot/operator-created Users remain valid
+and simply cannot use password login. Before adding the column, the migration
+refuses to proceed if existing User emails collide after trim-and-lowercase
+normalization. It never rewrites existing emails; resolve any reported
+collision with A before retrying the migration.
 
 The Telegram bot now starts grammY long-polling. A real `TELEGRAM_BOT_TOKEN` is
 required to run the bot transport; the documented placeholder remains suitable

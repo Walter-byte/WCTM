@@ -237,6 +237,13 @@ function createEnvironmentSchema(
       .integer()
       .min(1)
       .default(60),
+    AUTH_REGISTER_RATE_LIMIT: Joi.number().integer().min(1).default(5),
+    AUTH_REGISTER_RATE_WINDOW_SECONDS: Joi.number()
+      .integer()
+      .min(1)
+      .default(60),
+    AUTH_LOGIN_RATE_LIMIT: Joi.number().integer().min(1).default(10),
+    AUTH_LOGIN_RATE_WINDOW_SECONDS: Joi.number().integer().min(1).default(60),
     PILOT_MODE: Joi.boolean().truthy('true').falsy('false').default(false),
     PILOT_WEBHOOK_BASE_URL: Joi.string()
       .trim()

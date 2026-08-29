@@ -650,7 +650,7 @@ Bot transport:
   Docker daemon was unavailable, so an isolated PostgreSQL migration apply and
   one deployed synthetic-order delivery remain manual validation steps.
 
-#### M14 — Practical Telegram Management UX (implemented; awaiting review)
+#### M14 — Practical Telegram Management UX (complete and merged)
 
 - One stateless Home surface connects Recent Orders, Status, and Help. Fixed
   navigation callbacks carry no protected or business state and re-enter the
@@ -676,6 +676,37 @@ Bot transport:
   business command, order behavior, notification behavior, status-write
   behavior, or dependency.
 
+#### M15 — Public Account Authentication Foundation (implemented)
+
+- Public `POST /api/auth/register` and `POST /api/auth/login` routes live in the
+  existing AuthModule and follow the established validation and error contract.
+- Email lookup and persistence use one trim-and-lowercase normalization rule.
+  Migration `20260828120000_public_account_authentication` adds only nullable
+  `users.password_hash` and aborts on normalized historical collisions without
+  rewriting existing emails.
+- Registration stores an Argon2id hash and returns the existing AuthService JWT
+  format. Login uses the same safe 401 response for an unknown email, wrong
+  password, or existing nullable-hash User; non-credential paths still perform
+  a bounded initialized dummy Argon2id verification.
+- Registration/login create or authenticate only a User. Their JWT has a User
+  subject and no tenant context; the unchanged M3 tenant endpoint remains the
+  only first-Tenant/OWNER bootstrap.
+- Independent Redis fixed windows use hashed IP plus normalized-email
+  components. Structured events contain fingerprints and safe User IDs only;
+  password-hash redaction and explicit response/JWT selections prevent secret
+  disclosure. No tenant AuditLog is forced onto pre-tenant activity.
+- Existing pilot Users retain nullable hashes and existing tooling remains
+  green. M15 adds only the approved `argon2` dependency and four typed rate-limit
+  settings.
+- Focused M15 tests and the complete regressions pass: 243 backend and 32 bot
+  tests, plus Prisma validate/generate, build, typecheck, lint, format, and diff
+  gates.
+- The backend Dockerfile installs `python3`, `make`, and `g++` as a temporary
+  Alpine virtual package in both `npm ci` stages, then removes them. A clean
+  no-cache backend image build succeeds, the runtime image executes Argon2id,
+  and Python/compiler tools are absent. Rebuild on the VPS before resuming the
+  migration collision audit/apply/status gate.
+
 ---
 
 ## 5. Current Repository Structure
@@ -685,24 +716,26 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current implementation branch: `feat/m14-telegram-management-ux`.
+Current implementation branch: `feat/m15-public-account-auth`.
 
 ---
 
 ## 6. Current Blockers
 
-No M14 implementation blocker remains. One bounded manual Telegram UX pass is
-required after review. Separately, before deployment, apply and verify the M13
-migration against isolated PostgreSQL; after deployment, validate one synthetic
-`order.created` notification and both existing action entries.
+No M15 code or Docker build blocker remains. Rebuild the backend on the VPS,
+then use isolated PostgreSQL to run the normalized-email collision audit and
+apply/status verification for the full migration chain. The bounded M14 manual
+Telegram UX pass and deployed M13 synthetic-notification check remain separate.
 
 ---
 
 ## 7. Current Task
 
-M14 implementation is complete on `feat/m14-telegram-management-ux` and awaits
-A/B review plus one bounded manual Telegram UX validation. No later product
-milestone is assigned.
+M15 implementation and automated gates are complete on
+`feat/m15-public-account-auth`; the Argon2 Alpine image-build blocker is fixed
+and clean-build verified. VPS rebuild and isolated PostgreSQL migration
+verification are still required. Do not begin Store onboarding or any later
+milestone without A approval.
 
 ---
 

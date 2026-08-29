@@ -78,6 +78,12 @@ test('valid environment loads typed configuration values', () => {
     rateLimit: 10,
     rateWindowSeconds: 60,
   });
+  assert.deepEqual(configuration.publicAuth, {
+    registerRateLimit: 5,
+    registerRateWindowSeconds: 60,
+    loginRateLimit: 10,
+    loginRateWindowSeconds: 60,
+  });
   assert.deepEqual(configuration.pilot, {
     enabled: false,
     webhookBaseUrl: undefined,
@@ -183,6 +189,36 @@ test('plugin registration limits accept typed configuration overrides', () => {
     rateLimit: 8,
     rateWindowSeconds: 45,
   });
+});
+
+test('public authentication limits accept independent typed overrides', () => {
+  const configuration = createConfiguration(
+    validEnvironment({
+      AUTH_REGISTER_RATE_LIMIT: '4',
+      AUTH_REGISTER_RATE_WINDOW_SECONDS: '90',
+      AUTH_LOGIN_RATE_LIMIT: '9',
+      AUTH_LOGIN_RATE_WINDOW_SECONDS: '120',
+    })
+  );
+
+  assert.deepEqual(configuration.publicAuth, {
+    registerRateLimit: 4,
+    registerRateWindowSeconds: 90,
+    loginRateLimit: 9,
+    loginRateWindowSeconds: 120,
+  });
+  assert.throws(
+    () =>
+      validateEnvironment(validEnvironment({ AUTH_REGISTER_RATE_LIMIT: '0' })),
+    /AUTH_REGISTER_RATE_LIMIT/
+  );
+  assert.throws(
+    () =>
+      validateEnvironment(
+        validEnvironment({ AUTH_LOGIN_RATE_WINDOW_SECONDS: '0' })
+      ),
+    /AUTH_LOGIN_RATE_WINDOW_SECONDS/
+  );
 });
 
 test('missing required variables produce one aggregated safe error', () => {

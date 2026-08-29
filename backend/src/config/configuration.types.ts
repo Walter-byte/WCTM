@@ -34,6 +34,10 @@ export interface ValidatedEnvironment {
   PLUGIN_REGISTRATION_TOKEN_TTL_SECONDS: number;
   PLUGIN_REGISTRATION_RATE_LIMIT: number;
   PLUGIN_REGISTRATION_RATE_WINDOW_SECONDS: number;
+  AUTH_REGISTER_RATE_LIMIT: number;
+  AUTH_REGISTER_RATE_WINDOW_SECONDS: number;
+  AUTH_LOGIN_RATE_LIMIT: number;
+  AUTH_LOGIN_RATE_WINDOW_SECONDS: number;
   PILOT_MODE: boolean;
   PILOT_WEBHOOK_BASE_URL?: string;
   PILOT_READINESS_TIMEOUT_SECONDS: number;
@@ -74,6 +78,10 @@ export const CONFIG_ENV_KEYS = [
   'PLUGIN_REGISTRATION_TOKEN_TTL_SECONDS',
   'PLUGIN_REGISTRATION_RATE_LIMIT',
   'PLUGIN_REGISTRATION_RATE_WINDOW_SECONDS',
+  'AUTH_REGISTER_RATE_LIMIT',
+  'AUTH_REGISTER_RATE_WINDOW_SECONDS',
+  'AUTH_LOGIN_RATE_LIMIT',
+  'AUTH_LOGIN_RATE_WINDOW_SECONDS',
   'PILOT_MODE',
   'PILOT_WEBHOOK_BASE_URL',
   'PILOT_READINESS_TIMEOUT_SECONDS',
@@ -139,6 +147,13 @@ export interface PluginRegistrationSettings {
   tokenTtlSeconds: number;
   rateLimit: number;
   rateWindowSeconds: number;
+}
+
+export interface PublicAuthSettings {
+  registerRateLimit: number;
+  registerRateWindowSeconds: number;
+  loginRateLimit: number;
+  loginRateWindowSeconds: number;
 }
 
 export interface PilotSettings {

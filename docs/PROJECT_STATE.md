@@ -7,9 +7,9 @@ Version: 1.0
 Current Phase
 
 Phase 4 — Telegram Platform remains In Progress. M14 Practical Telegram
-Management UX is implemented on `feat/m14-telegram-management-ux` and awaits
-A/B review plus bounded manual Telegram validation. M13 is merged to `main`;
-its deployment validation remains separate. M12 real-store validation remains
+Management UX is merged to `main`; its bounded manual Telegram validation
+remains separate. The approved M15 Public Account Authentication Foundation is
+implemented on `feat/m15-public-account-auth`. M12 real-store validation remains
 complete to the extent recorded in
 `docs/validation/M12_REAL_STORE_VALIDATION.md`.
 
@@ -17,8 +17,10 @@ complete to the extent recorded in
 
 Current Task
 
-M14 implementation is complete and awaiting A/B review and manual UX
-validation. Do not begin a later milestone without approval.
+M15 implementation and automated gates are complete. The Alpine Argon2 native
+build blocker is fixed and a clean backend image build is verified. Rebuild the
+backend on the VPS, then resume the isolated PostgreSQL migration apply/status
+gate. Do not begin Store onboarding or a later milestone without approval.
 
 ---
 
@@ -348,6 +350,34 @@ Message edits retain the existing reply fallback. M14 adds no schema,
 persistence, backend contract, business command, authorization, callback
 security, order, delivery, or mutation behavior.
 
+M15 adds public `POST /api/auth/register` and `POST /api/auth/login` endpoints
+inside the existing AuthModule. Both normalize email by trim-and-lowercase,
+apply independent Redis fixed-window limits keyed by hashed IP and normalized
+email, and issue the existing AuthService JWT format with only the User subject.
+Registration and login never create a Tenant, Membership, Store, or active
+tenant context; the existing M3 `POST /api/tenants` operation remains the sole
+first-Tenant/OWNER bootstrap.
+
+Migration `20260828120000_public_account_authentication` adds only nullable
+`users.password_hash` and refuses normalized historical email collisions before
+altering the table without rewriting existing data. Passwords use Argon2id;
+unknown-email, incorrect-password, and existing nullable-hash User login paths
+share the same safe failure contract, with the non-credential paths performing
+a bounded initialized dummy Argon2id verification. Explicit User selections,
+response mapping, JWT payload tests, structured-log fingerprints, and expanded
+redaction prevent password/hash disclosure. No tenant-scoped AuditLog is used
+for these pre-tenant operations.
+
+M15 adds typed independent registration/login limit configuration and the
+approved `argon2` runtime dependency. Focused M15 tests plus the full M3–M14
+regression suite pass: 243 backend tests and 32 Telegram bot tests. Prisma
+validate/generate, build, typecheck, formatting, and migration-structure checks
+pass. The backend Dockerfile installs `python3`, `make`, and `g++` as a temporary
+Alpine virtual package in both dependency-install stages, removes the package
+after `npm ci`, and retains a working Argon2id addon without Python or compiler
+tools in the runtime image. A clean no-cache image build and runtime Argon2id
+verification pass. VPS migration apply/status remains pending.
+
 ---
 
 Infrastructure
@@ -385,7 +415,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-feat/m14-telegram-management-ux
+feat/m15-public-account-auth
 
 ---
 
@@ -417,24 +447,26 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No M14 implementation blocker remains. One bounded manual Telegram UX pass is
-required after review. Separately, the M13 migration still requires one
-apply/status check against isolated PostgreSQL before deployment, and live
-delivery requires one synthetic `order.created` validation after deployment.
+M15 code, automated verification, and clean backend image build have no
+implementation blocker. The VPS must rebuild the backend from the Docker fix,
+then run the normalized-email collision audit plus full migration apply/status
+verification. The existing bounded M14 manual Telegram UX pass and M13 deployed
+synthetic-notification check also remain separate.
 
 ---
 
 Next Milestone
 
-No later product milestone is assigned. Await M14 A/B review and bounded manual
-Telegram UX validation; do not continue without approval.
+No later product milestone is assigned. Review M15 and run its isolated
+PostgreSQL migration verification; do not begin Store onboarding or continue
+without approval.
 
 ---
 
 Last Completed
 
-M14 Practical Telegram Management UX implementation and automated regression
-gates.
+M15 Public Account Authentication Foundation implementation and automated
+regression gates.
 
 ---
 

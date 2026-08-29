@@ -40,6 +40,7 @@ describe('StructuredLoggerService', () => {
         'processing request',
         {
           password: 'password-value',
+          passwordHash: 'argon-hash-value',
           nested: {
             accessToken: 'token-value',
             credentials: 'credential-value',
@@ -73,6 +74,7 @@ describe('StructuredLoggerService', () => {
       message: 'processing request',
       metadata: {
         password: '****',
+        passwordHash: '****',
         safe: 'visible',
         nested: {
           accessToken: '****',
@@ -83,6 +85,7 @@ describe('StructuredLoggerService', () => {
     });
     expect(record).toHaveProperty('timestamp');
     expect(output).not.toContain('password-value');
+    expect(output).not.toContain('argon-hash-value');
     expect(output).not.toContain('token-value');
     expect(output).not.toContain('credential-value');
     expect(output).not.toContain('encryption-value');
