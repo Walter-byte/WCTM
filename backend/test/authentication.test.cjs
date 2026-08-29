@@ -86,6 +86,9 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
   process.env.NODE_ENV = 'test';
 
   const { AppModule } = require('../dist/app.module');
+  const {
+    configureApplicationRouting,
+  } = require('../dist/application-routing');
   const { PrismaService } = require('../dist/prisma/prisma.service');
   const originalModuleInit = PrismaService.prototype.onModuleInit;
   const originalModuleDestroy = PrismaService.prototype.onModuleDestroy;
@@ -133,6 +136,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
 
   try {
     application = await NestFactory.create(AuthTestModule, { logger: false });
+    configureApplicationRouting(application);
     const prisma = application.get(PrismaService);
     const queueRuntime = application.get(QueueRuntimeService);
     prisma.membership.findFirst = async ({ where }) =>
@@ -147,7 +151,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
     assert.equal(typeof address, 'object');
 
     const baseUrl = `http://127.0.0.1:${address.port}`;
-    const publicResponse = await fetch(`${baseUrl}/auth-test/public`);
+    const publicResponse = await fetch(`${baseUrl}/api/auth-test/public`);
     assert.equal(publicResponse.status, 200);
     assert.match(
       publicResponse.headers.get('x-request-id'),
@@ -162,6 +166,10 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
       'no-referrer'
     );
     assert.equal(onboardingResponse.headers.get('cache-control'), 'no-store');
+    assert.equal(
+      onboardingResponse.headers.get('x-content-type-options'),
+      'nosniff'
+    );
     assert.match(
       onboardingResponse.headers.get('content-security-policy'),
       /connect-src 'self'/
@@ -174,12 +182,56 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
       `${baseUrl}/onboarding/app.js`
     );
     assert.equal(onboardingScriptResponse.status, 200);
+    assert.match(
+      onboardingScriptResponse.headers.get('content-type'),
+      /^text\/javascript/
+    );
+    assert.equal(
+      onboardingScriptResponse.headers.get('referrer-policy'),
+      'no-referrer'
+    );
+    assert.equal(
+      onboardingScriptResponse.headers.get('cache-control'),
+      'no-store'
+    );
+    assert.equal(
+      onboardingScriptResponse.headers.get('x-content-type-options'),
+      'nosniff'
+    );
     assert.doesNotMatch(
       await onboardingScriptResponse.text(),
       /localStorage|console\./
     );
 
-    const missingResponse = await fetch(`${baseUrl}/auth-test/protected`);
+    const onboardingStylesResponse = await fetch(
+      `${baseUrl}/onboarding/styles.css`
+    );
+    assert.equal(onboardingStylesResponse.status, 200);
+    assert.match(
+      onboardingStylesResponse.headers.get('content-type'),
+      /^text\/css/
+    );
+    assert.equal(
+      onboardingStylesResponse.headers.get('referrer-policy'),
+      'no-referrer'
+    );
+    assert.equal(
+      onboardingStylesResponse.headers.get('cache-control'),
+      'no-store'
+    );
+    assert.equal(
+      onboardingStylesResponse.headers.get('x-content-type-options'),
+      'nosniff'
+    );
+    assert.match(await onboardingStylesResponse.text(), /\[hidden\]/);
+
+    const prefixedOnboardingResponse = await fetch(`${baseUrl}/api/onboarding`);
+    assert.equal(prefixedOnboardingResponse.status, 404);
+
+    const unprefixedApiResponse = await fetch(`${baseUrl}/auth-test/public`);
+    assert.equal(unprefixedApiResponse.status, 404);
+
+    const missingResponse = await fetch(`${baseUrl}/api/auth-test/protected`);
     assert.equal(missingResponse.status, 401);
     assert.match(
       missingResponse.headers.get('x-request-id'),
@@ -187,7 +239,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
     );
 
     const invalidRequestId = 'invalid-auth-request';
-    const invalidResponse = await fetch(`${baseUrl}/auth-test/protected`, {
+    const invalidResponse = await fetch(`${baseUrl}/api/auth-test/protected`, {
       headers: {
         Authorization: 'Bearer invalid-token',
         'x-request-id': invalidRequestId,
@@ -225,7 +277,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
     };
 
     const registrationPassword = 'correct horse battery staple';
-    const registrationResponse = await fetch(`${baseUrl}/auth/register`, {
+    const registrationResponse = await fetch(`${baseUrl}/api/auth/register`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -255,7 +307,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
     prisma.$queryRaw = async () => [
       { ...registeredUser, passwordHash: registeredPasswordHash },
     ];
-    const loginResponse = await fetch(`${baseUrl}/auth/login`, {
+    const loginResponse = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -271,7 +323,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
     );
     assert.doesNotMatch(JSON.stringify(loginBody.user), /password|hash/i);
 
-    const wrongPasswordResponse = await fetch(`${baseUrl}/auth/login`, {
+    const wrongPasswordResponse = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -280,7 +332,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
       }),
     });
     prisma.$queryRaw = async () => [];
-    const unknownEmailResponse = await fetch(`${baseUrl}/auth/login`, {
+    const unknownEmailResponse = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -298,7 +350,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
 
     prisma.user.findUnique = async ({ where }) =>
       where.id === registeredUser.id ? registeredUser : null;
-    const profileResponse = await fetch(`${baseUrl}/users/me`, {
+    const profileResponse = await fetch(`${baseUrl}/api/users/me`, {
       headers: { Authorization: `Bearer ${registrationBody.accessToken}` },
     });
     assert.equal(profileResponse.status, 200);
@@ -306,7 +358,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
 
     prisma.membership.findMany = async () => [];
     const missingTenantContextResponse = await fetch(
-      `${baseUrl}/auth/tenant-context`,
+      `${baseUrl}/api/auth/tenant-context`,
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${registrationBody.accessToken}` },
@@ -326,7 +378,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
       updatedAt: new Date('2026-08-28T08:00:00.000Z'),
       memberships: [data.memberships.create],
     });
-    const tenantResponse = await fetch(`${baseUrl}/tenants`, {
+    const tenantResponse = await fetch(`${baseUrl}/api/tenants`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${registrationBody.accessToken}`,
@@ -341,7 +393,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
 
     prisma.membership.findMany = async () => [{ tenantId: tenantBody.id }];
     const tenantContextResponse = await fetch(
-      `${baseUrl}/auth/tenant-context`,
+      `${baseUrl}/api/auth/tenant-context`,
       {
         method: 'POST',
         headers: {
@@ -370,7 +422,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
       { tenantId: 'ten_second' },
     ];
     const ambiguousTenantContextResponse = await fetch(
-      `${baseUrl}/auth/tenant-context`,
+      `${baseUrl}/api/auth/tenant-context`,
       {
         method: 'POST',
         headers: { Authorization: `Bearer ${registrationBody.accessToken}` },
@@ -382,9 +434,12 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
       sub: 'usr_missing',
       tenantId: 'ten_test',
     });
-    const noMembershipResponse = await fetch(`${baseUrl}/auth-test/protected`, {
-      headers: { Authorization: `Bearer ${noMembershipToken}` },
-    });
+    const noMembershipResponse = await fetch(
+      `${baseUrl}/api/auth-test/protected`,
+      {
+        headers: { Authorization: `Bearer ${noMembershipToken}` },
+      }
+    );
     assert.equal(noMembershipResponse.status, 403);
 
     const token = await authService.signAccessToken({
@@ -392,7 +447,7 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
       tenantId: 'ten_test',
     });
     const validRequestId = 'valid-auth-request';
-    const validResponse = await fetch(`${baseUrl}/auth-test/protected`, {
+    const validResponse = await fetch(`${baseUrl}/api/auth-test/protected`, {
       headers: {
         Authorization: `Bearer ${token}`,
         'x-request-id': validRequestId,

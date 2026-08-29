@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { json, raw, urlencoded } from 'express';
 
 import { AppModule } from './app.module';
+import { configureApplicationRouting } from './application-routing';
 import { StructuredLoggerService } from './common/logging/structured-logger.service';
 import { redactSensitiveData } from './common/utils/redact-sensitive-data';
 import { ApplicationConfigService } from './config/application-config.service';
@@ -35,7 +36,7 @@ async function bootstrap(): Promise<void> {
   );
   application.use(json());
   application.use(urlencoded({ extended: true }));
-  application.setGlobalPrefix('api');
+  configureApplicationRouting(application);
   application.enableShutdownHooks();
 
   await application.listen(port, '0.0.0.0');
