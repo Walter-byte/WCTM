@@ -2,7 +2,7 @@
 Contributors: wc-telegram-saas
 Tags: woocommerce, telegram, connector, automation
 Requires PHP: 8.0
-Stable tag: 0.1.0
+Stable tag: 0.2.0
 
 Lightweight connector between WooCommerce stores and WC-Telegram-SaaS.
 
@@ -11,8 +11,9 @@ Lightweight connector between WooCommerce stores and WC-Telegram-SaaS.
 WC Telegram Connector provides the WordPress-side foundation for securely
 connecting a WooCommerce store to WC-Telegram-SaaS.
 
-Version 0.1.0 contains activation, deactivation, and dependency-check stubs
-only. Store registration and webhook management arrive in a later phase.
+Version 0.2.0 provides the M16 onboarding connector. It redeems one M7 token,
+stores connector material with autoload disabled, installs and verifies the
+four required WooCommerce order webhooks, and confirms safe health to WCTM.
 
 == Installation ==
 
@@ -21,6 +22,10 @@ only. Store registration and webhook management arrive in a later phase.
    installation.
 2. Ensure WooCommerce is installed and active.
 3. Activate WC Telegram Connector from the WordPress Plugins screen.
+4. Set `WC_TELEGRAM_CONNECTOR_API_BASE_URL` to the public WCTM HTTPS origin in
+   the deployed connector build or WordPress configuration.
+5. Open WooCommerce → WCTM Connector and paste the one-time registration token
+   issued by WCTM onboarding.
 
 == Frequently Asked Questions ==
 
@@ -28,11 +33,16 @@ only. Store registration and webhook management arrive in a later phase.
 
 Yes. An administrator notice appears when WooCommerce is not active.
 
-= Does this version connect to Telegram? =
+= Does the plugin ask for my WCTM password? =
 
-No. This scaffold does not contain business logic or external API calls.
+No. It accepts only a one-time M7 token and never chooses a Tenant or Store.
 
 == Changelog ==
+
+= 0.2.0 =
+
+* Add M7 registration, secure connector storage, M8 order webhook setup,
+  verification, retry, and reconnect guidance.
 
 = 0.1.0 =
 

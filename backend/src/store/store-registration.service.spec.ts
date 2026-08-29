@@ -104,6 +104,14 @@ function setup(
       return matches ? { ...store } : null;
     }
   );
+  const findMany = jest.fn(
+    async ({ where }: { where: Record<string, unknown> }) =>
+      store.deletedAt === null &&
+      store.pluginSecretHash !== null &&
+      store.pluginSecretHash === where['pluginSecretHash']
+        ? [{ ...store }]
+        : []
+  );
   const updateMany = jest.fn(
     async ({
       where,
@@ -138,6 +146,8 @@ function setup(
         store.id === where['id'] &&
         (where['tenantId'] === undefined ||
           store.tenantId === where['tenantId']) &&
+        (where['pluginSecretHash'] === undefined ||
+          store.pluginSecretHash === where['pluginSecretHash']) &&
         registrationMatches &&
         webhookMatches &&
         store.deletedAt === null;
@@ -158,7 +168,10 @@ function setup(
     async (callback: (client: typeof transactionClient) => Promise<unknown>) =>
       callback(transactionClient)
   );
-  const prisma = { $transaction: transaction } as unknown as PrismaService;
+  const prisma = {
+    store: { findMany },
+    $transaction: transaction,
+  } as unknown as PrismaService;
   const issueStoreRegistrationToken = jest.fn(
     async (storeId: string, tokenHash: string, expiresAt: Date) => {
       if (storeId !== store.id || store.deletedAt !== null) {
@@ -201,6 +214,12 @@ function setup(
   const testConnection = jest
     .spyOn(WooCommerceClient.prototype, 'testConnection')
     .mockResolvedValue({ success: true });
+  const hasRequiredOrderWebhooksForEndpointKey = jest
+    .spyOn(
+      WooCommerceClient.prototype,
+      'hasRequiredOrderWebhooksForEndpointKey'
+    )
+    .mockResolvedValue(true);
   const service = new StoreRegistrationService(
     prisma,
     tenantPrisma,
@@ -216,6 +235,8 @@ function setup(
     assertAllowed,
     createAudit,
     findFirst,
+    findMany,
+    hasRequiredOrderWebhooksForEndpointKey,
     issueStoreRegistrationToken,
     service,
     store,
@@ -287,8 +308,8 @@ describe('StoreRegistrationService', () => {
     expect(fixture.store.registrationTokenConsumedAt).toBeInstanceOf(Date);
     expect(fixture.store.pluginRegisteredAt).toBeInstanceOf(Date);
     expect(fixture.store.lastSeenAt).toBeInstanceOf(Date);
-    expect(fixture.store.lastHealthyAt).toBeInstanceOf(Date);
-    expect(fixture.store.status).toBe(StoreStatus.ACTIVE);
+    expect(fixture.store.lastHealthyAt).toBeNull();
+    expect(fixture.store.status).toBe(StoreStatus.PENDING);
     expect(result.webhookSecret).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect(result.webhookEndpointKey).toMatch(/^whk_[A-Za-z0-9_-]{43}$/);
     expect(
@@ -424,7 +445,7 @@ describe('StoreRegistrationService', () => {
 
     expect(fulfilled).toHaveLength(1);
     expect(rejected).toHaveLength(1);
-    expect(fixture.store.status).toBe(StoreStatus.ACTIVE);
+    expect(fixture.store.status).toBe(StoreStatus.PENDING);
     expect(fixture.store.pluginSecretHash).toMatch(/^[a-f0-9]{64}$/);
     expect(fixture.createAudit).toHaveBeenCalledTimes(1);
   });
@@ -446,6 +467,46 @@ describe('StoreRegistrationService', () => {
     expect(JSON.stringify(health)).not.toMatch(
       /token|secret|consumer|credential/i
     );
+  });
+
+  it('promotes a registered Store only after required order webhooks verify', async () => {
+    const fixture = setup();
+    const registration = await fixture.service.register(
+      fixture.token,
+      '203.0.113.5'
+    );
+
+    const result = await fixture.service.confirmPluginConnection(
+      registration.pluginCredential
+    );
+
+    expect(result).toEqual({ status: StoreStatus.ACTIVE, healthy: true });
+    expect(fixture.hasRequiredOrderWebhooksForEndpointKey).toHaveBeenCalledWith(
+      registration.webhookEndpointKey
+    );
+    expect(fixture.store.status).toBe(StoreStatus.ACTIVE);
+    expect(fixture.store.lastHealthyAt).toBeInstanceOf(Date);
+    expect(fixture.store.lastSeenAt).toBeInstanceOf(Date);
+    expect(fixture.createAudit).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(result)).not.toMatch(/secret|credential|token/i);
+  });
+
+  it('keeps registration PENDING when required webhooks cannot be verified', async () => {
+    const fixture = setup();
+    const registration = await fixture.service.register(
+      fixture.token,
+      '203.0.113.5'
+    );
+    fixture.hasRequiredOrderWebhooksForEndpointKey.mockResolvedValue(false);
+
+    await expect(
+      fixture.service.confirmPluginConnection(registration.pluginCredential)
+    ).rejects.toMatchObject({
+      status: 400,
+      message: 'Required WooCommerce webhooks could not be verified',
+    });
+    expect(fixture.store.status).toBe(StoreStatus.PENDING);
+    expect(fixture.store.lastHealthyAt).toBeNull();
   });
 
   it('returns opaque 404 for unavailable connection health', async () => {

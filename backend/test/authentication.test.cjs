@@ -154,6 +154,31 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
     );
 
+    const onboardingResponse = await fetch(`${baseUrl}/onboarding`);
+    assert.equal(onboardingResponse.status, 200);
+    assert.match(onboardingResponse.headers.get('content-type'), /^text\/html/);
+    assert.equal(
+      onboardingResponse.headers.get('referrer-policy'),
+      'no-referrer'
+    );
+    assert.equal(onboardingResponse.headers.get('cache-control'), 'no-store');
+    assert.match(
+      onboardingResponse.headers.get('content-security-policy'),
+      /connect-src 'self'/
+    );
+    assert.match(
+      await onboardingResponse.text(),
+      /Connect WooCommerce to Telegram/
+    );
+    const onboardingScriptResponse = await fetch(
+      `${baseUrl}/onboarding/app.js`
+    );
+    assert.equal(onboardingScriptResponse.status, 200);
+    assert.doesNotMatch(
+      await onboardingScriptResponse.text(),
+      /localStorage|console\./
+    );
+
     const missingResponse = await fetch(`${baseUrl}/auth-test/protected`);
     assert.equal(missingResponse.status, 401);
     assert.match(
@@ -279,6 +304,20 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
     assert.equal(profileResponse.status, 200);
     assert.equal((await profileResponse.json()).id, registeredUser.id);
 
+    prisma.membership.findMany = async () => [];
+    const missingTenantContextResponse = await fetch(
+      `${baseUrl}/auth/tenant-context`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${registrationBody.accessToken}` },
+      }
+    );
+    assert.equal(missingTenantContextResponse.status, 409);
+    assert.match(
+      (await missingTenantContextResponse.json()).message,
+      /First Tenant bootstrap is required/
+    );
+
     prisma.tenant.create = async ({ data }) => ({
       id: data.id,
       name: data.name,
@@ -299,6 +338,45 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
     const tenantBody = await tenantResponse.json();
     assert.equal(tenantBody.memberships[0].userId, registeredUser.id);
     assert.equal(tenantBody.memberships[0].role, 'OWNER');
+
+    prisma.membership.findMany = async () => [{ tenantId: tenantBody.id }];
+    const tenantContextResponse = await fetch(
+      `${baseUrl}/auth/tenant-context`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${registrationBody.accessToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          tenantId: 'ten_caller_selected',
+          storeId: 'sto_caller_selected',
+        }),
+      }
+    );
+    assert.equal(tenantContextResponse.status, 200);
+    const tenantContextBody = await tenantContextResponse.json();
+    assert.deepEqual(Object.keys(tenantContextBody), ['accessToken']);
+    const tenantContextPayload = await authService.verifyAccessToken(
+      tenantContextBody.accessToken
+    );
+    assert.equal(tenantContextPayload.sub, registeredUser.id);
+    assert.equal(tenantContextPayload.tenantId, tenantBody.id);
+    assert.notEqual(tenantContextPayload.tenantId, 'ten_caller_selected');
+    assert.equal(tenantContextPayload.storeId, undefined);
+
+    prisma.membership.findMany = async () => [
+      { tenantId: tenantBody.id },
+      { tenantId: 'ten_second' },
+    ];
+    const ambiguousTenantContextResponse = await fetch(
+      `${baseUrl}/auth/tenant-context`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${registrationBody.accessToken}` },
+      }
+    );
+    assert.equal(ambiguousTenantContextResponse.status, 409);
 
     const noMembershipToken = await authService.signAccessToken({
       sub: 'usr_missing',

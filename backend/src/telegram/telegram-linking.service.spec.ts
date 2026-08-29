@@ -214,7 +214,12 @@ function setup() {
           (store) => store.status === where.status && store.deletedAt === null
         )
         .slice(0, take)
-        .map(({ id }) => ({ id }))
+        .map(({ id }) => ({
+          id,
+          lastHealthyAt: new Date('2026-08-29T08:00:00.000Z'),
+          webhookSecretEncrypted: 'encrypted-webhook-secret',
+          webhookEndpointKey: 'whk_endpoint',
+        }))
   );
   const transactionClient = {
     telegramLinkToken: {
@@ -290,6 +295,7 @@ function setup() {
     memberships,
     redeemInput,
     service,
+    storeFindMany,
     stores,
     tokens,
   };
@@ -298,11 +304,58 @@ function setup() {
 describe('TelegramLinkingService', () => {
   it('issues a random token once and persists only its SHA-256 hash', async () => {
     const fixture = setup();
+    fixture.memberships.set('usr_a', ['ten_a']);
+    fixture.stores.set('ten_a', [
+      { id: 'sto_a', status: StoreStatus.ACTIVE, deletedAt: null },
+    ]);
     const result = await fixture.service.issueToken({ sub: 'usr_a' });
 
     expect(result.token).toMatch(/^tgl_[A-Za-z0-9_-]{43}$/);
     expect(fixture.tokens[0]?.tokenHash).toBe(hash(result.token));
     expect(JSON.stringify(fixture.tokens)).not.toContain(result.token);
+    expect(fixture.storeFindMany).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'ten_a',
+        status: StoreStatus.ACTIVE,
+        deletedAt: null,
+        tenant: { deletedAt: null },
+      },
+      select: {
+        id: true,
+        lastHealthyAt: true,
+        webhookSecretEncrypted: true,
+        webhookEndpointKey: true,
+      },
+      take: 2,
+    });
+  });
+
+  it('denies direct link-token issuance before exact-one usable Store eligibility', async () => {
+    const fixture = setup();
+    fixture.memberships.set('usr_a', ['ten_a']);
+
+    await expect(
+      fixture.service.issueToken({ sub: 'usr_a' })
+    ).rejects.toMatchObject({ status: 403 });
+    expect(fixture.tokens).toHaveLength(0);
+
+    fixture.stores.set('ten_a', [
+      { id: 'sto_pending', status: StoreStatus.PENDING, deletedAt: null },
+    ]);
+    await expect(
+      fixture.service.issueToken({ sub: 'usr_a' })
+    ).rejects.toMatchObject({ status: 403 });
+    expect(fixture.tokens).toHaveLength(0);
+  });
+
+  it('denies link-token issuance when tenant selection would be required', async () => {
+    const fixture = setup();
+    fixture.memberships.set('usr_a', ['ten_a', 'ten_b']);
+
+    await expect(
+      fixture.service.issueToken({ sub: 'usr_a' })
+    ).rejects.toMatchObject({ status: 403 });
+    expect(fixture.tokens).toHaveLength(0);
   });
 
   it('redeems once, recovers an identical update, and hides other replay state', async () => {

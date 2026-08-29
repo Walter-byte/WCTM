@@ -46,6 +46,14 @@ only the User subject until the client uses the existing authenticated
 `POST /api/tenants` bootstrap; registration and login do not create a Tenant,
 Membership, Store, or active tenant context.
 
+M16 adds authenticated `POST /api/auth/tenant-context`. The request body carries
+no Tenant or Store ID. Using only the JWT subject, it asks the merchant to use
+the existing `POST /api/tenants` M3 bootstrap when no active Membership exists,
+returns the existing access-token response with the sole legitimate tenant
+context when exactly one exists, and refuses multiple Memberships because
+tenant selection is outside M16. The public onboarding ceremony is available
+at `/onboarding` through Caddy.
+
 The two public endpoints use independent endpoint-scoped Redis fixed windows.
 Registration defaults to 5 attempts per 60 seconds through
 `AUTH_REGISTER_RATE_LIMIT` and `AUTH_REGISTER_RATE_WINDOW_SECONDS`; login
@@ -316,18 +324,28 @@ database URL when running Prisma outside the Compose network.
 
 ## WordPress Plugin
 
-WordPress core is intentionally excluded from this repository. The connector
-scaffold is stored under `wp-content/plugins/`. To inspect it in a local
+WordPress core is intentionally excluded from this repository. The production
+M16 connector is stored under `wp-content/plugins/`. To validate it in a local
 WordPress environment:
 
 1. Copy the connector files from this repository's `wp-content/plugins/` into
    the WordPress installation's `wp-content/plugins/wc-telegram-connector/`
    directory.
 2. Install and activate WooCommerce.
-3. Activate **WC Telegram Connector** from the Plugins screen.
+3. Configure `WC_TELEGRAM_CONNECTOR_API_BASE_URL` as the public WCTM HTTPS
+   origin in the connector build or `wp-config.php`.
+4. Run `php -l wc-telegram-connector.php`, then activate **WC Telegram
+   Connector** from the Plugins screen.
+5. Complete account, Tenant, and Store creation at `/onboarding`, issue one M7
+   token, then paste only that token into WooCommerce → WCTM Connector.
 
 Without WooCommerce, the plugin still activates safely and displays an
-administrator notice.
+administrator notice. A successful fresh M7 response provides
+`pluginCredential`, `storeId`, `webhookSecret`, and `webhookEndpointKey` once.
+The connector stores required material with autoload disabled, installs and
+verifies the four required order webhooks, and then confirms backend health.
+The Store remains `PENDING` and M10 link-token issuance remains forbidden until
+that confirmation succeeds and backend verification promotes it to `ACTIVE`.
 
 ## Common Commands
 

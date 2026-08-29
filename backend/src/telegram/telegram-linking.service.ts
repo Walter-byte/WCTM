@@ -1,4 +1,5 @@
 import {
+  ForbiddenException,
   Injectable,
   ServiceUnavailableException,
   UnauthorizedException,
@@ -53,6 +54,7 @@ export class TelegramLinkingService {
     payload: JwtPayload | undefined
   ): Promise<TelegramLinkTokenResult> {
     const userId = this.authenticatedUserId(payload);
+    await this.assertLinkingEligible(userId);
     const token = `tgl_${randomBytes(32).toString('base64url')}`;
     const expiresAt = new Date(
       Date.now() + this.configuration.telegram.linkTokenTtlSeconds * 1000
@@ -377,11 +379,20 @@ export class TelegramLinkingService {
             deletedAt: null,
             tenant: { deletedAt: null },
           },
-          select: { id: true },
+          select: {
+            id: true,
+            lastHealthyAt: true,
+            webhookSecretEncrypted: true,
+            webhookEndpointKey: true,
+          },
           take: 2,
         })
       : [];
-    const hasOneStore = stores.length === 1;
+    const hasOneStore =
+      stores.length === 1 &&
+      stores[0]!.lastHealthyAt !== null &&
+      stores[0]!.webhookSecretEncrypted !== null &&
+      stores[0]!.webhookEndpointKey !== null;
     const contextResolved = hasOneTenant && hasOneStore;
     const tenantSelectionRequired = memberships.length !== 1;
     const storeSelectionRequired = hasOneTenant && stores.length !== 1;
@@ -396,6 +407,51 @@ export class TelegramLinkingService {
       storeSelectionRequired,
       selectionRequired: tenantSelectionRequired || storeSelectionRequired,
     };
+  }
+
+  private async assertLinkingEligible(userId: string): Promise<void> {
+    const memberships = await this.prisma.membership.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+        tenant: { deletedAt: null },
+      },
+      select: { tenantId: true },
+      take: 2,
+    });
+
+    if (memberships.length !== 1) {
+      throw new ForbiddenException(
+        'Exactly one active Tenant membership is required for Telegram linking'
+      );
+    }
+
+    const stores = await this.prisma.store.findMany({
+      where: {
+        tenantId: memberships[0]!.tenantId,
+        status: StoreStatus.ACTIVE,
+        deletedAt: null,
+        tenant: { deletedAt: null },
+      },
+      select: {
+        id: true,
+        lastHealthyAt: true,
+        webhookSecretEncrypted: true,
+        webhookEndpointKey: true,
+      },
+      take: 2,
+    });
+
+    if (
+      stores.length !== 1 ||
+      stores[0]!.lastHealthyAt === null ||
+      stores[0]!.webhookSecretEncrypted === null ||
+      stores[0]!.webhookEndpointKey === null
+    ) {
+      throw new ForbiddenException(
+        'Exactly one ACTIVE and healthy Store is required for Telegram linking'
+      );
+    }
   }
 
   private unauthorizedStatus(): TelegramAuthorizationStatus {

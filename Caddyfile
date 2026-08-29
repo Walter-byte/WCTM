@@ -8,7 +8,11 @@
 		reverse_proxy backend:{$BACKEND_PORT:3000}
 	}
 
-	# Placeholder for the future administration interface.
+	handle /onboarding* {
+		rewrite * /api{uri}
+		reverse_proxy backend:{$BACKEND_PORT:3000}
+	}
+
 	handle {
 		respond "WC-Telegram-SaaS is running" 200
 	}

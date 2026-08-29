@@ -31,6 +31,7 @@ interface Fixture {
   hash: ReturnType<typeof jest.fn>;
   matches: ReturnType<typeof jest.fn>;
   signAccessToken: ReturnType<typeof jest.fn>;
+  membershipFindMany: ReturnType<typeof jest.fn>;
   assertRegistrationAllowed: ReturnType<typeof jest.fn>;
   assertLoginAllowed: ReturnType<typeof jest.fn>;
   logger: {
@@ -49,6 +50,7 @@ function fixture(
   const hash = jest.fn().mockResolvedValue(PASSWORD_HASH as never);
   const matches = jest.fn().mockResolvedValue(true as never);
   const signAccessToken = jest.fn().mockResolvedValue('jwt-value' as never);
+  const membershipFindMany = jest.fn().mockResolvedValue([] as never);
   const assertRegistrationAllowed = jest
     .fn()
     .mockResolvedValue(undefined as never);
@@ -58,6 +60,7 @@ function fixture(
     {
       $queryRaw: queryRaw,
       user: { create },
+      membership: { findMany: membershipFindMany },
     } as unknown as PrismaService,
     { signAccessToken } as unknown as AuthService,
     { hash, matches } as unknown as PasswordHashService,
@@ -75,6 +78,7 @@ function fixture(
     hash,
     matches,
     signAccessToken,
+    membershipFindMany,
     assertRegistrationAllowed,
     assertLoginAllowed,
     logger,
@@ -239,6 +243,63 @@ describe('PublicAuthService', () => {
       )
     ).rejects.toMatchObject({ status: 401 });
     expect(pilot.matches).toHaveBeenCalledWith(null, PASSWORD);
+  });
+
+  it('issues the existing JWT format for exactly one legitimate active Membership', async () => {
+    const test = fixture();
+    test.membershipFindMany.mockResolvedValue([
+      { tenantId: 'ten_legitimate' },
+    ] as never);
+
+    await expect(
+      test.service.issueTenantContext({
+        sub: 'usr_public',
+        tenantId: 'ten_caller_selected',
+        storeId: 'sto_caller_selected',
+      })
+    ).resolves.toEqual({ accessToken: 'jwt-value' });
+    expect(test.membershipFindMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'usr_public',
+        deletedAt: null,
+        tenant: { deletedAt: null },
+      },
+      select: { tenantId: true },
+      take: 2,
+    });
+    expect(test.signAccessToken).toHaveBeenCalledWith({
+      sub: 'usr_public',
+      tenantId: 'ten_legitimate',
+    });
+  });
+
+  it('requires M3 bootstrap when the subject has no active Membership', async () => {
+    const test = fixture();
+
+    await expect(
+      test.service.issueTenantContext({ sub: 'usr_public' })
+    ).rejects.toMatchObject({
+      status: 409,
+      message: 'First Tenant bootstrap is required',
+    });
+    expect(test.signAccessToken).not.toHaveBeenCalled();
+  });
+
+  it('fails safely when tenant selection would be required', async () => {
+    const test = fixture();
+    test.membershipFindMany.mockResolvedValue([
+      { tenantId: 'ten_a' },
+      { tenantId: 'ten_b' },
+    ] as never);
+
+    await expect(
+      test.service.issueTenantContext({ sub: 'usr_public' })
+    ).rejects.toMatchObject({
+      status: 409,
+      message:
+        'Tenant selection is required and is unavailable during onboarding',
+    });
+    expect(test.signAccessToken).not.toHaveBeenCalled();
   });
 
   it('lets the issued tenantless identity use the existing M3 first-Tenant bootstrap unchanged', async () => {

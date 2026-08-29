@@ -114,8 +114,8 @@ Status:
 
 Current Milestone:
 
-M14 Practical Telegram Management UX (implemented; awaiting review and manual
-validation)
+M16 Self-Service Store Onboarding (implemented; awaiting A/B review and one
+controlled end-to-end validation)
 
 Deliverables
 
@@ -195,14 +195,36 @@ M14 scope:
 - No backend contract, authorization, callback-security, persistence, schema,
   order, notification-delivery, or status-write behavior change
 
-M12, M12-V, and M13 are complete and merged to `main`; D-023 is Accepted. M14
-is implemented on `feat/m14-telegram-management-ux` with automated gates
-passing and awaits A/B review plus one bounded manual Telegram UX validation.
-Phase 4 remains In Progress. No later product milestone is assigned.
+M15 scope:
+
+- Public register/login with normalized email identity, Argon2id passwords,
+  endpoint-scoped Redis limiting, and the existing User-subject JWT format
+- No Tenant, Membership, Store, refresh-token, email-verification, or password-
+  reset behavior
+
+M16 scope:
+
+- Authenticated exact-one-Membership tenant-context JWT bridge with M3 as the
+  sole first-Tenant/OWNER bootstrap
+- Restrained same-origin onboarding ceremony for account, Tenant, Store, M7
+  token, connector/health progress, and backend-gated M10 linking
+- Production WordPress connector redemption, non-autoloaded secret storage,
+  required M8 order-webhook installation/verification, safe retry, and new-token
+  reconnect guidance
+- Fresh M7 redemption remains `PENDING`; authenticated connector health is
+  promoted to `ACTIVE` only after the backend verifies the required remote
+  WooCommerce webhook configuration
+- No onboarding-state model, dashboard, Store/Tenant switching, billing, or
+  later management behavior
+
+M12 through M15 are complete and merged to `main`; D-023 is Accepted. M16 is
+implemented on `feat/m16-self-service-store-onboarding` with automated gates
+passing and awaits A/B review plus one controlled end-to-end onboarding
+validation. Phase 4 remains In Progress.
 
 Next operator action:
 
-- Review M14 and run the bounded manual Telegram navigation checklist
+- Review M16 and run the controlled fresh-merchant onboarding checklist
 - Retain the pending M13 deployment checks: apply migration
   `20260820090000_order_event_notifications`, configure the private bot
   transport, and validate one synthetic notification delivery without repeated

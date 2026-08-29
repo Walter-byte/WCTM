@@ -507,7 +507,11 @@ export class PilotService {
           webhookSecretEncrypted: { not: null },
           webhookEndpointKey: { not: null },
         },
-        data: { status: StoreStatus.ACTIVE },
+        data: {
+          status: StoreStatus.ACTIVE,
+          lastSeenAt: new Date(),
+          lastHealthyAt: new Date(),
+        },
       });
 
       if (updated.count !== 1) {

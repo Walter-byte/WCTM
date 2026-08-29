@@ -15,8 +15,12 @@ describe('PluginRegistrationController', () => {
       pluginCredential: 'plg_once',
       storeId: 'sto_a',
     } as never);
+    const confirmPluginConnection = jest
+      .fn()
+      .mockResolvedValue({ status: 'ACTIVE', healthy: true } as never);
     const controller = new PluginRegistrationController({
       register,
+      confirmPluginConnection,
     } as unknown as StoreRegistrationService);
 
     expect(
@@ -34,6 +38,18 @@ describe('PluginRegistrationController', () => {
     expect(register).toHaveBeenCalledWith(
       `reg_${'a'.repeat(43)}`,
       '203.0.113.8'
+    );
+    expect(
+      Reflect.getMetadata(
+        IS_PUBLIC_KEY,
+        PluginRegistrationController.prototype.connectionHealth
+      )
+    ).toBe(true);
+    await expect(
+      controller.connectionHealth(`plg_${'p'.repeat(43)}`)
+    ).resolves.toEqual({ status: 'ACTIVE', healthy: true });
+    expect(confirmPluginConnection).toHaveBeenCalledWith(
+      `plg_${'p'.repeat(43)}`
     );
   });
 

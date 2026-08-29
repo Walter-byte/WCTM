@@ -29,6 +29,9 @@ const INVALID_REGISTRATION_MESSAGE =
 const VERIFICATION_FAILED_MESSAGE = 'Plugin registration could not be verified';
 const REGISTRATION_UNAVAILABLE_MESSAGE =
   'Plugin registration is temporarily unavailable';
+const INVALID_PLUGIN_CREDENTIAL_MESSAGE = 'Plugin credential is invalid';
+const WEBHOOK_VERIFICATION_FAILED_MESSAGE =
+  'Required WooCommerce webhooks could not be verified';
 const TRANSIENT_CATEGORIES = new Set<WooCommerceErrorCategory>([
   'transport',
   'timeout',
@@ -59,6 +62,11 @@ export interface StoreConnectionHealthResult {
   lastSeenAt: Date | null;
   lastHealthyAt: Date | null;
   registered: boolean;
+}
+
+export interface PluginConnectionHealthResult {
+  status: StoreStatus;
+  healthy: true;
 }
 
 @Injectable()
@@ -128,6 +136,97 @@ export class StoreRegistrationService {
       lastHealthyAt: health.lastHealthyAt,
       registered: health.pluginRegisteredAt !== null,
     };
+  }
+
+  async confirmPluginConnection(
+    pluginCredential: string
+  ): Promise<PluginConnectionHealthResult> {
+    const pluginSecretHash = this.hash(pluginCredential);
+    const candidates = await this.prisma.store.findMany({
+      where: {
+        pluginSecretHash,
+        pluginRegisteredAt: { not: null },
+        deletedAt: null,
+        tenant: { deletedAt: null },
+      },
+      select: {
+        id: true,
+        tenantId: true,
+        baseUrl: true,
+        status: true,
+        consumerKeyEncrypted: true,
+        consumerSecretEncrypted: true,
+        pluginSecretHash: true,
+        webhookSecretEncrypted: true,
+        webhookEndpointKey: true,
+      },
+      take: 2,
+    });
+    const store = candidates.length === 1 ? candidates[0] : undefined;
+
+    if (
+      !store?.pluginSecretHash ||
+      !this.hashesEqual(store.pluginSecretHash, pluginSecretHash) ||
+      !store.webhookSecretEncrypted ||
+      !store.webhookEndpointKey
+    ) {
+      throw new BadRequestException(INVALID_PLUGIN_CREDENTIAL_MESSAGE);
+    }
+
+    const webhooksVerified = await new WooCommerceClient({
+      storeUrl: store.baseUrl,
+      consumerKey: this.encryption.decrypt(store.consumerKeyEncrypted),
+      consumerSecret: this.encryption.decrypt(store.consumerSecretEncrypted),
+      resilience: this.configuration.woocommerce.rest,
+    }).hasRequiredOrderWebhooksForEndpointKey(store.webhookEndpointKey);
+
+    if (!webhooksVerified) {
+      throw new BadRequestException(WEBHOOK_VERIFICATION_FAILED_MESSAGE);
+    }
+
+    const healthyAt = new Date();
+    const updated = await this.prisma.$transaction(async (transaction) => {
+      const result = await transaction.store.updateMany({
+        where: {
+          id: store.id,
+          tenantId: store.tenantId,
+          pluginSecretHash,
+          pluginRegisteredAt: { not: null },
+          deletedAt: null,
+          tenant: { deletedAt: null },
+        },
+        data: {
+          status: StoreStatus.ACTIVE,
+          lastSeenAt: healthyAt,
+          lastHealthyAt: healthyAt,
+        },
+      });
+
+      if (result.count !== 1) {
+        return false;
+      }
+
+      await transaction.auditLog.create({
+        data: {
+          id: `aud_${randomUUID()}`,
+          tenantId: store.tenantId,
+          userId: null,
+          action: 'store.plugin_connection_healthy',
+          entityType: 'Store',
+          entityId: store.id,
+          metadata: { status: StoreStatus.ACTIVE },
+        },
+        select: { id: true },
+      });
+
+      return true;
+    });
+
+    if (!updated) {
+      throw new ServiceUnavailableException(REGISTRATION_UNAVAILABLE_MESSAGE);
+    }
+
+    return { status: StoreStatus.ACTIVE, healthy: true };
   }
 
   provisionWebhookCredentials(
@@ -245,6 +344,7 @@ export class StoreRegistrationService {
         id: true,
         tenantId: true,
         baseUrl: true,
+        status: true,
         consumerKeyEncrypted: true,
         consumerSecretEncrypted: true,
         registrationTokenHash: true,
@@ -252,6 +352,7 @@ export class StoreRegistrationService {
         registrationTokenConsumedAt: true,
         webhookSecretEncrypted: true,
         webhookEndpointKey: true,
+        lastHealthyAt: true,
       },
     });
 
@@ -303,8 +404,10 @@ export class StoreRegistrationService {
         pluginRegisteredAt: finalizedAt,
         registrationTokenConsumedAt: finalizedAt,
         lastSeenAt: finalizedAt,
-        lastHealthyAt: finalizedAt,
-        status: StoreStatus.ACTIVE,
+        status:
+          store.status === StoreStatus.ACTIVE && store.lastHealthyAt
+            ? StoreStatus.ACTIVE
+            : StoreStatus.PENDING,
         ...(webhookCredentials
           ? {
               webhookSecretEncrypted: this.encryption.encrypt(
@@ -328,7 +431,12 @@ export class StoreRegistrationService {
         action: 'store.plugin_registered',
         entityType: 'Store',
         entityId: store.id,
-        metadata: { status: StoreStatus.ACTIVE },
+        metadata: {
+          status:
+            store.status === StoreStatus.ACTIVE && store.lastHealthyAt
+              ? StoreStatus.ACTIVE
+              : StoreStatus.PENDING,
+        },
       },
       select: { id: true },
     });
