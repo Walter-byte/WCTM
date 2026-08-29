@@ -332,8 +332,18 @@ WordPress environment:
    the WordPress installation's `wp-content/plugins/wc-telegram-connector/`
    directory.
 2. Install and activate WooCommerce.
-3. Configure `WC_TELEGRAM_CONNECTOR_API_BASE_URL` as the public WCTM HTTPS
-   origin in the connector build or `wp-config.php`.
+3. Configure `WC_TELEGRAM_CONNECTOR_API_BASE_URL` as the connector's public
+   WCTM HTTPS origin in the connector build or `wp-config.php`. The value must
+   be an HTTPS origin with no credentials, query, or fragment. Production
+   currently uses:
+
+   ```php
+   define(
+       'WC_TELEGRAM_CONNECTOR_API_BASE_URL',
+       'https://connector.wctm.walterbyte.com'
+   );
+   ```
+
 4. Run `php -l wc-telegram-connector.php`, then activate **WC Telegram
    Connector** from the Plugins screen.
 5. Complete account, Tenant, and Store creation at `/onboarding`, issue one M7
@@ -347,6 +357,17 @@ verifies the four required order webhooks, and then confirms backend health.
 M7 registration promotes the Store from `PENDING` to `ACTIVE`, but M10
 link-token issuance remains forbidden until connector confirmation succeeds and
 backend verification records healthy webhook evidence.
+
+The production connector hostname is DNS-only because some Iran-hosted
+WooCommerce environments cannot reach the Cloudflare-proxied public application
+hostname. Browser onboarding can remain at `https://wctm.walterbyte.com`; this
+is an operational network constraint and does not change the M7 registration or
+M8 endpoint-key plus HMAC architecture. Do not place a token, credential,
+secret, or other sensitive value in the hostname or this constant.
+
+`https://connector.wctm.walterbyte.com` reaches the existing backend through
+Caddy. Direct-origin connector routing does not publish PostgreSQL or Redis and
+does not expose any additional backend, database, cache, or bot ports.
 
 ## Common Commands
 

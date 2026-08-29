@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
+const { spawnSync } = require('node:child_process');
 const { test } = require('node:test');
 
 const plugin = readFileSync(
@@ -45,6 +46,13 @@ test('connector installs and verifies every required order webhook before health
   assert.match(plugin, /set_status\('active'\)/);
   assert.match(plugin, /set_delivery_url\(\$delivery_url\)/);
   assert.match(plugin, /set_secret\(\$secret\)/);
+  assert.match(plugin, /WC_Data_Store::load\('webhook'\)/);
+  assert.match(plugin, /get_webhooks_ids\(\)/);
+  assert.match(plugin, /wc_get_webhook\(\$webhook_id\)/);
+  assert.doesNotMatch(plugin, /wc_get_webhooks\(/);
+  assert.match(plugin, /get_name\(\) === \$name/);
+  assert.match(plugin, /\$saved_webhook = wc_get_webhook\(\$webhook_id\)/);
+  assert.match(plugin, /hash_equals\(\$secret, \$data\['secret'\]\)/);
   assert.match(
     plugin,
     /required_webhooks_are_healthy\(\) && wc_telegram_connector_confirm_health\(\)/
@@ -52,6 +60,32 @@ test('connector installs and verifies every required order webhook before health
   assert.match(plugin, /\/api\/plugin\/connection-health/);
   assert.match(plugin, /X-WCTM-Plugin-Credential/);
 });
+
+test('connector declares a private Update URI without implementing an updater', () => {
+  assert.match(
+    plugin,
+    /\* Update URI: https:\/\/wctm\.walterbyte\.com\/plugins\/wc-telegram-connector\//
+  );
+  assert.doesNotMatch(plugin, /pre_set_site_transient_update_plugins/);
+  assert.doesNotMatch(plugin, /plugins_api/);
+});
+
+const php = spawnSync('php', ['-v'], { encoding: 'utf8' });
+test(
+  'retry reconciles old-host hooks in place and restores the persisted M8 secret',
+  {
+    skip: php.error || php.status !== 0 ? 'PHP runtime is unavailable' : false,
+  },
+  () => {
+    const result = spawnSync(
+      'php',
+      [join(__dirname, 'fixtures/wordpress-plugin-reconciliation.php')],
+      { encoding: 'utf8' }
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /^PASS\s*$/);
+  }
+);
 
 test('connector keeps secrets out of navigation URLs and provides new-token reconnect guidance', () => {
   assert.doesNotMatch(
