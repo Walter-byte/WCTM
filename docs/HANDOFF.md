@@ -2,7 +2,7 @@
 
 **Generated:** 2026-07-19
 
-**Updated:** 2026-08-29
+**Updated:** 2026-08-30
 
 **Reason:** Transitioning implementation agent from GapCode to Codex GPT
 
@@ -494,7 +494,7 @@ Migration: `20260723120000_woocommerce_webhook_ingestion`.
 - No Telegram behavior, outbound WooCommerce write, related domain model, bulk
   sync, polling, historical import, replay surface, or metrics platform is added
 
-### Phase 4 — Telegram Platform (active)
+### Phase 4 — Telegram Platform (complete)
 
 #### M10 — Telegram Account Linking & Private-Chat Authorization (complete)
 
@@ -622,8 +622,8 @@ Bot transport:
   for the manually created synthetic order and Telegram order-flow visibility.
 - D-022 is Accepted. M12-V has no reset, force, overwrite, data deletion,
   public onboarding, plugin UI, billing, or Phase 5 scope.
-- M12-V is merged to `main`. Phase 4 remains In Progress pending A/B closure
-  review, not a new implementation milestone.
+- M12-V is merged to `main`; its evidence remains bounded by D-022 and does not
+  replace the public M16 onboarding path.
 
 #### M13 — Order Event Notifications (complete and merged)
 
@@ -650,9 +650,8 @@ Bot transport:
 - New configuration: `BOT_INTERNAL_URL`, `BOT_INTERNAL_PORT`, and
   `BOT_DELIVERY_TIMEOUT_MS`. D-023 is Accepted.
 - Automated backend, bot, M8-M12 regression, build, type, lint, formatting,
-  Prisma validation/generation, and migration-structure tests pass. The local
-  Docker daemon was unavailable, so an isolated PostgreSQL migration apply and
-  one deployed synthetic-order delivery remain manual validation steps.
+  Prisma validation/generation, and migration-structure tests pass. A deployed
+  synthetic M13 notification-delivery result is still not recorded as PASS.
 
 #### M14 — Practical Telegram Management UX (complete and merged)
 
@@ -708,10 +707,10 @@ Bot transport:
 - The backend Dockerfile installs `python3`, `make`, and `g++` as a temporary
   Alpine virtual package in both `npm ci` stages, then removes them. A clean
   no-cache backend image build succeeds, the runtime image executes Argon2id,
-  and Python/compiler tools are absent. Rebuild on the VPS before resuming the
-  migration collision audit/apply/status gate.
+  and Python/compiler tools are absent. Public register/login passed in the
+  deployed M16 fresh-merchant validation.
 
-#### M16 — Self-Service Store Onboarding (implemented)
+#### M16 — Self-Service Store Onboarding (complete, merged, and live-validated)
 
 - `POST /api/auth/tenant-context` is JWT-authenticated and tenant-optional. It
   reads only the signed subject, returns a safe M3-bootstrap requirement for
@@ -724,7 +723,7 @@ Bot transport:
   logs. Progress is derived from existing Tenant, Store, registration, status,
   and connection-health records.
 - The authoritative fresh M7 success response used by the connector is
-  `{ pluginCredential, storeId, webhookSecret, webhookEndpointKey }`. The
+  `{ pluginCredential, storeId, webhookSecret?, webhookEndpointKey? }`. The
   webhook fields remain conditional and appear only when M7 provisions missing
   M8 material; existing webhook secrets are never re-exposed.
 - Fresh M7 finalization preserves the established transition from `PENDING` to
@@ -739,40 +738,36 @@ Bot transport:
   exact HTTPS endpoint-key path. It requires an already-`ACTIVE` Store and does
   not own the lifecycle transition. Retry and newly issued M7-token
   reconnect guidance never renders persisted secrets.
+- WordPress connector 0.2.2 uses the approved direct connector HTTPS origin for
+  restricted/Iran-hosted networks. It fixes WooCommerce's proxied
+  `WC_Data_Store` loader path, safely reconciles duplicate connector-owned
+  canonical hooks, restores the persisted M8 secret, and makes Retry
+  idempotent.
 - M10 link-token issuance now denies direct API requests unless current backend
   state resolves exactly one active Membership and exactly one ACTIVE/healthy
-  Store with webhook material. M10 redemption and M11–M14 management semantics
-  remain unchanged.
+  Store with webhook material. Redemption revalidates eligibility and allows an
+  explicitly unlinked stale pilot Telegram identity to bind to the new User;
+  active identity conflicts and token replay remain rejected.
 - M16 adds no schema, migration, dependency, onboarding state, dashboard,
   selection/switching, billing, or order behavior. Automated gates pass with
-  258 backend tests and 32 bot tests. Host PHP and Docker are unavailable, so
-  native PHP/WordPress validation remains in the controlled checklist below.
+  262 backend tests and 32 bot tests.
 
-Controlled A/B validation checklist (run once after automated review):
+Final closure evidence:
 
-1. On an isolated migrated database and disposable WooCommerce Store, run
-   `php -l` on the connector and configure its public WCTM HTTPS origin.
-2. Open `/onboarding`; register, create the first Tenant, and confirm the
-   browser receives a legitimate tenant-context token without operator JWT or
-   SQL work.
-3. Submit one disposable WooCommerce REST key pair; verify invalid credentials
-   create no Store, then valid credentials create one `PENDING` Store.
-4. Issue one M7 token, paste it into WooCommerce → WCTM Connector, and confirm
-   the Store transitions from `PENDING` to `ACTIVE`, no secret is displayed
-   after submission, and sensitive WordPress options have autoload disabled.
-5. Confirm exactly four active order webhooks use the public
-   `/api/webhooks/woocommerce/<endpointKey>` destination and that backend
-   connection health remains `ACTIVE`, registered, and becomes healthy only
-   afterward.
-6. Before connector completion, verify a direct M10 link-token request returns
-   403; afterward issue the link command, redeem it once in a private Telegram
-   chat, and open Home → Recent Orders → an Order → unchanged status UX.
-7. Replay the consumed M7 token and confirm generic failure with no credential
-   rotation; issue a new token only for the connector reconnect exercise.
-8. Review browser history/network URLs, WordPress HTML/notices, Caddy/backend
-   logs, and WooCommerce diagnostics for absence of JWTs, WC credentials, M7
-   tokens, plugin credentials, and webhook secrets. Perform no repeated real-
-   store mutation and use no real customer or payment data.
+- B returned MERGE and A completed the fresh-merchant live validation with PASS
+- Public register/login, M3 Tenant/OWNER bootstrap, tenant-context JWT, Store
+  validation, M7 registration, Store activation, and independent connector
+  health passed
+- Exactly four current connector-owned order hooks remained after obsolete
+  private-pilot hooks were removed; Retry recovery and duplicate reconciliation
+  passed
+- A real signed M8 `order.created` delivery was accepted with HTTP 200
+- Fresh M10 linking, `/status`, `/orders`, order detail, Back/Home navigation,
+  and one-time token replay rejection passed
+- Merge commit `9e831a9` is deployed on the VPS and `/api/health` passed
+
+Phase 4 is complete. Its exit criterion is met through the implemented MVP
+order-management path. This does not complete or narrow the full MVP.
 
 ---
 
@@ -783,26 +778,23 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current implementation branch: `feat/m16-self-service-store-onboarding`.
+Current branch: `main` at M16 merge commit `9e831a9`.
 
 ---
 
 ## 6. Current Blockers
 
-No M16 code or automated-test blocker remains. This workspace has no PHP
-runtime and its Docker daemon is unavailable, so native connector syntax and
-the controlled WordPress/WooCommerce ceremony remain manual. M15 isolated VPS
-migration verification, the bounded M14 manual pass, and the deployed M13
-synthetic-notification check remain separate.
+No Phase 4 or M16 blocker remains. A deployed M13 synthetic new-order
+notification-delivery result is still not recorded as PASS. Existing known
+issues and technical debt remain unchanged.
 
 ---
 
 ## 7. Current Task
 
-M16 implementation and automated gates are complete on
-`feat/m16-self-service-store-onboarding`. Review the diff and run the single
-controlled onboarding checklist above. Do not begin any later milestone
-without A approval.
+No implementation task is active. Phase 5 — Core Store Management (MVP) is the
+next planned phase with the original full-MVP scope intact. Do not begin Phase
+5 without an approved task.
 
 ---
 

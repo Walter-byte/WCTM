@@ -253,9 +253,9 @@ bounded M6 order fetch, and stalled or failed processing remains recoverable and
 diagnosable within the existing operations queue.
 
 Phase 3 closed on 2026-07-23 with M6–M9 complete and its exit criterion
-satisfied. No next milestone is assigned.
+satisfied. Phase 4 followed and is now complete.
 
-## Phase 4 — Telegram Platform 🚧 In Progress
+## Phase 4 — Telegram Platform ✅ Complete
 
 - Manager registration, chat authorization, commands, inline keyboards, and
   callback handling
@@ -367,7 +367,7 @@ satisfied. No next milestone is assigned.
 - M3 remains the sole first-Tenant and atomic OWNER bootstrap
 - Migration `20260828120000_public_account_authentication`
 
-### M16 — Self-Service Store Onboarding ✅ Implemented / Awaiting Review
+### M16 — Self-Service Store Onboarding ✅ Complete / Merged / Live-Validated
 
 - Exact-one active Membership bridge issues the existing tenant-context JWT;
   zero Memberships require M3 bootstrap and multiple Memberships fail safely
@@ -381,17 +381,28 @@ satisfied. No next milestone is assigned.
   without owning the lifecycle transition
 - M10 token issuance is backend-denied until exact-one Tenant and exact-one
   ACTIVE/healthy Store eligibility is established
+- WordPress connector 0.2.2 uses the approved direct connector HTTPS origin for
+  restricted/Iran-hosted networks, supports WooCommerce's proxied
+  `WC_Data_Store`, reconciles duplicate canonical hooks, restores the persisted
+  M8 secret, and keeps Retry idempotent
+- A verified that exactly four current connector-owned order hooks remained
+  after obsolete private-pilot hooks were removed; real signed M8
+  `order.created` delivery was accepted with HTTP 200
+- The stale pilot Telegram identity conflict was fixed; fresh M10 linking,
+  `/status`, `/orders`, order detail, Back/Home, and replay rejection passed
 - No onboarding persistence, general dashboard, selection/switching, billing,
   new order behavior, or later milestone scope
 
-Phase 4 remains In Progress. M14 and M15 are merged/closed. M16 is implemented
-on `feat/m16-self-service-store-onboarding` with automated gates passing and
-awaits A/B review plus one controlled fresh-merchant onboarding validation.
-The pending M13 deployment validation remains separate.
+Phase 4 closed on 2026-08-30. B returned MERGE, A live validation passed, and
+M16 was merged to `main` in `9e831a9`, deployed to the VPS, and smoke-tested
+through `/api/health`. The separate M13 deployed synthetic-notification check
+is not recorded as PASS by this validation.
 
 ## Phase 5 — Core Store Management (MVP) ⬜ Planned
 
 - Orders, inventory, customers, payments, reports, and notifications
+- The original full MVP scope remains unchanged; Phase 4 closure does not mark
+  the full MVP complete
 
 ## Phase 6 — SaaS Platform ⬜ Planned
 

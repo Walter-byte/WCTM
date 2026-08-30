@@ -6,21 +6,20 @@ Version: 1.0
 
 Current Phase
 
-Phase 4 — Telegram Platform remains In Progress. M14 Practical Telegram
-Management UX and M15 Public Account Authentication Foundation are merged and
-closed on `main`. M16 Self-Service Store Onboarding is implemented on
-`feat/m16-self-service-store-onboarding` and awaits A/B review plus one
-controlled end-to-end validation. M12 real-store validation remains complete to
-the extent recorded in
+Phase 4 — Telegram Platform is complete. M16 Self-Service Store Onboarding was
+reviewed by B with MERGE, live-validated by A, merged to `main` in `9e831a9`,
+deployed to the VPS, and production smoke-tested. No implementation milestone
+is active. Phase 5 — Core Store Management (MVP) is the next planned phase; its
+original full-MVP scope remains unchanged. M12 real-store validation remains
+complete to the extent recorded in
 `docs/validation/M12_REAL_STORE_VALIDATION.md`.
 
 ---
 
 Current Task
 
-M16 implementation, connector work, automated coverage, and repository gates
-are complete. Run the one controlled fresh-merchant onboarding validation after
-A/B automated review. Do not begin a later milestone without approval.
+No implementation task is active. M16 and Phase 4 are closed. Phase 5 product
+code requires a separately approved implementation task.
 
 ---
 
@@ -32,7 +31,9 @@ Project Version
 
 Repository
 
-Initialized on branch main.
+Current branch: `main`.
+
+M16 merge commit: `9e831a9 merge: complete M16 self-service store onboarding`.
 
 ---
 
@@ -190,7 +191,7 @@ lease recovery, reconciliation, and verified delete/restore boundaries.
 
 Plugin
 
-The WooCommerce connector now exposes a minimal WooCommerce admin page that
+WordPress connector 0.2.2 exposes a minimal WooCommerce admin page that
 accepts exactly one M7 token. It derives Store identity only from the M7
 response, stores required connector/webhook material with WordPress autoload
 disabled, never re-renders secrets, creates or updates the four required order
@@ -198,6 +199,13 @@ webhooks, verifies their active topic/destination state, and calls the
 plugin-credential-authenticated connection-health operation. Safe retry and
 new-token reconnect guidance are included; no SaaS credentials, tenant/Store
 selection, order logic, or business policy is present.
+
+The final connector corrects WooCommerce's proxied `WC_Data_Store` webhook
+loader behavior, safely reconciles duplicate connector-owned canonical hooks,
+restores the persisted M8 secret during Retry, and keeps Retry idempotent. A
+dedicated direct HTTPS connector origin supports restricted/Iran-hosted network
+conditions without changing the browser onboarding origin or exposing new
+services.
 
 ---
 
@@ -384,7 +392,8 @@ pass. The backend Dockerfile installs `python3`, `make`, and `g++` as a temporar
 Alpine virtual package in both dependency-install stages, removes the package
 after `npm ci`, and retains a working Argon2id addon without Python or compiler
 tools in the runtime image. A clean no-cache image build and runtime Argon2id
-verification pass. VPS migration apply/status remains pending.
+verification pass. The deployed M16 fresh-merchant validation exercised public
+registration/login successfully on the VPS.
 
 M16 adds authenticated `POST /api/auth/tenant-context`. It accepts no Tenant or
 Store identity and derives the JWT subject from the authenticated request.
@@ -412,15 +421,26 @@ Store activation.
 
 M10 link-token issuance now re-resolves exact-one active Membership and
 exact-one `ACTIVE` Store with webhook credentials and a healthy timestamp.
-Ineligible direct API calls fail before token persistence; M10 redemption and
-the M11–M14 experience remain unchanged. M12-V remains functional by recording
-its already-verified pilot Store health when it activates that Store.
+Ineligible direct API calls fail before token persistence. Redemption now also
+revalidates that eligibility and permits only an explicitly unlinked stale
+pilot Telegram identity to bind to the new self-service User; active identity
+conflicts, expired tokens, malformed tokens, and replay remain rejected. M12-V
+remains functional by recording its already-verified pilot Store health when it
+activates that Store.
 
-M16 adds no schema migration or dependency. Backend tests now pass at 258 and
+M16 adds no schema migration or dependency. Backend tests pass at 262 and
 bot tests remain at 32. Build, typecheck, lint, formatting, Prisma
-validate/generate, connector contract checks, and diff checks pass. Native PHP
-syntax/runtime validation remains part of the controlled WordPress validation
-because PHP and Docker are unavailable in the current workspace.
+validate/generate, connector contract checks, and diff checks pass.
+
+Final A validation passed the complete fresh-merchant onboarding path through
+public account creation, M3 Tenant/OWNER bootstrap, Store validation, M7
+registration, Store activation, independent connector health, and exactly four
+canonical order webhooks. Retry recovery and duplicate reconciliation passed;
+old private-pilot hooks were removed. A real signed M8 `order.created` delivery
+was accepted with HTTP 200. Fresh M10 linking, `/status`, `/orders`, order
+detail, Back/Home navigation, and one-time token replay rejection all passed.
+B returned MERGE. The merged `main` revision was deployed and `/api/health`
+passed its production smoke test.
 
 ---
 
@@ -459,7 +479,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-feat/m16-self-service-store-onboarding
+main
 
 ---
 
@@ -491,25 +511,25 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No M16 implementation or automated-test blocker remains. The current workspace
-has neither a PHP runtime nor an available Docker daemon, so native `php -l` and
-the controlled WordPress/WooCommerce ceremony remain manual. Existing M15 VPS
-migration apply/status, bounded M14 Telegram UX, and M13 deployed synthetic-
-notification checks remain separate deployment validation items.
+No Phase 4 or M16 blocker remains. The deployed M13 synthetic new-order
+notification delivery check is still not recorded as PASS and remains a
+separate validation item. Existing known issues and technical debt remain open
+as documented above.
 
 ---
 
 Next Milestone
 
-No later product milestone is assigned. Review M16 and run its one controlled
-fresh-merchant onboarding validation; do not begin later work without approval.
+Phase 5 — Core Store Management (MVP) is next in the existing roadmap. No Phase
+5 implementation task is active; do not begin it without approval.
 
 ---
 
 Last Completed
 
-M16 Self-Service Store Onboarding implementation and automated regression
-gates. A/B review and one controlled end-to-end validation remain.
+M16 Self-Service Store Onboarding and Phase 4 — Telegram Platform. B returned
+MERGE; A live validation passed; merge commit `9e831a9` is deployed and
+production smoke-tested.
 
 ---
 
@@ -521,4 +541,4 @@ Excellent
 
 Last Updated
 
-2026-08-29
+2026-08-30

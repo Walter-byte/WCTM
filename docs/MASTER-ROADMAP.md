@@ -110,12 +110,12 @@ processing leases, and bounded single-order reconciliation.
 ## Phase 4 — Telegram Platform
 
 Status:
-🚧 In Progress
+✅ Complete
 
-Current Milestone:
+Final Milestone:
 
-M16 Self-Service Store Onboarding (implemented; awaiting A/B review and one
-controlled end-to-end validation)
+M16 Self-Service Store Onboarding — complete, reviewed, merged, deployed, and
+live-validated
 
 Deliverables
 
@@ -217,22 +217,34 @@ M16 scope:
 - No onboarding-state model, dashboard, Store/Tenant switching, billing, or
   later management behavior
 
-M12 through M15 are complete and merged to `main`; D-023 is Accepted. M16 is
-implemented on `feat/m16-self-service-store-onboarding` with automated gates
-passing and awaits A/B review plus one controlled end-to-end onboarding
-validation. Phase 4 remains In Progress.
+M16 completion evidence:
+
+- WordPress connector 0.2.2 supports the direct connector HTTPS origin needed
+  by restricted/Iran-hosted networks, corrects the proxied `WC_Data_Store`
+  loader defect, safely reconciles duplicate canonical hooks, restores the
+  persisted M8 secret, and keeps Retry idempotent
+- A verified that exactly four current connector-owned order hooks remained
+  after obsolete private-pilot hooks were removed; a real signed M8
+  `order.created` delivery returned HTTP 200
+- The stale pilot Telegram identity conflict was corrected; fresh M10 linking,
+  `/status`, `/orders`, order detail, Back/Home, and replay rejection passed
+- B returned MERGE; A live validation passed; merge commit `9e831a9` is on
+  `main`, deployed to the VPS, and `/api/health` passed
+
+M10 through M16 are complete and merged to `main`; D-023 remains Accepted. No
+new architectural or product decision was required for Phase 4 closure.
 
 Next operator action:
 
-- Review M16 and run the controlled fresh-merchant onboarding checklist
-- Retain the pending M13 deployment checks: apply migration
-  `20260820090000_order_event_notifications`, configure the private bot
-  transport, and validate one synthetic notification delivery without repeated
-  real-store testing
+- Await an approved Phase 5 implementation task; do not start Phase 5 from this
+  documentation closure
+- Retain the separate M13 deployed synthetic-notification validation item; it
+  is not promoted to PASS by the M16 onboarding evidence
 
 Exit Criteria
 
-Manager controls store from Telegram.
+✅ Met on 2026-08-30: the manager can control the Store from Telegram through
+the implemented MVP order-management path.
 
 ---
 
