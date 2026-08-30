@@ -54,7 +54,7 @@ export class TelegramLinkingService {
     payload: JwtPayload | undefined
   ): Promise<TelegramLinkTokenResult> {
     const userId = this.authenticatedUserId(payload);
-    await this.assertLinkingEligible(userId);
+    await this.assertLinkingEligible(this.prisma, userId);
     const token = `tgl_${randomBytes(32).toString('base64url')}`;
     const expiresAt = new Date(
       Date.now() + this.configuration.telegram.linkTokenTtlSeconds * 1000
@@ -235,9 +235,16 @@ export class TelegramLinkingService {
       accountByTelegramUser &&
       accountBySaasUser &&
       accountByTelegramUser.id !== accountBySaasUser.id;
+    // Unlink revokes every chat first; only that explicit state may release the
+    // Telegram identity for a different SaaS User.
+    const canReassignUnlinkedTelegramIdentity =
+      accountByTelegramUser !== null &&
+      accountByTelegramUser.deletedAt !== null &&
+      accountBySaasUser === null;
     const telegramIdentityConflict =
       accountByTelegramUser !== null &&
-      accountByTelegramUser.userId !== token.userId;
+      accountByTelegramUser.userId !== token.userId &&
+      !canReassignUnlinkedTelegramIdentity;
     const saasIdentityConflict =
       accountBySaasUser !== null &&
       accountBySaasUser.telegramUserId !== telegramUserId;
@@ -280,6 +287,12 @@ export class TelegramLinkingService {
       return INVALID_TOKEN_RESULT;
     }
 
+    const context = await this.resolveContext(transaction, token.userId);
+
+    if (!context.activeTenantId || !context.activeStoreId) {
+      return INVALID_TOKEN_RESULT;
+    }
+
     const existingChat = await transaction.telegramChatAuthorization.findUnique(
       {
         where: { telegramChatId },
@@ -312,6 +325,7 @@ export class TelegramLinkingService {
           where: { id: existingAccount.id },
           data: {
             telegramUserId,
+            userId: token.userId,
             deletedAt: null,
             lastRedeemUpdateId: updateId,
           },
@@ -326,8 +340,6 @@ export class TelegramLinkingService {
           },
           select: { id: true },
         });
-    const context = await this.resolveContext(transaction, token.userId);
-
     if (existingChat) {
       await transaction.telegramChatAuthorization.update({
         where: { telegramChatId },
@@ -395,7 +407,7 @@ export class TelegramLinkingService {
       stores[0]!.webhookEndpointKey !== null;
     const contextResolved = hasOneTenant && hasOneStore;
     const tenantSelectionRequired = memberships.length !== 1;
-    const storeSelectionRequired = hasOneTenant && stores.length !== 1;
+    const storeSelectionRequired = hasOneTenant && !hasOneStore;
 
     return {
       linked: true,
@@ -409,45 +421,19 @@ export class TelegramLinkingService {
     };
   }
 
-  private async assertLinkingEligible(userId: string): Promise<void> {
-    const memberships = await this.prisma.membership.findMany({
-      where: {
-        userId,
-        deletedAt: null,
-        tenant: { deletedAt: null },
-      },
-      select: { tenantId: true },
-      take: 2,
-    });
+  private async assertLinkingEligible(
+    transaction: Prisma.TransactionClient | PrismaService,
+    userId: string
+  ): Promise<void> {
+    const context = await this.resolveContext(transaction, userId);
 
-    if (memberships.length !== 1) {
+    if (context.tenantSelectionRequired) {
       throw new ForbiddenException(
         'Exactly one active Tenant membership is required for Telegram linking'
       );
     }
 
-    const stores = await this.prisma.store.findMany({
-      where: {
-        tenantId: memberships[0]!.tenantId,
-        status: StoreStatus.ACTIVE,
-        deletedAt: null,
-        tenant: { deletedAt: null },
-      },
-      select: {
-        id: true,
-        lastHealthyAt: true,
-        webhookSecretEncrypted: true,
-        webhookEndpointKey: true,
-      },
-      take: 2,
-    });
-
-    if (
-      stores.length !== 1 ||
-      stores[0]!.lastHealthyAt === null ||
-      stores[0]!.webhookSecretEncrypted === null ||
-      stores[0]!.webhookEndpointKey === null
-    ) {
+    if (!context.activeStoreId) {
       throw new ForbiddenException(
         'Exactly one ACTIVE and healthy Store is required for Telegram linking'
       );
