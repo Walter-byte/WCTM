@@ -7,9 +7,8 @@ Version: 1.0
 Current Phase
 
 Phase 5 — Core Store Management (MVP) is in progress. M17 Order Workflow
-Completion is implemented, automatically tested, and documented on
-`feat/m17-order-workflow-completion`; it awaits B/A review, merge, migration
-deployment, and live WooCommerce/Telegram validation. Phase 4 and M1–M16 remain
+Completion is complete, B-reviewed with `MERGE`, merged, migrated, deployed,
+and operationally validated on the real Store. Phase 4 and M1–M16 remain
 complete and unchanged. M12 real-store validation remains complete to the
 extent recorded in `docs/validation/M12_REAL_STORE_VALIDATION.md`.
 
@@ -17,8 +16,8 @@ extent recorded in `docs/validation/M12_REAL_STORE_VALIDATION.md`.
 
 Current Task
 
-M17 Order Workflow Completion implementation is complete on its focused branch.
-Do not begin another Phase 5 milestone before review and approval.
+M17 Order Workflow Completion is fully closed. The next planned milestone is
+M18 — MVP Store Settings Foundation; do not begin M18 without an approved task.
 
 ---
 
@@ -30,7 +29,7 @@ Project Version
 
 Repository
 
-Current branch: `feat/m17-order-workflow-completion`.
+Current branch: `main`.
 
 M17 implementation commit: `feat(orders): complete MVP order workflow`.
 
@@ -483,8 +482,17 @@ Customer, Payment, Shipping, or note-history model was introduced.
 M17 automated evidence passes: Prisma validate/generate, 48 backend suites with
 292 tests, 39 Telegram bot tests, build, typecheck, lint, formatting, and diff
 checks. The full 11-migration chain, including M17, applied cleanly to an
-isolated PostgreSQL 16 database and Prisma reported the schema up to date. Live
-Telegram/WooCommerce note/refresh validation remains an explicit manual item.
+isolated PostgreSQL 16 database and Prisma reported the schema up to date.
+
+M17 received B review `MERGE`. Production migration
+`20260830120000_m17_order_workflow_completion` was successfully applied, and
+backend plus telegram-bot deployment passed. Production `/api/health` and
+`/api/health/readiness` passed. On the real Store, `/order <known-test-order>`,
+authoritative Refresh, internal WooCommerce note round-trip, and
+customer-visible WooCommerce note round-trip all passed. No additional live
+duplicate, MEMBER, cross-tenant, or ambiguous-response testing was required;
+those cases were accepted from automated/adversarial coverage. M17 operational
+validation passed and M17 is fully closed.
 
 ---
 
@@ -555,30 +563,22 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No M17 implementation blocker remains. Migration
-`20260830120000_m17_order_workflow_completion` applied cleanly with the full
-baseline chain in isolated PostgreSQL 16 and Prisma reported the schema up to
-date. One live OWNER/ADMIN internal note, one customer-visible note, duplicate
-Confirm replay, ambiguous-response fault injection where safely available,
-MEMBER denial, and one authoritative Refresh remain manual validation items.
-The deployed M13 synthetic new-order notification result is still not recorded
-as PASS.
+M17 has no blockers; all required validation is complete. The deployed M13
+synthetic new-order notification result is still not recorded as PASS.
 
 ---
 
 Next Milestone
 
-Await B/A review of M17. Do not begin another Phase 5 milestone without an
-approved task.
+M18 — MVP Store Settings Foundation is planned next. Do not begin M18 without
+an approved task.
 
 ---
 
 Last Completed
 
-M17 Order Workflow Completion implementation on
-`feat/m17-order-workflow-completion`. Review, merge, migration deployment, and
-live validation remain pending. M16 remains the last A-accepted/deployed
-milestone.
+M17 Order Workflow Completion is complete, merged, production-migrated,
+deployed, operationally validated with PASS, and fully closed.
 
 ---
 

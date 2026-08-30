@@ -404,7 +404,7 @@ is not recorded as PASS by this validation.
 - The original full MVP scope remains unchanged; Phase 4 closure does not mark
   the full MVP complete
 
-### M17 — Order Workflow Completion ✅ Implemented / Awaiting Review
+### M17 — Order Workflow Completion ✅ Complete / Merged / Operationally Validated
 
 - Exact `/order <number>` lookup against the current backend-resolved Store,
   with safe malformed, absent, ambiguous-exact, deleted, unauthorized, and
@@ -426,10 +426,18 @@ is not recorded as PASS by this validation.
   Customer/Payment/Shipping model, workflow engine, queue, or service topology
   added
 - Automated gates pass; the full migration chain applies cleanly to isolated
-  PostgreSQL 16 and Prisma reports it up to date; live WooCommerce/Telegram
-  refresh/note validation remains pending
+  PostgreSQL 16 and Prisma reports it up to date
+- B review returned `MERGE`; production migration
+  `20260830120000_m17_order_workflow_completion` applied successfully
+- Backend and telegram-bot deployment, `/api/health`, and
+  `/api/health/readiness` passed
+- Real-Store `/order <known-test-order>`, authoritative Refresh, internal note
+  round-trip, and customer-visible note round-trip passed
+- Additional live duplicate, MEMBER, cross-tenant, and ambiguous-response tests
+  were not required because automated/adversarial coverage was accepted
+- M17 operational validation passed and M17 is fully closed
 
-Do not begin another Phase 5 milestone without approval.
+Next planned milestone: M18 — MVP Store Settings Foundation. Do not begin M18.
 
 ## Phase 6 — SaaS Platform ⬜ Planned
 

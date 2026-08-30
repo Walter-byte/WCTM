@@ -771,7 +771,7 @@ order-management path. This does not complete or narrow the full MVP.
 
 ### Phase 5 — Core Store Management (MVP) (in progress)
 
-#### M17 — Order Workflow Completion (implemented; awaiting review)
+#### M17 — Order Workflow Completion (complete; fully closed)
 
 - `/order <number>` performs exact current-Store projected lookup only. The
   backend derives Telegram account, private chat, active Membership, tenant,
@@ -812,12 +812,21 @@ order-management path. This does not complete or narrow the full MVP.
 - Automated evidence: Prisma validate/generate; 48 backend suites and 292 tests;
   39 bot tests; build, typecheck, lint, format, and diff checks all pass. The
   full 11-migration chain, including M17, applies cleanly to isolated PostgreSQL
-  16 and Prisma reports the schema up to date. Live refresh/internal
-  note/customer-visible note/replay/fault validation remains manual.
+  16 and Prisma reports the schema up to date.
+- B review returned `MERGE`. Production migration
+  `20260830120000_m17_order_workflow_completion` applied successfully.
+- Backend and telegram-bot deployment passed. `/api/health` and
+  `/api/health/readiness` passed.
+- Real-Store `/order <known-test-order>`, authoritative Refresh, internal
+  WooCommerce note round-trip, and customer-visible WooCommerce note round-trip
+  passed.
+- No additional live duplicate, MEMBER, cross-tenant, or ambiguous-response
+  testing was required because automated/adversarial coverage was accepted.
+- M17 operational validation passed; M17 is fully closed.
 
 M17 adds no dependency and does not change M6, M9, M11–M16 authentication,
-status, notification, navigation, onboarding, or connector contracts. Do not
-begin another Phase 5 milestone without approval.
+status, notification, navigation, onboarding, or connector contracts. The next
+planned milestone is M18 — MVP Store Settings Foundation. Do not begin M18.
 
 ---
 
@@ -828,16 +837,13 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `feat/m17-order-workflow-completion`, based on `main` after M16
-merge commit `9e831a9`.
+Current branch: `main`.
 
 ---
 
 ## 6. Current Blockers
 
-No M17 implementation blocker remains. The full migration chain, including M17,
-applied cleanly to isolated PostgreSQL 16 and Prisma reported the schema up to
-date. Live WooCommerce/Telegram validation remains pending. A deployed M13
+M17 has no blockers; all required validation is complete. A deployed M13
 synthetic new-order notification-delivery result is still not recorded as PASS.
 Existing known issues and technical debt remain unchanged.
 
@@ -845,9 +851,8 @@ Existing known issues and technical debt remain unchanged.
 
 ## 7. Current Task
 
-M17 implementation is complete and awaits B/A review, merge, migration
-deployment, and live validation. Do not begin another Phase 5 task without
-approval.
+M17 is fully closed. M18 — MVP Store Settings Foundation is the next planned
+milestone. Do not begin M18 without an approved task.
 
 ---
 
