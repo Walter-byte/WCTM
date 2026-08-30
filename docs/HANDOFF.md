@@ -809,11 +809,11 @@ order-management path. This does not complete or narrow the full MVP.
 - Successful creation writes `telegram.order.note.created` AuditLog metadata
   containing only Store, visibility, and result. Note body and external payloads
   are absent from audit and structured logs.
-- Automated evidence: Prisma validate/generate; 48 backend suites and 286 tests;
-  38 bot tests; build, typecheck, lint, format, and diff checks all pass. Docker
-  Desktop was unavailable, so isolated PostgreSQL migration apply plus live
-  refresh/internal note/customer-visible note/replay/fault validation remain
-  explicit manual items.
+- Automated evidence: Prisma validate/generate; 48 backend suites and 292 tests;
+  39 bot tests; build, typecheck, lint, format, and diff checks all pass. The
+  full 11-migration chain, including M17, applies cleanly to isolated PostgreSQL
+  16 and Prisma reports the schema up to date. Live refresh/internal
+  note/customer-visible note/replay/fault validation remains manual.
 
 M17 adds no dependency and does not change M6, M9, M11–M16 authentication,
 status, notification, navigation, onboarding, or connector contracts. Do not
@@ -835,11 +835,11 @@ merge commit `9e831a9`.
 
 ## 6. Current Blockers
 
-No M17 implementation blocker remains. Docker Desktop was unavailable, so the
-M17 migration apply check and live WooCommerce/Telegram validation remain
-pending. A deployed M13 synthetic new-order notification-delivery result is
-still not recorded as PASS. Existing known issues and technical debt remain
-unchanged.
+No M17 implementation blocker remains. The full migration chain, including M17,
+applied cleanly to isolated PostgreSQL 16 and Prisma reported the schema up to
+date. Live WooCommerce/Telegram validation remains pending. A deployed M13
+synthetic new-order notification-delivery result is still not recorded as PASS.
+Existing known issues and technical debt remain unchanged.
 
 ---
 

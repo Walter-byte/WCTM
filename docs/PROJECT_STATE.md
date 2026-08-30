@@ -481,10 +481,10 @@ transaction IDs, phone, email, credentials, and raw WooCommerce payloads. No
 Customer, Payment, Shipping, or note-history model was introduced.
 
 M17 automated evidence passes: Prisma validate/generate, 48 backend suites with
-286 tests, 38 Telegram bot tests, build, typecheck, lint, formatting, and diff
-checks. Docker Desktop was unavailable, so isolated PostgreSQL migration apply
-and live Telegram/WooCommerce note/refresh validation remain explicit manual
-items rather than PASS.
+292 tests, 39 Telegram bot tests, build, typecheck, lint, formatting, and diff
+checks. The full 11-migration chain, including M17, applied cleanly to an
+isolated PostgreSQL 16 database and Prisma reported the schema up to date. Live
+Telegram/WooCommerce note/refresh validation remains an explicit manual item.
 
 ---
 
@@ -555,13 +555,14 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No M17 implementation blocker remains. Docker Desktop was unavailable during
-M17 verification, so migration `20260830120000_m17_order_workflow_completion`
-still requires deployment/apply verification against PostgreSQL. One live
-OWNER/ADMIN internal note, one customer-visible note, duplicate Confirm replay,
-ambiguous-response fault injection where safely available, MEMBER denial, and
-one authoritative Refresh remain manual validation items. The deployed M13
-synthetic new-order notification result is still not recorded as PASS.
+No M17 implementation blocker remains. Migration
+`20260830120000_m17_order_workflow_completion` applied cleanly with the full
+baseline chain in isolated PostgreSQL 16 and Prisma reported the schema up to
+date. One live OWNER/ADMIN internal note, one customer-visible note, duplicate
+Confirm replay, ambiguous-response fault injection where safely available,
+MEMBER denial, and one authoritative Refresh remain manual validation items.
+The deployed M13 synthetic new-order notification result is still not recorded
+as PASS.
 
 ---
 

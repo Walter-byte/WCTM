@@ -321,12 +321,54 @@ function createFixture(orderCount = 18) {
           where,
           data,
         }: {
-          where: { id: string };
+          where: {
+            id?: string;
+            purpose?: string;
+            noteClaimedAt?: null;
+            noteBodyEncrypted?: { not: null };
+            expiresAt?: { gt?: Date; lte?: Date };
+          };
           data: Partial<TestReference>;
         }) => {
-          const reference = references.find(
-            (candidate) => candidate.id === where.id
-          );
+          const reference = references.find((candidate) => {
+            if (where.id && candidate.id !== where.id) {
+              return false;
+            }
+
+            if (where.purpose && candidate.purpose !== where.purpose) {
+              return false;
+            }
+
+            if (
+              where.noteClaimedAt === null &&
+              candidate.noteClaimedAt != null
+            ) {
+              return false;
+            }
+
+            if (
+              where.noteBodyEncrypted?.not === null &&
+              candidate.noteBodyEncrypted == null
+            ) {
+              return false;
+            }
+
+            if (
+              where.expiresAt?.gt &&
+              candidate.expiresAt <= where.expiresAt.gt
+            ) {
+              return false;
+            }
+
+            if (
+              where.expiresAt?.lte &&
+              candidate.expiresAt > where.expiresAt.lte
+            ) {
+              return false;
+            }
+
+            return true;
+          });
 
           if (
             !reference ||
@@ -1304,6 +1346,24 @@ describe('M17 order lookup, refresh, context, and notes', () => {
     );
   });
 
+  it('rejects a detail reference after the active Store context changes without refreshing', async () => {
+    const fixture = createFixture(1);
+    const detailRef = await detailReference(fixture);
+    const fetchOrder = jest.spyOn(WooCommerceClient.prototype, 'fetchOrder');
+    fixture.state.activeStoreId = 'sto_changed';
+
+    await expect(
+      fixture.service.refresh({
+        telegram: fixture.identity,
+        ref: detailRef,
+      })
+    ).resolves.toMatchObject({ state: 'CONTEXT_CHANGED' });
+    expect(fetchOrder).not.toHaveBeenCalled();
+    expect(
+      fixture.projection.reconcileAuthoritativeOrder
+    ).not.toHaveBeenCalled();
+  });
+
   it('exposes minimized payment and fulfillment context without contact or transaction data', async () => {
     const fixture = createFixture(1);
     const result = await fixture.service.detail({
@@ -1324,6 +1384,26 @@ describe('M17 order lookup, refresh, context, and notes', () => {
     expect(JSON.stringify(result)).not.toMatch(
       /must-not-leak|transaction|email|phone/i
     );
+  });
+
+  it('renders migration-backfilled empty payment and shipping snapshots safely', async () => {
+    const fixture = createFixture(1);
+    fixture.orders[0]!.paymentSnapshot = {} as TestOrder['paymentSnapshot'];
+    fixture.orders[0]!.shippingLinesSnapshot = [];
+    delete fixture.orders[0]!.customerSnapshot.shipping;
+
+    const result = await fixture.service.detail({
+      telegram: fixture.identity,
+      ref: await detailReference(fixture),
+    });
+
+    expect(result).toMatchObject({
+      state: 'OK',
+      order: {
+        payment: { method: null, paid: false },
+        shipping: { methods: [], addressLines: [] },
+      },
+    });
   });
 
   it('refreshes with one logical bounded fetch and only M9 authoritative reconciliation', async () => {
@@ -1471,6 +1551,79 @@ describe('M17 order lookup, refresh, context, and notes', () => {
     expect(fixture.auditLogs).toHaveLength(0);
   });
 
+  it('allows only one note POST under simultaneous duplicate confirmation', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.OWNER;
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValue(wooPayload('processing'));
+    let releasePost!: (value: { id: number; customer_note: boolean }) => void;
+    let markDispatched!: () => void;
+    const dispatched = new Promise<void>((resolve) => {
+      markDispatched = resolve;
+    });
+    const postResult = new Promise<{ id: number; customer_note: boolean }>(
+      (resolve) => {
+        releasePost = resolve;
+      }
+    );
+    const createNote = jest
+      .spyOn(WooCommerceClient.prototype, 'createOrderNote')
+      .mockImplementation(async () => {
+        markDispatched();
+        return postResult;
+      });
+    const confirmRef = await preparedNote(
+      fixture,
+      TelegramOrderNoteVisibility.INTERNAL
+    );
+
+    const first = fixture.service.confirmNote({
+      telegram: fixture.identity,
+      ref: confirmRef,
+    });
+    await dispatched;
+    const concurrent = await fixture.service.confirmNote({
+      telegram: fixture.identity,
+      ref: confirmRef,
+    });
+    releasePost({ id: 501, customer_note: false });
+
+    await expect(first).resolves.toMatchObject({ state: 'OK' });
+    expect(concurrent).toMatchObject({ state: 'IN_PROGRESS' });
+    expect(createNote).toHaveBeenCalledTimes(1);
+    expect(fixture.noteActions).toHaveLength(1);
+    expect(fixture.auditLogs).toHaveLength(1);
+  });
+
+  it('persists a rate-limited post-dispatch result and does not retry it on replay', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.OWNER;
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValue(wooPayload('processing'));
+    const createNote = jest
+      .spyOn(WooCommerceClient.prototype, 'createOrderNote')
+      .mockRejectedValue(new WooCommerceClientError('rate-limited'));
+    const confirmRef = await preparedNote(
+      fixture,
+      TelegramOrderNoteVisibility.INTERNAL
+    );
+
+    const first = await fixture.service.confirmNote({
+      telegram: fixture.identity,
+      ref: confirmRef,
+    });
+    const replay = await fixture.service.confirmNote({
+      telegram: fixture.identity,
+      ref: confirmRef,
+    });
+
+    expect(first).toMatchObject({ state: 'RETRYABLE' });
+    expect(replay).toEqual(first);
+    expect(createNote).toHaveBeenCalledTimes(1);
+  });
+
   it('converts a stale restart-surviving note claim to AMBIGUOUS without dispatch', async () => {
     const fixture = createFixture(1);
     fixture.state.membershipRole = MembershipRole.OWNER;
@@ -1546,6 +1699,70 @@ describe('M17 order lookup, refresh, context, and notes', () => {
         note: 'Safe text',
       })
     ).resolves.toEqual({ state: 'CONTEXT_CHANGED' });
+  });
+
+  it('blocks a prepared draft immediately after authorization is revoked', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.ADMIN;
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValue(wooPayload('processing'));
+    const createNote = jest.spyOn(
+      WooCommerceClient.prototype,
+      'createOrderNote'
+    );
+    const confirmRef = await preparedNote(
+      fixture,
+      TelegramOrderNoteVisibility.CUSTOMER,
+      'این یادداشت برای مشتری است.'
+    );
+    fixture.state.chatRevoked = true;
+
+    await expect(
+      fixture.service.confirmNote({
+        telegram: fixture.identity,
+        ref: confirmRef,
+      })
+    ).resolves.toEqual({ state: 'UNAUTHORIZED' });
+    expect(createNote).not.toHaveBeenCalled();
+    expect(fixture.noteActions).toHaveLength(0);
+  });
+
+  it('binds prepared visibility server-side and rejects a switched confirmation token', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.OWNER;
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValue(wooPayload('processing'));
+    const createNote = jest
+      .spyOn(WooCommerceClient.prototype, 'createOrderNote')
+      .mockResolvedValue({ id: 501, customer_note: false });
+    const confirmRef = await preparedNote(
+      fixture,
+      TelegramOrderNoteVisibility.INTERNAL
+    );
+
+    await expect(
+      fixture.service.confirmNote({
+        telegram: fixture.identity,
+        ref: `${confirmRef}:CUSTOMER`,
+      })
+    ).resolves.toEqual({ state: 'CONTEXT_CHANGED' });
+    await expect(
+      fixture.service.confirmNote({
+        telegram: fixture.identity,
+        ref: confirmRef,
+      })
+    ).resolves.toMatchObject({
+      state: 'OK',
+      visibility: TelegramOrderNoteVisibility.INTERNAL,
+    });
+    expect(createNote).toHaveBeenCalledTimes(1);
+    expect(createNote).toHaveBeenCalledWith(
+      '1001',
+      'Pack this order carefully.',
+      false
+    );
   });
 
   it('cancels a draft without any WooCommerce mutation', async () => {

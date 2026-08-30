@@ -425,8 +425,9 @@ is not recorded as PASS by this validation.
 - Migration `20260830120000_m17_order_workflow_completion`; no dependency,
   Customer/Payment/Shipping model, workflow engine, queue, or service topology
   added
-- Automated gates pass; PostgreSQL migration apply and live WooCommerce/Telegram
-  refresh/note validation remain pending because Docker was unavailable
+- Automated gates pass; the full migration chain applies cleanly to isolated
+  PostgreSQL 16 and Prisma reports it up to date; live WooCommerce/Telegram
+  refresh/note validation remains pending
 
 Do not begin another Phase 5 milestone without approval.
 

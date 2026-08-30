@@ -262,6 +262,39 @@ test('Add Note uses backend-owned visibility, reply correlation, confirmation, a
   assert.deepEqual(callbacks(result), [DETAIL_REF, 'nav:home']);
 });
 
+test('note preview renders user Telegram markup as literal plain text', async () => {
+  const apiCalls = [];
+  const note = '*bold* _italic_ [link](https://example.test)';
+  const bot = createBot(BOT_TOKEN, {
+    backend: {
+      prepareOrderNote: async (_identity, ref, value) => ({
+        state: 'OK',
+        confirmRef: CONFIRM_REF,
+        detailRef: DETAIL_REF,
+        visibility: 'INTERNAL',
+        preview: value,
+      }),
+    },
+  });
+  installApiStub(bot, apiCalls);
+
+  await bot.handleUpdate(
+    noteReplyUpdate(
+      234,
+      note,
+      `Reply with note\n\nNote reference: ${INPUT_REF}`
+    )
+  );
+
+  const confirmation = apiCalls.find(
+    (call) =>
+      call.method === 'sendMessage' &&
+      call.payload.text.includes('Confirm Order Note')
+  );
+  assert.match(confirmation.payload.text, /Preview: \*bold\* _italic_/);
+  assert.equal(confirmation.payload.parse_mode, undefined);
+});
+
 test('MEMBER detail has no Add Note action and cancellation makes no mutation call', async () => {
   const apiCalls = [];
   let confirmCalls = 0;
