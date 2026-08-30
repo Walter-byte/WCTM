@@ -12,7 +12,7 @@ This document is the master implementation roadmap.
 
 It defines every project phase, milestone, deliverable, and current progress.
 
-Detailed implementation tasks are tracked in `../PHASE_BREAKDOWN.md`.
+Detailed implementation tasks are tracked in `PHASE_BREAKDOWN.md`.
 
 Only A (Project Owner + Architect) may modify the roadmap.
 
