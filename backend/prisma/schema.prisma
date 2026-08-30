@@ -51,8 +51,26 @@ enum TelegramCallbackPurpose {
   LIST_PAGE
   ORDER_DETAIL
   STATUS_WRITE
+  NOTE_INPUT
+  NOTE_CONFIRM
 
   @@map("telegram_callback_purpose")
+}
+
+enum TelegramOrderNoteVisibility {
+  INTERNAL
+  CUSTOMER
+
+  @@map("telegram_order_note_visibility")
+}
+
+enum TelegramOrderNoteActionState {
+  IN_FLIGHT
+  SUCCEEDED
+  FAILED
+  AMBIGUOUS
+
+  @@map("telegram_order_note_action_state")
 }
 
 enum TelegramCallbackDirection {
@@ -89,6 +107,7 @@ model Tenant {
   telegramChatAuthorizations TelegramChatAuthorization[]         @relation("TelegramActiveTenant")
   telegramCallbackReferences TelegramCallbackReference[]
   telegramOrderStatusWrites  TelegramOrderStatusWrite[]
+  telegramOrderNoteActions   TelegramOrderNoteAction[]
   telegramOrderNotifications TelegramOrderNotificationDelivery[]
 
   @@map("tenants")
@@ -152,6 +171,7 @@ model Store {
   telegramChatAuthorizations  TelegramChatAuthorization[]         @relation("TelegramActiveStore")
   telegramCallbackReferences  TelegramCallbackReference[]
   telegramOrderStatusWrites   TelegramOrderStatusWrite[]
+  telegramOrderNoteActions    TelegramOrderNoteAction[]
   telegramOrderNotifications  TelegramOrderNotificationDelivery[]
 
   @@unique([tenantId, baseUrl])
@@ -201,6 +221,8 @@ model Order {
   totals                Json                                @map("totals") @db.JsonB
   customerSnapshot      Json                                @map("customer_snapshot") @db.JsonB
   lineItemsSnapshot     Json                                @map("line_items_snapshot") @db.JsonB
+  paymentSnapshot       Json                                @map("payment_snapshot") @db.JsonB
+  shippingLinesSnapshot Json                                @map("shipping_lines_snapshot") @db.JsonB
   wcCreatedAt           DateTime                            @map("wc_created_at") @db.Timestamptz(3)
   wcModifiedAt          DateTime                            @map("wc_modified_at") @db.Timestamptz(3)
   projectionFingerprint String                              @map("projection_fingerprint") @db.VarChar(64)
@@ -249,6 +271,7 @@ model TelegramAccount {
   chatAuthorizations TelegramChatAuthorization[]
   callbackReferences TelegramCallbackReference[]
   orderStatusWrites  TelegramOrderStatusWrite[]
+  orderNoteActions   TelegramOrderNoteAction[]
   orderNotifications TelegramOrderNotificationDelivery[]
 
   @@index([userId])
@@ -291,33 +314,65 @@ model TelegramLinkToken {
 }
 
 model TelegramCallbackReference {
-  id                    String                     @id @map("id") @db.VarChar(64)
-  telegramAccountId     String                     @map("telegram_account_id") @db.VarChar(64)
-  telegramChatId        BigInt                     @map("telegram_chat_id")
-  tenantId              String                     @map("tenant_id") @db.VarChar(64)
-  storeId               String                     @map("store_id") @db.VarChar(64)
-  purpose               TelegramCallbackPurpose    @map("purpose")
-  direction             TelegramCallbackDirection? @map("direction")
-  boundaryWcCreatedAt   DateTime?                  @map("boundary_wc_created_at") @db.Timestamptz(3)
-  boundaryWcOrderId     String?                    @map("boundary_wc_order_id") @db.VarChar(32)
-  targetWcOrderId       String?                    @map("target_wc_order_id") @db.VarChar(32)
-  reachableOffset       Int?                       @map("reachable_offset")
-  backReferenceId       String?                    @map("back_reference_id") @db.VarChar(64)
-  allowedTargetStatuses String[]                   @default([]) @map("allowed_target_statuses")
-  claimedTargetStatus   String?                    @map("claimed_target_status") @db.VarChar(64)
-  expiresAt             DateTime                   @map("expires_at") @db.Timestamptz(3)
-  createdAt             DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt             DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
-  telegramAccount       TelegramAccount            @relation(fields: [telegramAccountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  tenant                Tenant                     @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  store                 Store                      @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  statusWrites          TelegramOrderStatusWrite[]
+  id                     String                       @id @map("id") @db.VarChar(64)
+  telegramAccountId      String                       @map("telegram_account_id") @db.VarChar(64)
+  telegramChatId         BigInt                       @map("telegram_chat_id")
+  tenantId               String                       @map("tenant_id") @db.VarChar(64)
+  storeId                String                       @map("store_id") @db.VarChar(64)
+  purpose                TelegramCallbackPurpose      @map("purpose")
+  direction              TelegramCallbackDirection?   @map("direction")
+  boundaryWcCreatedAt    DateTime?                    @map("boundary_wc_created_at") @db.Timestamptz(3)
+  boundaryWcOrderId      String?                      @map("boundary_wc_order_id") @db.VarChar(32)
+  targetWcOrderId        String?                      @map("target_wc_order_id") @db.VarChar(32)
+  reachableOffset        Int?                         @map("reachable_offset")
+  backReferenceId        String?                      @map("back_reference_id") @db.VarChar(64)
+  allowedTargetStatuses  String[]                     @default([]) @map("allowed_target_statuses")
+  claimedTargetStatus    String?                      @map("claimed_target_status") @db.VarChar(64)
+  noteVisibility         TelegramOrderNoteVisibility? @map("note_visibility")
+  noteBodyEncrypted      String?                      @map("note_body_encrypted") @db.Text
+  noteContentFingerprint String?                      @map("note_content_fingerprint") @db.VarChar(64)
+  noteClaimedAt          DateTime?                    @map("note_claimed_at") @db.Timestamptz(3)
+  expiresAt              DateTime                     @map("expires_at") @db.Timestamptz(3)
+  createdAt              DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  telegramAccount        TelegramAccount              @relation(fields: [telegramAccountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  tenant                 Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  store                  Store                        @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  statusWrites           TelegramOrderStatusWrite[]
+  noteActions            TelegramOrderNoteAction[]
 
   @@index([telegramAccountId])
   @@index([telegramChatId])
   @@index([tenantId, storeId])
   @@index([expiresAt])
   @@map("telegram_callback_references")
+}
+
+model TelegramOrderNoteAction {
+  id                  String                       @id @map("id") @db.VarChar(64)
+  callbackReferenceId String                       @unique @map("callback_reference_id") @db.VarChar(64)
+  telegramAccountId   String                       @map("telegram_account_id") @db.VarChar(64)
+  tenantId            String                       @map("tenant_id") @db.VarChar(64)
+  storeId             String                       @map("store_id") @db.VarChar(64)
+  wcOrderId           String                       @map("wc_order_id") @db.VarChar(32)
+  visibility          TelegramOrderNoteVisibility  @map("visibility")
+  contentFingerprint  String                       @map("content_fingerprint") @db.VarChar(64)
+  state               TelegramOrderNoteActionState @default(IN_FLIGHT) @map("state")
+  result              Json?                        @map("result") @db.JsonB
+  startedAt           DateTime                     @default(now()) @map("started_at") @db.Timestamptz(3)
+  completedAt         DateTime?                    @map("completed_at") @db.Timestamptz(3)
+  createdAt           DateTime                     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  callbackReference   TelegramCallbackReference    @relation(fields: [callbackReferenceId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  telegramAccount     TelegramAccount              @relation(fields: [telegramAccountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  tenant              Tenant                       @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  store               Store                        @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([telegramAccountId])
+  @@index([tenantId, storeId])
+  @@index([storeId, wcOrderId])
+  @@index([state])
+  @@map("telegram_order_note_actions")
 }
 
 model TelegramOrderStatusWrite {

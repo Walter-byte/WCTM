@@ -189,6 +189,46 @@ describe('WooCommerceClient', () => {
     );
   });
 
+  it.each<[string, boolean]>([
+    ['internal', false],
+    ['customer-visible', true],
+  ])(
+    'dispatches one %s note write without automatic retry',
+    async (_label, customerNote) => {
+      const payload = { id: 501, customer_note: customerNote };
+      const request = jest
+        .spyOn(axios, 'post')
+        .mockResolvedValue({ data: payload });
+
+      await expect(
+        client().createOrderNote('101', 'Plain note text', customerNote)
+      ).resolves.toEqual(payload);
+      expect(request).toHaveBeenCalledTimes(1);
+      expect(request).toHaveBeenCalledWith(
+        'https://shop.example/wp-json/wc/v3/orders/101/notes',
+        { note: 'Plain note text', customer_note: customerNote },
+        expect.objectContaining({
+          timeout: 5000,
+          auth: {
+            username: 'ck_sensitive_value',
+            password: 'cs_sensitive_value',
+          },
+        })
+      );
+    }
+  );
+
+  it('does not retry an ambiguous note POST failure', async () => {
+    const request = jest
+      .spyOn(axios, 'post')
+      .mockRejectedValue(axiosFailure({ status: 500 }));
+
+    await expect(
+      client().createOrderNote('101', 'Plain note text', false)
+    ).rejects.toMatchObject({ category: 'transport' });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
   it('creates the four required order webhooks and verifies their public destination', async () => {
     const deliveryUrl =
       'https://pilot.example/api/webhooks/woocommerce/whk_endpoint';

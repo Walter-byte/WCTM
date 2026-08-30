@@ -6,20 +6,19 @@ Version: 1.0
 
 Current Phase
 
-Phase 4 — Telegram Platform is complete. M16 Self-Service Store Onboarding was
-reviewed by B with MERGE, live-validated by A, merged to `main` in `9e831a9`,
-deployed to the VPS, and production smoke-tested. No implementation milestone
-is active. Phase 5 — Core Store Management (MVP) is the next planned phase; its
-original full-MVP scope remains unchanged. M12 real-store validation remains
-complete to the extent recorded in
-`docs/validation/M12_REAL_STORE_VALIDATION.md`.
+Phase 5 — Core Store Management (MVP) is in progress. M17 Order Workflow
+Completion is implemented, automatically tested, and documented on
+`feat/m17-order-workflow-completion`; it awaits B/A review, merge, migration
+deployment, and live WooCommerce/Telegram validation. Phase 4 and M1–M16 remain
+complete and unchanged. M12 real-store validation remains complete to the
+extent recorded in `docs/validation/M12_REAL_STORE_VALIDATION.md`.
 
 ---
 
 Current Task
 
-No implementation task is active. M16 and Phase 4 are closed. Phase 5 product
-code requires a separately approved implementation task.
+M17 Order Workflow Completion implementation is complete on its focused branch.
+Do not begin another Phase 5 milestone before review and approval.
 
 ---
 
@@ -31,9 +30,11 @@ Project Version
 
 Repository
 
-Current branch: `main`.
+Current branch: `feat/m17-order-workflow-completion`.
 
-M16 merge commit: `9e831a9 merge: complete M16 self-service store onboarding`.
+M17 implementation commit: `feat(orders): complete MVP order workflow`.
+
+M16 remains merged in `9e831a9 merge: complete M16 self-service store onboarding`.
 
 ---
 
@@ -442,6 +443,49 @@ detail, Back/Home navigation, and one-time token replay rejection all passed.
 B returned MERGE. The merged `main` revision was deployed and `/api/health`
 passed its production smoke test.
 
+M17 completes the approved MVP order workflow without replacing M6, M9, or the
+M11–M16 Telegram foundations. `/order <number>` performs one case-sensitive
+exact match against the current backend-resolved tenant and Store projection;
+malformed, missing, duplicate-exact, unauthorized, no-context, deleted, and
+stale-reference outcomes fail safely. OWNER, ADMIN, and MEMBER may read.
+
+Active order detail now issues the existing signed M11 detail reference for a
+bounded Refresh action. Refresh re-resolves current Telegram authorization,
+loads the referenced current-Store Order, performs one logical M6 authoritative
+single-order read with the established safe read retries, and passes the payload
+only through M9 `reconcileAuthoritativeOrder`. It adds no polling, queue, sync
+service, or alternate projection path.
+
+OWNER and ADMIN receive an Add Note capability; MEMBER receives neither the
+button nor backend permission. Internal and customer-visible choices map to
+WooCommerce `customer_note=false` and `customer_note=true`. The bot remains
+stateless: a short-lived context-bound backend reference is embedded in a
+Telegram ForceReply prompt, and the backend validates bounded plain text before
+returning a safe preview plus mandatory Confirm/Cancel actions.
+
+The M17 migration extends the existing Order projection with only
+`payment_snapshot` and `shipping_lines_snapshot`, and adds encrypted short-lived
+note draft fields plus the narrow `TelegramOrderNoteAction` durable claim/result
+record. Confirm atomically claims the reference and action, performs a safe
+authoritative existence read, then dispatches the WooCommerce note POST once
+without write retry. Success, definitive failure, ambiguous/lost response, and
+replay are persisted; stale in-flight claims become ambiguous and are never
+redispatched. Successful creation emits `telegram.order.note.created` with
+Store, visibility, and result metadata only. Note text is absent from action
+records, AuditLog, and structured logs; the short-lived required draft copy is
+encrypted and cleared on completion or cancellation.
+
+Order detail exposes payment method/title plus paid/unpaid state, and shipping
+method plus minimized fulfillment address lines. It deliberately omits
+transaction IDs, phone, email, credentials, and raw WooCommerce payloads. No
+Customer, Payment, Shipping, or note-history model was introduced.
+
+M17 automated evidence passes: Prisma validate/generate, 48 backend suites with
+286 tests, 38 Telegram bot tests, build, typecheck, lint, formatting, and diff
+checks. Docker Desktop was unavailable, so isolated PostgreSQL migration apply
+and live Telegram/WooCommerce note/refresh validation remain explicit manual
+items rather than PASS.
+
 ---
 
 Infrastructure
@@ -479,7 +523,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-main
+feat/m17-order-workflow-completion
 
 ---
 
@@ -511,25 +555,29 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No Phase 4 or M16 blocker remains. The deployed M13 synthetic new-order
-notification delivery check is still not recorded as PASS and remains a
-separate validation item. Existing known issues and technical debt remain open
-as documented above.
+No M17 implementation blocker remains. Docker Desktop was unavailable during
+M17 verification, so migration `20260830120000_m17_order_workflow_completion`
+still requires deployment/apply verification against PostgreSQL. One live
+OWNER/ADMIN internal note, one customer-visible note, duplicate Confirm replay,
+ambiguous-response fault injection where safely available, MEMBER denial, and
+one authoritative Refresh remain manual validation items. The deployed M13
+synthetic new-order notification result is still not recorded as PASS.
 
 ---
 
 Next Milestone
 
-Phase 5 — Core Store Management (MVP) is next in the existing roadmap. No Phase
-5 implementation task is active; do not begin it without approval.
+Await B/A review of M17. Do not begin another Phase 5 milestone without an
+approved task.
 
 ---
 
 Last Completed
 
-M16 Self-Service Store Onboarding and Phase 4 — Telegram Platform. B returned
-MERGE; A live validation passed; merge commit `9e831a9` is deployed and
-production smoke-tested.
+M17 Order Workflow Completion implementation on
+`feat/m17-order-workflow-completion`. Review, merge, migration deployment, and
+live validation remain pending. M16 remains the last A-accepted/deployed
+milestone.
 
 ---
 

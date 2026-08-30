@@ -18,12 +18,18 @@ import {
   type TelegramRedeemDto,
   type TelegramOrderDetailDto,
   type TelegramOrderListDto,
+  type TelegramOrderLookupDto,
+  type TelegramOrderNotePrepareDto,
+  type TelegramOrderNoteStartDto,
   type TelegramOrderStatusUpdateDto,
   type TelegramOrderTransitionsDto,
   type TelegramStatusDto,
   type TelegramUnlinkDto,
   telegramOrderDetailSchema,
   telegramOrderListSchema,
+  telegramOrderLookupSchema,
+  telegramOrderNotePrepareSchema,
+  telegramOrderNoteStartSchema,
   telegramOrderStatusUpdateSchema,
   telegramOrderTransitionsSchema,
   telegramRedeemSchema,
@@ -42,6 +48,12 @@ import {
 import {
   type TelegramOrderDetailResult,
   type TelegramOrderListResult,
+  type TelegramOrderLookupResult,
+  type TelegramOrderNoteMutationResult,
+  type TelegramOrderNoteOptionsResult,
+  type TelegramOrderNotePrepareResult,
+  type TelegramOrderNoteStartResult,
+  type TelegramOrderRefreshResult,
   type TelegramOrderStatusUpdateResult,
   type TelegramOrderTransitionsResult,
   TelegramOrderService,
@@ -111,6 +123,19 @@ export class TelegramInternalController {
     return this.orders.list(input);
   }
 
+  @Post('orders/lookup')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  lookupOrder(
+    @Body(new JoiValidationPipe(telegramOrderLookupSchema))
+    input: TelegramOrderLookupDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramOrderLookupResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.orders.lookup(input);
+  }
+
   @Post('orders/detail')
   @Public()
   @UseGuards(BotApiKeyGuard)
@@ -122,6 +147,84 @@ export class TelegramInternalController {
   ): Promise<TelegramOrderDetailResult> {
     this.assertUpdateIdHeader(headerUpdateId);
     return this.orders.detail(input);
+  }
+
+  @Post('orders/refresh')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  refreshOrder(
+    @Body(new JoiValidationPipe(telegramOrderDetailSchema))
+    input: TelegramOrderDetailDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramOrderRefreshResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.orders.refresh(input);
+  }
+
+  @Post('orders/notes/options')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  orderNoteOptions(
+    @Body(new JoiValidationPipe(telegramOrderDetailSchema))
+    input: TelegramOrderDetailDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramOrderNoteOptionsResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.orders.noteOptions(input);
+  }
+
+  @Post('orders/notes/start')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  startOrderNote(
+    @Body(new JoiValidationPipe(telegramOrderNoteStartSchema))
+    input: TelegramOrderNoteStartDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramOrderNoteStartResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.orders.startNote(input);
+  }
+
+  @Post('orders/notes/prepare')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  prepareOrderNote(
+    @Body(new JoiValidationPipe(telegramOrderNotePrepareSchema))
+    input: TelegramOrderNotePrepareDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramOrderNotePrepareResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.orders.prepareNote(input);
+  }
+
+  @Post('orders/notes/cancel')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  cancelOrderNote(
+    @Body(new JoiValidationPipe(telegramOrderDetailSchema))
+    input: TelegramOrderDetailDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramOrderNoteMutationResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.orders.cancelNote(input);
+  }
+
+  @Post('orders/notes/confirm')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  confirmOrderNote(
+    @Body(new JoiValidationPipe(telegramOrderDetailSchema))
+    input: TelegramOrderDetailDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramOrderNoteMutationResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.orders.confirmNote(input);
   }
 
   @Post('orders/transitions')
