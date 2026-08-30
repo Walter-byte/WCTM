@@ -3,6 +3,7 @@ import { UnauthorizedException } from '@nestjs/common';
 
 import { IS_PUBLIC_KEY } from '../auth/decorators/public.decorator';
 import { IS_TENANT_OPTIONAL_KEY } from '../tenant/decorators/tenant-optional.decorator';
+import { telegramRedeemSchema } from './dto/telegram-internal.dto';
 import { TelegramInternalController } from './telegram-internal.controller';
 import type { TelegramLinkingService } from './telegram-linking.service';
 import type { TelegramOrderService } from './telegram-order.service';
@@ -52,6 +53,38 @@ describe('TelegramInternalController authentication boundaries', () => {
       )
     ).toThrow(UnauthorizedException);
     expect(status).not.toHaveBeenCalled();
+  });
+
+  it('accepts only the exact issued M10 token representation', () => {
+    const valid = `tgl_${'A_b-'.repeat(10)}A_b`;
+    expect(valid).toHaveLength(47);
+    const validated = telegramRedeemSchema.validate({
+      telegramUserId: '1001',
+      telegramChatId: '1001',
+      chatType: 'private',
+      token: `  ${valid}  `,
+      updateId: '5001',
+    });
+    expect(validated.error).toBeUndefined();
+    expect(validated.value.token).toBe(valid);
+
+    for (const token of [
+      `/start ${valid}`,
+      `%2Fstart%20${valid}`,
+      `"${valid}"`,
+      `link_${'a'.repeat(43)}`,
+      'tgl_too-short',
+    ]) {
+      expect(
+        telegramRedeemSchema.validate({
+          telegramUserId: '1001',
+          telegramChatId: '1001',
+          chatType: 'private',
+          token,
+          updateId: '5001',
+        }).error
+      ).toBeDefined();
+    }
   });
 
   it('requires a valid Telegram update header before order service access', () => {

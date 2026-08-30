@@ -259,6 +259,46 @@ describe('WooCommerceClient', () => {
     expect(put).not.toHaveBeenCalled();
   });
 
+  it('verifies one shared HTTPS delivery URL for the exact server endpoint key', async () => {
+    const deliveryUrl =
+      'https://app.example/api/webhooks/woocommerce/whk_endpoint';
+    const data = [
+      'order.created',
+      'order.updated',
+      'order.deleted',
+      'order.restored',
+    ].map((topic, index) => ({
+      id: index + 1,
+      name: `WCTM Connector: ${topic}`,
+      status: 'active',
+      topic,
+      delivery_url: deliveryUrl,
+    }));
+    jest.spyOn(axios, 'get').mockResolvedValue({ data });
+
+    await expect(
+      client().hasRequiredOrderWebhooksForEndpointKey('whk_endpoint')
+    ).resolves.toBe(true);
+  });
+
+  it('rejects incomplete, non-HTTPS, or mismatched webhook destinations', async () => {
+    jest.spyOn(axios, 'get').mockResolvedValue({
+      data: ['order.created', 'order.updated', 'order.deleted'].map(
+        (topic, index) => ({
+          id: index + 1,
+          name: `WCTM Connector: ${topic}`,
+          status: 'active',
+          topic,
+          delivery_url: 'http://app.example/api/webhooks/woocommerce/whk_other',
+        })
+      ),
+    });
+
+    await expect(
+      client().hasRequiredOrderWebhooksForEndpointKey('whk_endpoint')
+    ).resolves.toBe(false);
+  });
+
   it('enforces the total operation hard cap and aborts the active request', async () => {
     jest.useFakeTimers();
     const request = jest

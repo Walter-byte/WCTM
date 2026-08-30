@@ -4,7 +4,9 @@ import { createHash } from 'node:crypto';
 
 import type { ApplicationConfigService } from '../config/application-config.service';
 import type { PrismaService } from '../prisma/prisma.service';
+import { TelegramInternalController } from './telegram-internal.controller';
 import { TelegramLinkingService } from './telegram-linking.service';
+import type { TelegramOrderService } from './telegram-order.service';
 
 interface TokenRow {
   id: string;
@@ -32,6 +34,15 @@ interface ChatRow {
   activeStoreId: string | null;
 }
 
+interface StoreRow {
+  id: string;
+  status: StoreStatus;
+  deletedAt: Date | null;
+  lastHealthyAt?: Date | null;
+  webhookSecretEncrypted?: string | null;
+  webhookEndpointKey?: string | null;
+}
+
 function hash(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }
@@ -41,10 +52,7 @@ function setup() {
   const accounts: AccountRow[] = [];
   const chats: ChatRow[] = [];
   const memberships = new Map<string, string[]>();
-  const stores = new Map<
-    string,
-    Array<{ id: string; status: StoreStatus; deletedAt: Date | null }>
-  >();
+  const stores = new Map<string, StoreRow[]>();
   const tokenCreate = jest.fn(async ({ data }: { data: TokenRow }) => {
     tokens.push({ ...data, consumedAt: null });
     return { id: data.id };
@@ -214,7 +222,21 @@ function setup() {
           (store) => store.status === where.status && store.deletedAt === null
         )
         .slice(0, take)
-        .map(({ id }) => ({ id }))
+        .map((store) => ({
+          id: store.id,
+          lastHealthyAt:
+            store.lastHealthyAt === undefined
+              ? new Date('2026-08-29T08:00:00.000Z')
+              : store.lastHealthyAt,
+          webhookSecretEncrypted:
+            store.webhookSecretEncrypted === undefined
+              ? 'encrypted-webhook-secret'
+              : store.webhookSecretEncrypted,
+          webhookEndpointKey:
+            store.webhookEndpointKey === undefined
+              ? 'whk_endpoint'
+              : store.webhookEndpointKey,
+        }))
   );
   const transactionClient = {
     telegramLinkToken: {
@@ -290,19 +312,123 @@ function setup() {
     memberships,
     redeemInput,
     service,
+    storeFindMany,
     stores,
     tokens,
   };
 }
 
 describe('TelegramLinkingService', () => {
+  it('completes the M16 onboarding issuance-to-Telegram redemption path', async () => {
+    const fixture = setup();
+    fixture.memberships.set('usr_m16', ['ten_m16']);
+    fixture.stores.set('ten_m16', [
+      { id: 'sto_m16', status: StoreStatus.ACTIVE, deletedAt: null },
+    ]);
+    const controller = new TelegramInternalController(
+      fixture.service,
+      {} as TelegramOrderService
+    );
+
+    const issued = await controller.issueToken({
+      sub: 'usr_m16',
+      tenantId: 'ten_m16',
+    });
+    const input = fixture.redeemInput(issued.token);
+
+    expect(issued.token).toMatch(/^tgl_[A-Za-z0-9_-]{43}$/);
+    expect(fixture.tokens[0]?.consumedAt).toBeNull();
+    await expect(
+      controller.redeem(input, input.updateId)
+    ).resolves.toMatchObject({
+      status: 'linked',
+      activeTenantId: 'ten_m16',
+      activeStoreId: 'sto_m16',
+      selectionRequired: false,
+    });
+    expect(fixture.tokens[0]).toMatchObject({
+      userId: 'usr_m16',
+      tokenHash: hash(issued.token),
+    });
+    expect(fixture.tokens[0]?.consumedAt).toBeInstanceOf(Date);
+    expect(fixture.accounts[0]).toMatchObject({ userId: 'usr_m16' });
+  });
+
   it('issues a random token once and persists only its SHA-256 hash', async () => {
     const fixture = setup();
+    fixture.memberships.set('usr_a', ['ten_a']);
+    fixture.stores.set('ten_a', [
+      { id: 'sto_a', status: StoreStatus.ACTIVE, deletedAt: null },
+    ]);
+    const issuedAtEarliest = Date.now();
     const result = await fixture.service.issueToken({ sub: 'usr_a' });
+    const issuedAtLatest = Date.now();
 
     expect(result.token).toMatch(/^tgl_[A-Za-z0-9_-]{43}$/);
+    expect(result.expiresAt.getTime()).toBeGreaterThanOrEqual(
+      issuedAtEarliest + 900_000
+    );
+    expect(result.expiresAt.getTime()).toBeLessThanOrEqual(
+      issuedAtLatest + 900_000
+    );
     expect(fixture.tokens[0]?.tokenHash).toBe(hash(result.token));
     expect(JSON.stringify(fixture.tokens)).not.toContain(result.token);
+    expect(fixture.storeFindMany).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'ten_a',
+        status: StoreStatus.ACTIVE,
+        deletedAt: null,
+        tenant: { deletedAt: null },
+      },
+      select: {
+        id: true,
+        lastHealthyAt: true,
+        webhookSecretEncrypted: true,
+        webhookEndpointKey: true,
+      },
+      take: 2,
+    });
+  });
+
+  it('denies direct link-token issuance before exact-one usable Store eligibility', async () => {
+    const fixture = setup();
+    fixture.memberships.set('usr_a', ['ten_a']);
+
+    await expect(
+      fixture.service.issueToken({ sub: 'usr_a' })
+    ).rejects.toMatchObject({ status: 403 });
+    expect(fixture.tokens).toHaveLength(0);
+
+    fixture.stores.set('ten_a', [
+      { id: 'sto_pending', status: StoreStatus.PENDING, deletedAt: null },
+    ]);
+    await expect(
+      fixture.service.issueToken({ sub: 'usr_a' })
+    ).rejects.toMatchObject({ status: 403 });
+    expect(fixture.tokens).toHaveLength(0);
+
+    fixture.stores.set('ten_a', [
+      {
+        id: 'sto_active_unhealthy',
+        status: StoreStatus.ACTIVE,
+        deletedAt: null,
+        lastHealthyAt: null,
+      },
+    ]);
+    await expect(
+      fixture.service.issueToken({ sub: 'usr_a' })
+    ).rejects.toMatchObject({ status: 403 });
+    expect(fixture.tokens).toHaveLength(0);
+  });
+
+  it('denies link-token issuance when tenant selection would be required', async () => {
+    const fixture = setup();
+    fixture.memberships.set('usr_a', ['ten_a', 'ten_b']);
+
+    await expect(
+      fixture.service.issueToken({ sub: 'usr_a' })
+    ).rejects.toMatchObject({ status: 403 });
+    expect(fixture.tokens).toHaveLength(0);
   });
 
   it('redeems once, recovers an identical update, and hides other replay state', async () => {
@@ -349,6 +475,16 @@ describe('TelegramLinkingService', () => {
 
   it('rejects duplicate Telegram user, SaaS user, and private-chat identities', async () => {
     const fixture = setup();
+    for (const suffix of ['a', 'b', 'c']) {
+      fixture.memberships.set(`usr_${suffix}`, [`ten_${suffix}`]);
+      fixture.stores.set(`ten_${suffix}`, [
+        {
+          id: `sto_${suffix}`,
+          status: StoreStatus.ACTIVE,
+          deletedAt: null,
+        },
+      ]);
+    }
     const first = `tgl_${'a'.repeat(43)}`;
     const second = `tgl_${'b'.repeat(43)}`;
     fixture.addToken(first, 'usr_a');
@@ -384,13 +520,12 @@ describe('TelegramLinkingService', () => {
     ).resolves.toEqual({ status: 'invalid_or_expired' });
   });
 
-  it('resolves only exactly one active tenant and one active Store', async () => {
+  it('rejects redemption if the issued User no longer has one eligible tenant and Store', async () => {
     const cases = [
-      { tenants: [] as string[], stores: [], selectionRequired: true },
+      { tenants: [] as string[], stores: [] },
       {
         tenants: ['ten_a', 'ten_b'],
         stores: [],
-        selectionRequired: true,
       },
       {
         tenants: ['ten_a'],
@@ -402,7 +537,17 @@ describe('TelegramLinkingService', () => {
             deletedAt: new Date(),
           },
         ],
-        selectionRequired: true,
+      },
+      {
+        tenants: ['ten_a'],
+        stores: [
+          {
+            id: 'sto_unhealthy',
+            status: StoreStatus.ACTIVE,
+            deletedAt: null,
+            lastHealthyAt: null,
+          },
+        ],
       },
     ];
 
@@ -415,17 +560,41 @@ describe('TelegramLinkingService', () => {
 
       await expect(
         fixture.service.redeem(fixture.redeemInput(raw))
-      ).resolves.toMatchObject({
-        status: 'linked',
-        activeTenantId: null,
-        activeStoreId: null,
-        selectionRequired: item.selectionRequired,
-      });
+      ).resolves.toEqual({ status: 'invalid_or_expired' });
+      expect(fixture.tokens[0]?.consumedAt).toBeNull();
     }
+  });
+
+  it('does not consume a token when tenant association changes before redemption', async () => {
+    const fixture = setup();
+    fixture.memberships.set('usr_a', ['ten_a']);
+    fixture.stores.set('ten_a', [
+      { id: 'sto_a', status: StoreStatus.ACTIVE, deletedAt: null },
+    ]);
+    const issued = await fixture.service.issueToken({ sub: 'usr_a' });
+
+    fixture.memberships.set('usr_a', ['ten_wrong']);
+    await expect(
+      fixture.service.redeem(fixture.redeemInput(issued.token))
+    ).resolves.toEqual({ status: 'invalid_or_expired' });
+    expect(fixture.tokens[0]?.consumedAt).toBeNull();
+
+    fixture.memberships.set('usr_a', ['ten_a']);
+    await expect(
+      fixture.service.redeem(fixture.redeemInput(issued.token))
+    ).resolves.toMatchObject({
+      status: 'linked',
+      activeTenantId: 'ten_a',
+      activeStoreId: 'sto_a',
+    });
   });
 
   it('requires confirmation, revokes atomically, and makes repeats idempotent', async () => {
     const fixture = setup();
+    fixture.memberships.set('usr_a', ['ten_a']);
+    fixture.stores.set('ten_a', [
+      { id: 'sto_a', status: StoreStatus.ACTIVE, deletedAt: null },
+    ]);
     const raw = `tgl_${'x'.repeat(43)}`;
     fixture.addToken(raw, 'usr_a');
     await fixture.service.redeem(fixture.redeemInput(raw));
@@ -454,9 +623,12 @@ describe('TelegramLinkingService', () => {
 
   it('reuses a soft-revoked account for a later valid link by the same Telegram identity', async () => {
     const fixture = setup();
-    const first = `tgl_${'r'.repeat(43)}`;
-    fixture.addToken(first, 'usr_a');
-    await fixture.service.redeem(fixture.redeemInput(first));
+    fixture.memberships.set('usr_a', ['ten_a']);
+    fixture.stores.set('ten_a', [
+      { id: 'sto_a', status: StoreStatus.ACTIVE, deletedAt: null },
+    ]);
+    const first = await fixture.service.issueToken({ sub: 'usr_a' });
+    await fixture.service.redeem(fixture.redeemInput(first.token));
     await fixture.service.unlink({
       telegramUserId: '1001',
       telegramChatId: '1001',
@@ -464,11 +636,10 @@ describe('TelegramLinkingService', () => {
       confirmed: true,
     });
 
-    const second = `tgl_${'s'.repeat(43)}`;
-    fixture.addToken(second, 'usr_a');
+    const second = await fixture.service.issueToken({ sub: 'usr_a' });
     await expect(
       fixture.service.redeem(
-        fixture.redeemInput(second, {
+        fixture.redeemInput(second.token, {
           telegramUserId: '1001',
           telegramChatId: '1001',
           updateId: '6002',
@@ -485,5 +656,61 @@ describe('TelegramLinkingService', () => {
       fixture.chats.find((chat) => chat.telegramChatId === BigInt(1001))
         ?.revokedAt
     ).toBeNull();
+  });
+
+  it('allows an explicitly unlinked pilot Telegram identity to link the new M16 User', async () => {
+    const fixture = setup();
+    fixture.memberships.set('usr_pilot', ['ten_pilot']);
+    fixture.stores.set('ten_pilot', [
+      { id: 'sto_pilot', status: StoreStatus.ACTIVE, deletedAt: null },
+    ]);
+    const pilotToken = await fixture.service.issueToken({ sub: 'usr_pilot' });
+    await fixture.service.redeem(fixture.redeemInput(pilotToken.token));
+    await fixture.service.unlink({
+      telegramUserId: '1001',
+      telegramChatId: '1001',
+      updateId: '6001',
+      confirmed: true,
+    });
+
+    fixture.memberships.set('usr_m16', ['ten_m16']);
+    fixture.stores.set('ten_m16', [
+      { id: 'sto_m16', status: StoreStatus.ACTIVE, deletedAt: null },
+    ]);
+    const controller = new TelegramInternalController(
+      fixture.service,
+      {} as TelegramOrderService
+    );
+    const m16Token = await controller.issueToken({
+      sub: 'usr_m16',
+      tenantId: 'ten_m16',
+    });
+    const input = fixture.redeemInput(m16Token.token, { updateId: '6002' });
+
+    await expect(
+      controller.redeem(input, input.updateId)
+    ).resolves.toMatchObject({
+      status: 'linked',
+      activeTenantId: 'ten_m16',
+      activeStoreId: 'sto_m16',
+    });
+    expect(fixture.accounts).toHaveLength(1);
+    expect(fixture.accounts[0]).toMatchObject({
+      userId: 'usr_m16',
+      telegramUserId: BigInt(1001),
+      deletedAt: null,
+    });
+    expect(fixture.chats[0]).toMatchObject({
+      revokedAt: null,
+      activeTenantId: 'ten_m16',
+      activeStoreId: 'sto_m16',
+    });
+
+    await expect(
+      controller.redeem(
+        fixture.redeemInput(m16Token.token, { updateId: '6003' }),
+        '6003'
+      )
+    ).resolves.toEqual({ status: 'invalid_or_expired' });
   });
 });

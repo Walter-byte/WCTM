@@ -7,20 +7,20 @@ Version: 1.0
 Current Phase
 
 Phase 4 — Telegram Platform remains In Progress. M14 Practical Telegram
-Management UX is merged to `main`; its bounded manual Telegram validation
-remains separate. The approved M15 Public Account Authentication Foundation is
-implemented on `feat/m15-public-account-auth`. M12 real-store validation remains
-complete to the extent recorded in
+Management UX and M15 Public Account Authentication Foundation are merged and
+closed on `main`. M16 Self-Service Store Onboarding is implemented on
+`feat/m16-self-service-store-onboarding` and awaits A/B review plus one
+controlled end-to-end validation. M12 real-store validation remains complete to
+the extent recorded in
 `docs/validation/M12_REAL_STORE_VALIDATION.md`.
 
 ---
 
 Current Task
 
-M15 implementation and automated gates are complete. The Alpine Argon2 native
-build blocker is fixed and a clean backend image build is verified. Rebuild the
-backend on the VPS, then resume the isolated PostgreSQL migration apply/status
-gate. Do not begin Store onboarding or a later milestone without approval.
+M16 implementation, connector work, automated coverage, and repository gates
+are complete. Run the one controlled fresh-merchant onboarding validation after
+A/B automated review. Do not begin a later milestone without approval.
 
 ---
 
@@ -118,9 +118,11 @@ registration endpoint derives Store identity only from that token and uses the
 M6 WooCommerce REST test—there is no SaaS→plugin probe or plugin endpoint URL.
 
 Successful registration atomically consumes the token, replaces the hashed
-persistent plugin→SaaS credential, records registration, last-seen, and
-last-healthy timestamps, creates an audit event, and changes Store status to
-`ACTIVE`. Auth and transient failures leave all Store state unchanged. A
+persistent plugin→SaaS credential, records registration and last-seen time,
+creates an audit event, provisions missing M8 material, and promotes the Store
+from `PENDING` to `ACTIVE`. As extended by M16, connector webhook verification
+separately sets healthy timestamps without owning that lifecycle transition.
+Auth and transient failures leave all Store state unchanged. A
 tenant-scoped connection-health endpoint exposes only status, timestamps, and a
 registration boolean. A Redis fixed-window limiter applies only to public
 plugin registration.
@@ -188,8 +190,14 @@ lease recovery, reconciliation, and verified delete/restore boundaries.
 
 Plugin
 
-WooCommerce connector scaffold created. The SaaS-side MVP registration contract
-is available; plugin-side UI and implementation remain outside M7.
+The WooCommerce connector now exposes a minimal WooCommerce admin page that
+accepts exactly one M7 token. It derives Store identity only from the M7
+response, stores required connector/webhook material with WordPress autoload
+disabled, never re-renders secrets, creates or updates the four required order
+webhooks, verifies their active topic/destination state, and calls the
+plugin-credential-authenticated connection-health operation. Safe retry and
+new-token reconnect guidance are included; no SaaS credentials, tenant/Store
+selection, order logic, or business policy is present.
 
 ---
 
@@ -378,6 +386,42 @@ after `npm ci`, and retains a working Argon2id addon without Python or compiler
 tools in the runtime image. A clean no-cache image build and runtime Argon2id
 verification pass. VPS migration apply/status remains pending.
 
+M16 adds authenticated `POST /api/auth/tenant-context`. It accepts no Tenant or
+Store identity and derives the JWT subject from the authenticated request.
+Zero active Memberships return a safe M3-bootstrap requirement, exactly one
+active Membership issues the existing AuthService JWT format with that Tenant,
+and multiple active Memberships fail because selection is outside M16.
+
+The framework-free `/onboarding` surface is served through the existing NestJS
+and Caddy topology. It keeps JWTs in memory, submits WooCommerce REST
+credentials directly to existing M4/M6 Store creation, clears credential input,
+and derives progress from current Store/connection-health data. It never calls
+the M8 browser credential route and places no JWT, WooCommerce credential, M7
+token, plugin credential, or webhook secret in a URL or browser store.
+
+The current successful fresh M7 response remains authoritative:
+`{ pluginCredential, storeId, webhookSecret, webhookEndpointKey }`. Existing
+webhook material remains non-reexposable on re-registration. For a fresh Store,
+M7 records registration, returns the one-time M8 material, and preserves its
+established `PENDING` to `ACTIVE` transition. The connector installs/verifies
+`order.created`, `order.updated`, `order.deleted`, and `order.restored`, then
+authenticates with the plugin credential. The backend independently reads
+WooCommerce webhook configuration and records healthy timestamps only when all
+required topics share the exact HTTPS endpoint-key destination; it does not own
+Store activation.
+
+M10 link-token issuance now re-resolves exact-one active Membership and
+exact-one `ACTIVE` Store with webhook credentials and a healthy timestamp.
+Ineligible direct API calls fail before token persistence; M10 redemption and
+the M11–M14 experience remain unchanged. M12-V remains functional by recording
+its already-verified pilot Store health when it activates that Store.
+
+M16 adds no schema migration or dependency. Backend tests now pass at 258 and
+bot tests remain at 32. Build, typecheck, lint, formatting, Prisma
+validate/generate, connector contract checks, and diff checks pass. Native PHP
+syntax/runtime validation remains part of the controlled WordPress validation
+because PHP and Docker are unavailable in the current workspace.
+
 ---
 
 Infrastructure
@@ -415,7 +459,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-feat/m15-public-account-auth
+feat/m16-self-service-store-onboarding
 
 ---
 
@@ -447,26 +491,25 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-M15 code, automated verification, and clean backend image build have no
-implementation blocker. The VPS must rebuild the backend from the Docker fix,
-then run the normalized-email collision audit plus full migration apply/status
-verification. The existing bounded M14 manual Telegram UX pass and M13 deployed
-synthetic-notification check also remain separate.
+No M16 implementation or automated-test blocker remains. The current workspace
+has neither a PHP runtime nor an available Docker daemon, so native `php -l` and
+the controlled WordPress/WooCommerce ceremony remain manual. Existing M15 VPS
+migration apply/status, bounded M14 Telegram UX, and M13 deployed synthetic-
+notification checks remain separate deployment validation items.
 
 ---
 
 Next Milestone
 
-No later product milestone is assigned. Review M15 and run its isolated
-PostgreSQL migration verification; do not begin Store onboarding or continue
-without approval.
+No later product milestone is assigned. Review M16 and run its one controlled
+fresh-merchant onboarding validation; do not begin later work without approval.
 
 ---
 
 Last Completed
 
-M15 Public Account Authentication Foundation implementation and automated
-regression gates.
+M16 Self-Service Store Onboarding implementation and automated regression
+gates. A/B review and one controlled end-to-end validation remain.
 
 ---
 
@@ -478,4 +521,4 @@ Excellent
 
 Last Updated
 
-2026-08-28
+2026-08-29

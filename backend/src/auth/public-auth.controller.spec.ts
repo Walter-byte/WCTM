@@ -2,6 +2,7 @@ import { describe, expect, it, jest } from '@jest/globals';
 
 import { JoiValidationPipe } from '../common/validation/joi-validation.pipe';
 import { IS_PUBLIC_KEY } from './decorators/public.decorator';
+import { IS_TENANT_OPTIONAL_KEY } from '../tenant/decorators/tenant-optional.decorator';
 import {
   type PublicAuthDto,
   publicLoginSchema,
@@ -24,9 +25,13 @@ describe('PublicAuthController', () => {
     };
     const register = jest.fn().mockResolvedValue(result as never);
     const login = jest.fn().mockResolvedValue(result as never);
+    const issueTenantContext = jest
+      .fn()
+      .mockResolvedValue({ accessToken: 'tenant-jwt' } as never);
     const controller = new PublicAuthController({
       register,
       login,
+      issueTenantContext,
     } as unknown as PublicAuthService);
 
     expect(
@@ -37,6 +42,18 @@ describe('PublicAuthController', () => {
     ).toBe(true);
     expect(
       Reflect.getMetadata(IS_PUBLIC_KEY, PublicAuthController.prototype.login)
+    ).toBe(true);
+    expect(
+      Reflect.getMetadata(
+        IS_PUBLIC_KEY,
+        PublicAuthController.prototype.tenantContext
+      )
+    ).not.toBe(true);
+    expect(
+      Reflect.getMetadata(
+        IS_TENANT_OPTIONAL_KEY,
+        PublicAuthController.prototype.tenantContext
+      )
     ).toBe(true);
 
     const input = {
@@ -49,6 +66,16 @@ describe('PublicAuthController', () => {
     await expect(controller.login(input, '')).resolves.toBe(result);
     expect(register).toHaveBeenCalledWith(input, '203.0.113.5');
     expect(login).toHaveBeenCalledWith(input, 'unknown');
+    await expect(
+      controller.tenantContext({
+        sub: 'usr_a',
+        tenantId: 'ten_caller_selected',
+      })
+    ).resolves.toEqual({ accessToken: 'tenant-jwt' });
+    expect(issueTenantContext).toHaveBeenCalledWith({
+      sub: 'usr_a',
+      tenantId: 'ten_caller_selected',
+    });
   });
 
   it('rejects invalid credentials and strips unrelated identity fields', () => {

@@ -153,8 +153,10 @@ Acceptance checklist:
   an endpoint-scoped Redis fixed-window limit, and verifies the Store through
   the M6 WooCommerce REST client.
 - Successful finalization atomically consumes the token, stores a hashed
-  plugin→SaaS credential, records registration/health timestamps, and promotes
-  the Store from `PENDING` to `ACTIVE`.
+  plugin→SaaS credential, records registration/last-seen time, and provisions
+  missing M8 material while promoting the Store from `PENDING` to `ACTIVE`.
+  Under the M16 extension, connector webhook verification separately records
+  health evidence and does not own that lifecycle transition.
 - Authentication and transient verification failures preserve the token,
   WooCommerce credentials, plugin credential, status, and health state.
 - OWNER, ADMIN, and MEMBER may read tenant-scoped connection health without
@@ -340,7 +342,7 @@ satisfied. No next milestone is assigned.
   one private `BOT_INTERNAL_API_KEY`-authenticated prepared-message operation
 - Migration `20260820090000_order_event_notifications`; D-023 Accepted
 
-### M14 — Practical Telegram Management UX ✅ Implemented / Awaiting Review
+### M14 — Practical Telegram Management UX ✅ Complete / Merged
 
 - One stateless Home surface connects Recent Orders, Status, and Help without a
   second navigation or business-state system
@@ -356,10 +358,36 @@ satisfied. No next milestone is assigned.
   order, notification, mutation, or Store-selection behavior changes
 - Focused M14 tests plus M10–M13 regressions and repository quality gates pass
 
-Phase 4 remains In Progress. M14 is implemented on
-`feat/m14-telegram-management-ux` and awaits A/B review plus one bounded manual
-Telegram UX validation. The pending M13 deployment validation remains separate.
-No later product milestone is assigned.
+### M15 — Public Account Authentication Foundation ✅ Complete / Merged
+
+- Public register/login routes create or authenticate only a normalized User
+- Argon2id password hashes, safe equivalent login failures, and independent
+  endpoint-scoped Redis fixed-window limits
+- Existing AuthService JWT format with a User subject and no tenant context
+- M3 remains the sole first-Tenant and atomic OWNER bootstrap
+- Migration `20260828120000_public_account_authentication`
+
+### M16 — Self-Service Store Onboarding ✅ Implemented / Awaiting Review
+
+- Exact-one active Membership bridge issues the existing tenant-context JWT;
+  zero Memberships require M3 bootstrap and multiple Memberships fail safely
+- Framework-free same-origin onboarding surface keeps JWTs in memory, submits
+  WooCommerce credentials without browser persistence, and exposes only the
+  approved account, Tenant, Store, M7, health, and M10 ceremony
+- Fresh M7 registration provisions the current M8 response material and
+  preserves the established Store transition to `ACTIVE`; the connector
+  persists secrets with autoload disabled, installs and verifies all four order
+  webhooks, then authenticates a backend verification that records health
+  without owning the lifecycle transition
+- M10 token issuance is backend-denied until exact-one Tenant and exact-one
+  ACTIVE/healthy Store eligibility is established
+- No onboarding persistence, general dashboard, selection/switching, billing,
+  new order behavior, or later milestone scope
+
+Phase 4 remains In Progress. M14 and M15 are merged/closed. M16 is implemented
+on `feat/m16-self-service-store-onboarding` with automated gates passing and
+awaits A/B review plus one controlled fresh-merchant onboarding validation.
+The pending M13 deployment validation remains separate.
 
 ## Phase 5 — Core Store Management (MVP) ⬜ Planned
 

@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 
 import { StructuredLoggerService } from '../common/logging/structured-logger.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { AuthService } from './auth.service';
+import { AuthService, type JwtPayload } from './auth.service';
 import type { PublicAuthDto } from './dto/public-auth.dto';
 import { PasswordHashService } from './password-hash.service';
 import {
@@ -36,6 +36,10 @@ interface CredentialUser extends PublicUser {
 export interface PublicAuthResult {
   accessToken: string;
   user: PublicUser;
+}
+
+export interface TenantContextTokenResult {
+  accessToken: string;
 }
 
 @Injectable()
@@ -122,6 +126,38 @@ export class PublicAuthService {
     return { accessToken, user };
   }
 
+  async issueTenantContext(
+    payload: JwtPayload | undefined
+  ): Promise<TenantContextTokenResult> {
+    const userId = this.authenticatedUserId(payload);
+    const memberships = await this.prisma.membership.findMany({
+      where: {
+        userId,
+        deletedAt: null,
+        tenant: { deletedAt: null },
+      },
+      select: { tenantId: true },
+      take: 2,
+    });
+
+    if (memberships.length === 0) {
+      throw new ConflictException('First Tenant bootstrap is required');
+    }
+
+    if (memberships.length > 1) {
+      throw new ConflictException(
+        'Tenant selection is required and is unavailable during onboarding'
+      );
+    }
+
+    return {
+      accessToken: await this.auth.signAccessToken({
+        sub: userId,
+        tenantId: memberships[0]!.tenantId,
+      }),
+    };
+  }
+
   private async findCredentialUser(
     normalizedEmail: string
   ): Promise<CredentialUser | null> {
@@ -146,6 +182,16 @@ export class PublicAuthService {
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === 'P2002'
     );
+  }
+
+  private authenticatedUserId(payload: JwtPayload | undefined): string {
+    const userId = payload?.['sub'];
+
+    if (typeof userId !== 'string' || userId.trim() === '') {
+      throw new UnauthorizedException('Authenticated user subject is required');
+    }
+
+    return userId;
   }
 
   private logRejected(

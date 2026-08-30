@@ -8,6 +8,9 @@ import {
 } from '@nestjs/common';
 
 import { JoiValidationPipe } from '../common/validation/joi-validation.pipe';
+import { TenantOptional } from '../tenant/decorators/tenant-optional.decorator';
+import type { JwtPayload } from './auth.service';
+import { CurrentUser } from './decorators/current-user.decorator';
 import { Public } from './decorators/public.decorator';
 import {
   type PublicAuthDto,
@@ -17,6 +20,7 @@ import {
 import {
   type PublicAuthResult,
   PublicAuthService,
+  type TenantContextTokenResult,
 } from './public-auth.service';
 
 @Controller('auth')
@@ -40,5 +44,14 @@ export class PublicAuthController {
     @Ip() clientIp: string
   ): Promise<PublicAuthResult> {
     return this.publicAuth.login(input, clientIp || 'unknown');
+  }
+
+  @Post('tenant-context')
+  @TenantOptional()
+  @HttpCode(HttpStatus.OK)
+  tenantContext(
+    @CurrentUser() user: JwtPayload | undefined
+  ): Promise<TenantContextTokenResult> {
+    return this.publicAuth.issueTenantContext(user);
   }
 }

@@ -155,6 +155,32 @@ export class WooCommerceClient {
     );
   }
 
+  async hasRequiredOrderWebhooksForEndpointKey(
+    endpointKey: string
+  ): Promise<boolean> {
+    const webhooks = await this.listWebhooks();
+    const matching = webhooks.filter(
+      (webhook) =>
+        webhook.status === 'active' &&
+        this.deliveryUrlMatchesEndpointKey(webhook.deliveryUrl, endpointKey)
+    );
+
+    if (matching.length === 0) {
+      return false;
+    }
+
+    const deliveryUrls = new Set(
+      matching.map((webhook) => webhook.deliveryUrl)
+    );
+
+    return (
+      deliveryUrls.size === 1 &&
+      REQUIRED_ORDER_WEBHOOK_TOPICS.every((topic) =>
+        matching.some((webhook) => webhook.topic === topic)
+      )
+    );
+  }
+
   private async requestWithTotalTimeout<T>(url: string): Promise<T> {
     const controller = new AbortController();
     let totalTimeout: NodeJS.Timeout | undefined;
@@ -404,6 +430,27 @@ export class WooCommerceClient {
 
   private managedWebhookName(topic: string): string {
     return `WC Telegram private pilot: ${topic}`;
+  }
+
+  private deliveryUrlMatchesEndpointKey(
+    deliveryUrl: string,
+    endpointKey: string
+  ): boolean {
+    try {
+      const parsed = new URL(deliveryUrl);
+
+      return (
+        parsed.protocol === 'https:' &&
+        parsed.username === '' &&
+        parsed.password === '' &&
+        parsed.search === '' &&
+        parsed.hash === '' &&
+        parsed.pathname ===
+          `/api/webhooks/woocommerce/${encodeURIComponent(endpointKey)}`
+      );
+    } catch {
+      return false;
+    }
   }
 
   private readStoreName(value: unknown): string | undefined {

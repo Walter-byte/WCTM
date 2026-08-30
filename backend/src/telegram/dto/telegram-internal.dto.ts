@@ -54,7 +54,10 @@ export const telegramRedeemSchema = Joi.object<TelegramRedeemDto>({
   telegramUserId: decimalIdentifier.required(),
   telegramChatId: decimalIdentifier.required(),
   chatType: Joi.string().valid('private').required(),
-  token: Joi.string().trim().min(32).max(256).required(),
+  token: Joi.string()
+    .trim()
+    .pattern(/^tgl_[A-Za-z0-9_-]{43}$/)
+    .required(),
   updateId: decimalIdentifier.required(),
 });
 
