@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
-import { MembershipRole, TelegramCallbackPurpose } from '@prisma/client';
+import {
+  MembershipRole,
+  TelegramCallbackPurpose,
+  TelegramOrderNoteActionState,
+  TelegramOrderNoteVisibility,
+} from '@prisma/client';
 
 import type { ApplicationConfigService } from '../config/application-config.service';
 import type { EncryptionService } from '../common/encryption/encryption.service';
@@ -25,11 +30,21 @@ interface TestOrder {
   totals: Record<string, string>;
   customerSnapshot: {
     billing: { first_name: string; last_name: string };
+    shipping?: Record<string, string>;
   };
   lineItemsSnapshot: Array<{
     name: string;
     quantity: number;
     total: string;
+  }>;
+  paymentSnapshot: {
+    method: string | null;
+    method_title: string | null;
+    paid: boolean;
+  };
+  shippingLinesSnapshot: Array<{
+    method_id: string | null;
+    method_title: string | null;
   }>;
   wcCreatedAt: Date;
   wcModifiedAt: Date;
@@ -52,6 +67,10 @@ interface TestReference {
   backReferenceId?: string | null;
   allowedTargetStatuses?: string[];
   claimedTargetStatus?: string | null;
+  noteVisibility?: TelegramOrderNoteVisibility | null;
+  noteBodyEncrypted?: string | null;
+  noteContentFingerprint?: string | null;
+  noteClaimedAt?: Date | null;
   expiresAt: Date;
 }
 
@@ -60,6 +79,15 @@ interface TestStatusWrite {
   callbackReferenceId: string;
   targetStatus: string;
   result?: unknown;
+}
+
+interface TestNoteAction {
+  id: string;
+  callbackReferenceId: string;
+  visibility: TelegramOrderNoteVisibility;
+  state: TelegramOrderNoteActionState;
+  result?: unknown;
+  startedAt: Date;
 }
 
 function makeOrder(
@@ -78,9 +106,25 @@ function makeOrder(
     totals: { total: `${index}.00`, total_tax: '0.00' },
     customerSnapshot: {
       billing: { first_name: `Customer${index}`, last_name: 'Test' },
+      shipping: {
+        address_1: 'Fulfillment Street 1',
+        city: 'Tehran',
+        postcode: '12345',
+        country: 'IR',
+        phone: 'must-not-leak',
+        email: 'must-not-leak@example.test',
+      },
     },
     lineItemsSnapshot: [
       { name: `Item ${index}`, quantity: 1, total: `${index}.00` },
+    ],
+    paymentSnapshot: {
+      method: 'cod',
+      method_title: 'Cash on delivery',
+      paid: false,
+    },
+    shippingLinesSnapshot: [
+      { method_id: 'flat_rate', method_title: 'Flat rate' },
     ],
     wcCreatedAt: created,
     wcModifiedAt: created,
@@ -93,6 +137,7 @@ function makeOrder(
 function createFixture(orderCount = 18) {
   const references: TestReference[] = [];
   const statusWrites: TestStatusWrite[] = [];
+  const noteActions: TestNoteAction[] = [];
   const auditLogs: unknown[] = [];
   const orders = Array.from({ length: orderCount }, (_, index) =>
     makeOrder(index + 1)
@@ -184,9 +229,10 @@ function createFixture(orderCount = 18) {
           where: {
             tenantId: string;
             storeId: string;
+            orderNumber?: string;
             OR?: Array<Record<string, unknown>>;
           };
-          orderBy: Array<Record<string, 'asc' | 'desc'>>;
+          orderBy?: Array<Record<string, 'asc' | 'desc'>>;
           take: number;
         }) => {
           let result = orders.filter(
@@ -194,6 +240,12 @@ function createFixture(orderCount = 18) {
               order.tenantId === where.tenantId &&
               order.storeId === where.storeId
           );
+
+          if (where.orderNumber !== undefined) {
+            result = result.filter(
+              (order) => order.orderNumber === where.orderNumber
+            );
+          }
           const timestampRule = where.OR?.[0]?.['wcCreatedAt'] as
             { gt?: Date; lt?: Date } | undefined;
           const tiedRule = where.OR?.[1] as
@@ -224,7 +276,7 @@ function createFixture(orderCount = 18) {
             });
           }
 
-          const ascending = orderBy[0]?.['wcCreatedAt'] === 'asc';
+          const ascending = orderBy?.[0]?.['wcCreatedAt'] === 'asc';
           result.sort((left, right) => {
             const dateComparison =
               left.wcCreatedAt.getTime() - right.wcCreatedAt.getTime();
@@ -269,23 +321,81 @@ function createFixture(orderCount = 18) {
           where,
           data,
         }: {
-          where: { id: string };
-          data: { claimedTargetStatus: string };
+          where: {
+            id?: string;
+            purpose?: string;
+            noteClaimedAt?: null;
+            noteBodyEncrypted?: { not: null };
+            expiresAt?: { gt?: Date; lte?: Date };
+          };
+          data: Partial<TestReference>;
         }) => {
-          const reference = references.find(
-            (candidate) => candidate.id === where.id
-          );
+          const reference = references.find((candidate) => {
+            if (where.id && candidate.id !== where.id) {
+              return false;
+            }
+
+            if (where.purpose && candidate.purpose !== where.purpose) {
+              return false;
+            }
+
+            if (
+              where.noteClaimedAt === null &&
+              candidate.noteClaimedAt != null
+            ) {
+              return false;
+            }
+
+            if (
+              where.noteBodyEncrypted?.not === null &&
+              candidate.noteBodyEncrypted == null
+            ) {
+              return false;
+            }
+
+            if (
+              where.expiresAt?.gt &&
+              candidate.expiresAt <= where.expiresAt.gt
+            ) {
+              return false;
+            }
+
+            if (
+              where.expiresAt?.lte &&
+              candidate.expiresAt > where.expiresAt.lte
+            ) {
+              return false;
+            }
+
+            return true;
+          });
 
           if (
             !reference ||
-            (reference.claimedTargetStatus &&
+            (data.claimedTargetStatus &&
+              reference.claimedTargetStatus &&
               reference.claimedTargetStatus !== data.claimedTargetStatus)
           ) {
             return { count: 0 };
           }
 
-          reference.claimedTargetStatus = data.claimedTargetStatus;
+          Object.assign(reference, data);
           return { count: 1 };
+        }
+      ),
+      update: jest.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: Partial<TestReference>;
+        }) => {
+          const reference = references.find(
+            (candidate) => candidate.id === where.id
+          )!;
+          Object.assign(reference, data);
+          return { id: reference.id };
         }
       ),
     },
@@ -329,14 +439,77 @@ function createFixture(orderCount = 18) {
         }
       ),
     },
+    telegramOrderNoteAction: {
+      findUnique: jest.fn(
+        async ({ where }: { where: { callbackReferenceId: string } }) => {
+          const action = noteActions.find(
+            (candidate) =>
+              candidate.callbackReferenceId === where.callbackReferenceId
+          );
+
+          if (!action) {
+            return null;
+          }
+
+          const reference = references.find(
+            (candidate) => candidate.id === action.callbackReferenceId
+          );
+          return {
+            ...action,
+            callbackReference: {
+              backReferenceId: reference?.backReferenceId ?? null,
+            },
+          };
+        }
+      ),
+      create: jest.fn(async ({ data }: { data: TestNoteAction }) => {
+        if (
+          noteActions.some(
+            (candidate) =>
+              candidate.callbackReferenceId === data.callbackReferenceId
+          )
+        ) {
+          throw Object.assign(new Error('unique'), { code: 'P2002' });
+        }
+
+        noteActions.push({
+          ...data,
+          state: TelegramOrderNoteActionState.IN_FLIGHT,
+          startedAt: new Date(),
+        });
+        return { id: data.id };
+      }),
+      update: jest.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where: { id: string };
+          data: Partial<TestNoteAction>;
+        }) => {
+          const action = noteActions.find(
+            (candidate) => candidate.id === where.id
+          )!;
+          Object.assign(action, data);
+          return { id: action.id };
+        }
+      ),
+    },
     auditLog: {
       create: jest.fn(async ({ data }: { data: unknown }) => {
         auditLogs.push(data);
         return { id: 'aud_test' };
       }),
     },
-    $transaction: jest.fn(async (operations: Array<Promise<unknown>>) =>
-      Promise.all(operations)
+    $transaction: jest.fn(
+      async (
+        operation:
+          | Array<Promise<unknown>>
+          | ((transaction: typeof prisma) => Promise<unknown>)
+      ) =>
+        typeof operation === 'function'
+          ? operation(prisma)
+          : Promise.all(operation)
     ),
   };
   const configuration = {
@@ -376,7 +549,10 @@ function createFixture(orderCount = 18) {
   const service = new TelegramOrderService(
     prisma as unknown as PrismaService,
     configuration,
-    { decrypt: (value: string) => value } as EncryptionService,
+    {
+      encrypt: (value: string) => `encrypted:${value}`,
+      decrypt: (value: string) => value.replace(/^encrypted:/, ''),
+    } as EncryptionService,
     projection as unknown as OrderProjectionService
   );
   const identity = { userId: '1001', chatId: '1001' };
@@ -389,6 +565,7 @@ function createFixture(orderCount = 18) {
     orders,
     references,
     statusWrites,
+    noteActions,
     auditLogs,
     projection,
     identity,
@@ -514,6 +691,10 @@ function wooPayload(status: string) {
     customer_id: 1,
     billing: { first_name: 'Customer1', last_name: 'Test' },
     shipping: {},
+    payment_method: 'cod',
+    payment_method_title: 'Cash on delivery',
+    date_paid_gmt: null,
+    shipping_lines: [{ method_id: 'flat_rate', method_title: 'Flat rate' }],
     line_items: [{ name: 'Item 1', quantity: 1, total: '1.00' }],
     date_created_gmt: '2026-07-23T12:00:00Z',
     date_modified_gmt: '2026-07-23T12:20:00Z',
@@ -1025,5 +1206,586 @@ describe('TelegramOrderService status writes', () => {
     expect(result).toEqual({ state: 'FAILED' });
     expect(fixture.orders[0]!.status).toBe('processing');
     expect(fixture.auditLogs).toHaveLength(0);
+  });
+});
+
+describe('M17 order lookup, refresh, context, and notes', () => {
+  async function detailReference(
+    fixture: ReturnType<typeof createFixture>
+  ): Promise<string> {
+    const list = await fixture.service.list({ telegram: fixture.identity });
+    return list.orders[0]!.ref;
+  }
+
+  async function preparedNote(
+    fixture: ReturnType<typeof createFixture>,
+    visibility: TelegramOrderNoteVisibility,
+    note = 'Pack this order carefully.'
+  ): Promise<string> {
+    const detailRef = await detailReference(fixture);
+    const started = await fixture.service.startNote({
+      telegram: fixture.identity,
+      ref: detailRef,
+      visibility,
+    });
+    expect(started).toMatchObject({
+      state: 'OK',
+      inputRef: expect.stringMatching(/^i\./),
+    });
+    const prepared = await fixture.service.prepareNote({
+      telegram: fixture.identity,
+      ref: started.inputRef!,
+      note,
+    });
+    expect(prepared).toMatchObject({
+      state: 'OK',
+      confirmRef: expect.stringMatching(/^c\./),
+      preview: note,
+    });
+    return prepared.confirmRef!;
+  }
+
+  it.each([MembershipRole.OWNER, MembershipRole.ADMIN, MembershipRole.MEMBER])(
+    'performs exact current-Store lookup for %s readers and reuses M11 detail',
+    async (role) => {
+      const fixture = createFixture(1);
+      fixture.state.membershipRole = role;
+      fixture.orders.push(
+        makeOrder(91, {
+          tenantId: 'ten_b',
+          storeId: 'sto_b',
+          orderNumber: '1001',
+        })
+      );
+
+      const result = await fixture.service.lookup({
+        telegram: fixture.identity,
+        orderNumber: '1001',
+      });
+
+      expect(result).toMatchObject({
+        state: 'OK',
+        order: { orderNumber: '1001' },
+        refreshRef: expect.stringMatching(/^d\./),
+      });
+      if (role === MembershipRole.MEMBER) {
+        expect(result).not.toHaveProperty('addNoteRef');
+      } else {
+        expect(result).toHaveProperty('addNoteRef', result.refreshRef);
+      }
+      expect(fixture.prisma.order.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            tenantId: 'ten_a',
+            storeId: 'sto_a',
+            orderNumber: '1001',
+          }),
+          take: 2,
+        })
+      );
+    }
+  );
+
+  it('fails malformed, missing, and ambiguous exact lookup safely', async () => {
+    const fixture = createFixture(1);
+
+    await expect(
+      fixture.service.lookup({
+        telegram: fixture.identity,
+        orderNumber: '1001 other',
+      })
+    ).resolves.toMatchObject({ state: 'MALFORMED_ORDER_NUMBER' });
+    await expect(
+      fixture.service.lookup({
+        telegram: fixture.identity,
+        orderNumber: '9999',
+      })
+    ).resolves.toMatchObject({ state: 'NOT_FOUND' });
+
+    fixture.orders.push(
+      makeOrder(2, { wcOrderId: '9998', orderNumber: '1001' })
+    );
+    await expect(
+      fixture.service.lookup({
+        telegram: fixture.identity,
+        orderNumber: '1001',
+      })
+    ).resolves.toMatchObject({ state: 'AMBIGUOUS' });
+  });
+
+  it('does not resolve an exact order number from another tenant or Store', async () => {
+    const fixture = createFixture(0);
+    fixture.orders.push(
+      makeOrder(1, {
+        tenantId: 'ten_foreign',
+        storeId: 'sto_foreign',
+        orderNumber: '1001',
+      }),
+      makeOrder(2, {
+        tenantId: 'ten_a',
+        storeId: 'sto_foreign',
+        orderNumber: '1001',
+      })
+    );
+
+    await expect(
+      fixture.service.lookup({
+        telegram: fixture.identity,
+        orderNumber: '1001',
+      })
+    ).resolves.toMatchObject({ state: 'NOT_FOUND' });
+
+    expect(fixture.prisma.order.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          tenantId: 'ten_a',
+          storeId: 'sto_a',
+          orderNumber: '1001',
+        }),
+      })
+    );
+  });
+
+  it('rejects a detail reference after the active Store context changes without refreshing', async () => {
+    const fixture = createFixture(1);
+    const detailRef = await detailReference(fixture);
+    const fetchOrder = jest.spyOn(WooCommerceClient.prototype, 'fetchOrder');
+    fixture.state.activeStoreId = 'sto_changed';
+
+    await expect(
+      fixture.service.refresh({
+        telegram: fixture.identity,
+        ref: detailRef,
+      })
+    ).resolves.toMatchObject({ state: 'CONTEXT_CHANGED' });
+    expect(fetchOrder).not.toHaveBeenCalled();
+    expect(
+      fixture.projection.reconcileAuthoritativeOrder
+    ).not.toHaveBeenCalled();
+  });
+
+  it('exposes minimized payment and fulfillment context without contact or transaction data', async () => {
+    const fixture = createFixture(1);
+    const result = await fixture.service.detail({
+      telegram: fixture.identity,
+      ref: await detailReference(fixture),
+    });
+
+    expect(result).toMatchObject({
+      state: 'OK',
+      order: {
+        payment: { method: 'Cash on delivery', paid: false },
+        shipping: {
+          methods: ['Flat rate'],
+          addressLines: ['Fulfillment Street 1', 'Tehran, 12345', 'IR'],
+        },
+      },
+    });
+    expect(JSON.stringify(result)).not.toMatch(
+      /must-not-leak|transaction|email|phone/i
+    );
+  });
+
+  it('renders migration-backfilled empty payment and shipping snapshots safely', async () => {
+    const fixture = createFixture(1);
+    fixture.orders[0]!.paymentSnapshot = {} as TestOrder['paymentSnapshot'];
+    fixture.orders[0]!.shippingLinesSnapshot = [];
+    delete fixture.orders[0]!.customerSnapshot.shipping;
+
+    const result = await fixture.service.detail({
+      telegram: fixture.identity,
+      ref: await detailReference(fixture),
+    });
+
+    expect(result).toMatchObject({
+      state: 'OK',
+      order: {
+        payment: { method: null, paid: false },
+        shipping: { methods: [], addressLines: [] },
+      },
+    });
+  });
+
+  it('refreshes with one logical bounded fetch and only M9 authoritative reconciliation', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.MEMBER;
+    const detailRef = await detailReference(fixture);
+    const fetchOrder = jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValue(wooPayload('completed'));
+
+    const result = await fixture.service.refresh({
+      telegram: fixture.identity,
+      ref: detailRef,
+    });
+
+    expect(result.state).toBe('OK');
+    expect(fetchOrder).toHaveBeenCalledTimes(1);
+    expect(fetchOrder).toHaveBeenCalledWith('1001');
+    expect(
+      fixture.projection.reconcileAuthoritativeOrder
+    ).toHaveBeenCalledTimes(1);
+    expect(fixture.projection.reconcileAuthoritativeOrder).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'sto_a' }),
+      expect.any(Object),
+      '1001'
+    );
+  });
+
+  it.each<[WooCommerceClientError, 'RETRYABLE' | 'NOT_FOUND' | 'FAILED']>([
+    [new WooCommerceClientError('timeout'), 'RETRYABLE'],
+    [new WooCommerceClientError('not-found'), 'NOT_FOUND'],
+    [new WooCommerceClientError('auth'), 'FAILED'],
+  ])('normalizes refresh failure %s as %s', async (error, state) => {
+    const fixture = createFixture(1);
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockRejectedValue(error);
+
+    await expect(
+      fixture.service.refresh({
+        telegram: fixture.identity,
+        ref: await detailReference(fixture),
+      })
+    ).resolves.toMatchObject({ state });
+  });
+
+  it.each<
+    [Exclude<MembershipRole, 'MEMBER'>, TelegramOrderNoteVisibility, boolean]
+  >([
+    [MembershipRole.OWNER, TelegramOrderNoteVisibility.INTERNAL, false],
+    [MembershipRole.ADMIN, TelegramOrderNoteVisibility.INTERNAL, false],
+    [MembershipRole.OWNER, TelegramOrderNoteVisibility.CUSTOMER, true],
+    [MembershipRole.ADMIN, TelegramOrderNoteVisibility.CUSTOMER, true],
+  ])(
+    'creates one %s %s note with WooCommerce visibility %s and safe audit',
+    async (role, visibility, customerNote) => {
+      const fixture = createFixture(1);
+      fixture.state.membershipRole = role;
+      jest
+        .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+        .mockResolvedValue(wooPayload('processing'));
+      const createNote = jest
+        .spyOn(WooCommerceClient.prototype, 'createOrderNote')
+        .mockResolvedValue({ id: 501, customer_note: customerNote });
+      const confirmRef = await preparedNote(fixture, visibility);
+
+      const first = await fixture.service.confirmNote({
+        telegram: fixture.identity,
+        ref: confirmRef,
+      });
+      const replay = await fixture.service.confirmNote({
+        telegram: fixture.identity,
+        ref: confirmRef,
+      });
+
+      expect(first).toMatchObject({ state: 'OK', visibility });
+      expect(replay).toEqual(first);
+      expect(createNote).toHaveBeenCalledTimes(1);
+      expect(createNote).toHaveBeenCalledWith(
+        '1001',
+        'Pack this order carefully.',
+        customerNote
+      );
+      expect(fixture.noteActions).toHaveLength(1);
+      expect(fixture.auditLogs).toHaveLength(1);
+      expect(fixture.auditLogs[0]).toMatchObject({
+        action: 'telegram.order.note.created',
+        entityType: 'Order',
+        entityId: '1001',
+        metadata: { visibility, result: 'SUCCEEDED' },
+      });
+      expect(JSON.stringify(fixture.auditLogs)).not.toContain(
+        'Pack this order carefully.'
+      );
+    }
+  );
+
+  it('never exposes or allows a MEMBER note mutation path', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.MEMBER;
+    const detailRef = await detailReference(fixture);
+    const detail = await fixture.service.detail({
+      telegram: fixture.identity,
+      ref: detailRef,
+    });
+
+    expect(detail).not.toHaveProperty('addNoteRef');
+    await expect(
+      fixture.service.noteOptions({
+        telegram: fixture.identity,
+        ref: detailRef,
+      })
+    ).resolves.toEqual({ state: 'FORBIDDEN_ROLE' });
+    expect(
+      fixture.prisma.telegramOrderNoteAction.create
+    ).not.toHaveBeenCalled();
+  });
+
+  it('persists ambiguous note outcomes and never blindly redispatches them', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.OWNER;
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValue(wooPayload('processing'));
+    const createNote = jest
+      .spyOn(WooCommerceClient.prototype, 'createOrderNote')
+      .mockRejectedValue(new WooCommerceClientError('timeout'));
+    const confirmRef = await preparedNote(
+      fixture,
+      TelegramOrderNoteVisibility.CUSTOMER
+    );
+
+    const first = await fixture.service.confirmNote({
+      telegram: fixture.identity,
+      ref: confirmRef,
+    });
+    const replay = await fixture.service.confirmNote({
+      telegram: fixture.identity,
+      ref: confirmRef,
+    });
+
+    expect(first).toMatchObject({ state: 'AMBIGUOUS' });
+    expect(replay).toEqual(first);
+    expect(createNote).toHaveBeenCalledTimes(1);
+    expect(fixture.auditLogs).toHaveLength(0);
+  });
+
+  it('allows only one note POST under simultaneous duplicate confirmation', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.OWNER;
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValue(wooPayload('processing'));
+    let releasePost!: (value: { id: number; customer_note: boolean }) => void;
+    let markDispatched!: () => void;
+    const dispatched = new Promise<void>((resolve) => {
+      markDispatched = resolve;
+    });
+    const postResult = new Promise<{ id: number; customer_note: boolean }>(
+      (resolve) => {
+        releasePost = resolve;
+      }
+    );
+    const createNote = jest
+      .spyOn(WooCommerceClient.prototype, 'createOrderNote')
+      .mockImplementation(async () => {
+        markDispatched();
+        return postResult;
+      });
+    const confirmRef = await preparedNote(
+      fixture,
+      TelegramOrderNoteVisibility.INTERNAL
+    );
+
+    const first = fixture.service.confirmNote({
+      telegram: fixture.identity,
+      ref: confirmRef,
+    });
+    await dispatched;
+    const concurrent = await fixture.service.confirmNote({
+      telegram: fixture.identity,
+      ref: confirmRef,
+    });
+    releasePost({ id: 501, customer_note: false });
+
+    await expect(first).resolves.toMatchObject({ state: 'OK' });
+    expect(concurrent).toMatchObject({ state: 'IN_PROGRESS' });
+    expect(createNote).toHaveBeenCalledTimes(1);
+    expect(fixture.noteActions).toHaveLength(1);
+    expect(fixture.auditLogs).toHaveLength(1);
+  });
+
+  it('persists a rate-limited post-dispatch result and does not retry it on replay', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.OWNER;
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValue(wooPayload('processing'));
+    const createNote = jest
+      .spyOn(WooCommerceClient.prototype, 'createOrderNote')
+      .mockRejectedValue(new WooCommerceClientError('rate-limited'));
+    const confirmRef = await preparedNote(
+      fixture,
+      TelegramOrderNoteVisibility.INTERNAL
+    );
+
+    const first = await fixture.service.confirmNote({
+      telegram: fixture.identity,
+      ref: confirmRef,
+    });
+    const replay = await fixture.service.confirmNote({
+      telegram: fixture.identity,
+      ref: confirmRef,
+    });
+
+    expect(first).toMatchObject({ state: 'RETRYABLE' });
+    expect(replay).toEqual(first);
+    expect(createNote).toHaveBeenCalledTimes(1);
+  });
+
+  it('converts a stale restart-surviving note claim to AMBIGUOUS without dispatch', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.OWNER;
+    const confirmRef = await preparedNote(
+      fixture,
+      TelegramOrderNoteVisibility.INTERNAL
+    );
+    const callbackReferenceId = `tcr_${confirmRef.split('.')[1]}`;
+    fixture.noteActions.push({
+      id: 'tona_stale',
+      callbackReferenceId,
+      visibility: TelegramOrderNoteVisibility.INTERNAL,
+      state: TelegramOrderNoteActionState.IN_FLIGHT,
+      startedAt: new Date(Date.now() - 61_000),
+    });
+    const createNote = jest.spyOn(
+      WooCommerceClient.prototype,
+      'createOrderNote'
+    );
+
+    const result = await fixture.service.confirmNote({
+      telegram: fixture.identity,
+      ref: confirmRef,
+    });
+
+    expect(result).toMatchObject({ state: 'AMBIGUOUS' });
+    expect(createNote).not.toHaveBeenCalled();
+    expect(fixture.noteActions[0]!.state).toBe(
+      TelegramOrderNoteActionState.AMBIGUOUS
+    );
+  });
+
+  it('requires plain bounded text and rejects expired or context-changed note references', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.OWNER;
+    const detailRef = await detailReference(fixture);
+    const started = await fixture.service.startNote({
+      telegram: fixture.identity,
+      ref: detailRef,
+      visibility: TelegramOrderNoteVisibility.INTERNAL,
+    });
+
+    await expect(
+      fixture.service.prepareNote({
+        telegram: fixture.identity,
+        ref: started.inputRef!,
+        note: '<script>unsafe</script>',
+      })
+    ).resolves.toMatchObject({ state: 'INVALID_NOTE' });
+
+    const reference = fixture.references.find(
+      (candidate) => candidate.id === `tcr_${started.inputRef!.split('.')[1]}`
+    )!;
+    reference.expiresAt = new Date(0);
+    await expect(
+      fixture.service.prepareNote({
+        telegram: fixture.identity,
+        ref: started.inputRef!,
+        note: 'Safe text',
+      })
+    ).resolves.toEqual({ state: 'EXPIRED_REF' });
+
+    const fresh = await fixture.service.startNote({
+      telegram: fixture.identity,
+      ref: detailRef,
+      visibility: TelegramOrderNoteVisibility.INTERNAL,
+    });
+    fixture.state.activeStoreId = 'sto_changed';
+    await expect(
+      fixture.service.prepareNote({
+        telegram: fixture.identity,
+        ref: fresh.inputRef!,
+        note: 'Safe text',
+      })
+    ).resolves.toEqual({ state: 'CONTEXT_CHANGED' });
+  });
+
+  it('blocks a prepared draft immediately after authorization is revoked', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.ADMIN;
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValue(wooPayload('processing'));
+    const createNote = jest.spyOn(
+      WooCommerceClient.prototype,
+      'createOrderNote'
+    );
+    const confirmRef = await preparedNote(
+      fixture,
+      TelegramOrderNoteVisibility.CUSTOMER,
+      'این یادداشت برای مشتری است.'
+    );
+    fixture.state.chatRevoked = true;
+
+    await expect(
+      fixture.service.confirmNote({
+        telegram: fixture.identity,
+        ref: confirmRef,
+      })
+    ).resolves.toEqual({ state: 'UNAUTHORIZED' });
+    expect(createNote).not.toHaveBeenCalled();
+    expect(fixture.noteActions).toHaveLength(0);
+  });
+
+  it('binds prepared visibility server-side and rejects a switched confirmation token', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.OWNER;
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValue(wooPayload('processing'));
+    const createNote = jest
+      .spyOn(WooCommerceClient.prototype, 'createOrderNote')
+      .mockResolvedValue({ id: 501, customer_note: false });
+    const confirmRef = await preparedNote(
+      fixture,
+      TelegramOrderNoteVisibility.INTERNAL
+    );
+
+    await expect(
+      fixture.service.confirmNote({
+        telegram: fixture.identity,
+        ref: `${confirmRef}:CUSTOMER`,
+      })
+    ).resolves.toEqual({ state: 'CONTEXT_CHANGED' });
+    await expect(
+      fixture.service.confirmNote({
+        telegram: fixture.identity,
+        ref: confirmRef,
+      })
+    ).resolves.toMatchObject({
+      state: 'OK',
+      visibility: TelegramOrderNoteVisibility.INTERNAL,
+    });
+    expect(createNote).toHaveBeenCalledTimes(1);
+    expect(createNote).toHaveBeenCalledWith(
+      '1001',
+      'Pack this order carefully.',
+      false
+    );
+  });
+
+  it('cancels a draft without any WooCommerce mutation', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.ADMIN;
+    const detailRef = await detailReference(fixture);
+    const started = await fixture.service.startNote({
+      telegram: fixture.identity,
+      ref: detailRef,
+      visibility: TelegramOrderNoteVisibility.INTERNAL,
+    });
+    const createNote = jest.spyOn(
+      WooCommerceClient.prototype,
+      'createOrderNote'
+    );
+
+    await expect(
+      fixture.service.cancelNote({
+        telegram: fixture.identity,
+        ref: started.inputRef!,
+      })
+    ).resolves.toMatchObject({ state: 'CANCELLED', detailRef });
+    expect(createNote).not.toHaveBeenCalled();
+    expect(fixture.noteActions).toHaveLength(0);
   });
 });

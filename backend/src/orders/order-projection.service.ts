@@ -66,6 +66,8 @@ interface ExistingOrderProjection {
   totals: Prisma.JsonValue;
   customerSnapshot: Prisma.JsonValue;
   lineItemsSnapshot: Prisma.JsonValue;
+  paymentSnapshot: Prisma.JsonValue;
+  shippingLinesSnapshot: Prisma.JsonValue;
   wcCreatedAt: Date;
   wcModifiedAt: Date;
   projectionFingerprint: string;
@@ -260,6 +262,9 @@ export class OrderProjectionService {
         totals: existing.totals as Prisma.InputJsonObject,
         customerSnapshot: existing.customerSnapshot as Prisma.InputJsonObject,
         lineItemsSnapshot: existing.lineItemsSnapshot as Prisma.InputJsonArray,
+        paymentSnapshot: existing.paymentSnapshot as Prisma.InputJsonObject,
+        shippingLinesSnapshot:
+          existing.shippingLinesSnapshot as Prisma.InputJsonArray,
         wcCreatedAt: existing.wcCreatedAt,
         wcModifiedAt: existing.wcModifiedAt,
         remoteDeletedAt: event.receivedAt,
@@ -305,6 +310,8 @@ export class OrderProjectionService {
             totals: candidate.totals,
             customerSnapshot: candidate.customerSnapshot,
             lineItemsSnapshot: candidate.lineItemsSnapshot,
+            paymentSnapshot: candidate.paymentSnapshot,
+            shippingLinesSnapshot: candidate.shippingLinesSnapshot,
             wcCreatedAt: candidate.wcCreatedAt,
             wcModifiedAt: candidate.wcModifiedAt,
             projectionFingerprint: candidate.projectionFingerprint,
@@ -341,6 +348,8 @@ export class OrderProjectionService {
           totals: projection.totals,
           customerSnapshot: projection.customerSnapshot,
           lineItemsSnapshot: projection.lineItemsSnapshot,
+          paymentSnapshot: projection.paymentSnapshot,
+          shippingLinesSnapshot: projection.shippingLinesSnapshot,
           wcCreatedAt: projection.wcCreatedAt,
           wcModifiedAt: projection.wcModifiedAt,
           projectionFingerprint: projection.projectionFingerprint,
@@ -379,6 +388,8 @@ export class OrderProjectionService {
         totals: true,
         customerSnapshot: true,
         lineItemsSnapshot: true,
+        paymentSnapshot: true,
+        shippingLinesSnapshot: true,
         wcCreatedAt: true,
         wcModifiedAt: true,
         projectionFingerprint: true,

@@ -219,7 +219,7 @@ test('/help and command discovery list existing functionality only', async () =>
 
   assert.deepEqual(
     BOT_COMMANDS.map(({ command }) => command),
-    ['start', 'orders', 'status', 'help', 'unlink']
+    ['start', 'orders', 'order', 'status', 'help', 'unlink']
   );
   const message = apiCalls.find((call) => call.method === 'sendMessage');
   for (const command of BOT_COMMANDS) {

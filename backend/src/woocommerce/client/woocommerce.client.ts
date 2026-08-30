@@ -96,6 +96,18 @@ export class WooCommerceClient {
     );
   }
 
+  createOrderNote(
+    wcOrderId: string,
+    note: string,
+    customerNote: boolean
+  ): Promise<unknown> {
+    return this.writeWithTotalTimeout<unknown>(
+      'post',
+      `${this.ordersUrl}/${encodeURIComponent(wcOrderId)}/notes`,
+      { note, customer_note: customerNote }
+    );
+  }
+
   async ensureRequiredOrderWebhooks(
     deliveryUrl: string,
     webhookSecret: string
@@ -228,7 +240,7 @@ export class WooCommerceClient {
   private async writeWithTotalTimeout<T>(
     method: 'post' | 'put',
     url: string,
-    body: Readonly<Record<string, string>>
+    body: Readonly<Record<string, string | boolean>>
   ): Promise<T> {
     const controller = new AbortController();
     const timeout = setTimeout(

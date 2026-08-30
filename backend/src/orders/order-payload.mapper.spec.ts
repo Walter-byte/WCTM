@@ -22,6 +22,10 @@ function orderPayload(overrides: Record<string, unknown> = {}) {
     customer_id: 7,
     billing: { last_name: 'Doe', first_name: 'Jane' },
     shipping: { country: 'US', city: 'Austin' },
+    payment_method: 'cod',
+    payment_method_title: 'Cash on delivery',
+    date_paid_gmt: null,
+    shipping_lines: [{ method_id: 'flat_rate', method_title: 'Flat rate' }],
     line_items: [{ quantity: 2, name: 'Widget', id: 11, total: '20.00' }],
     date_created_gmt: '2026-07-23T10:00:00',
     date_modified_gmt: '2026-07-23T10:05:00',
@@ -45,6 +49,14 @@ describe('WooCommerce order payload mapping', () => {
       customerSnapshot: {
         customer_id: 7,
       },
+      paymentSnapshot: {
+        method: 'cod',
+        method_title: 'Cash on delivery',
+        paid: false,
+      },
+      shippingLinesSnapshot: [
+        { method_id: 'flat_rate', method_title: 'Flat rate' },
+      ],
       remoteDeletedAt: null,
     });
     expect(mapped.lineItemsSnapshot).toHaveLength(1);

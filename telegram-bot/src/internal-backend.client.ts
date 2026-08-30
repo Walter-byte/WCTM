@@ -63,6 +63,8 @@ export interface OrderDetailPayload {
   totals?: Readonly<Record<string, string | number>>;
   customerDisplayName: string;
   lineItems?: OrderLineItem[];
+  payment?: { method: string | null; paid: boolean };
+  shipping?: { methods: string[]; addressLines: string[] };
   wcCreatedAt?: string;
   wcModifiedAt?: string;
   remoteDeleted: boolean;
@@ -79,7 +81,64 @@ export interface OrderDetailResult {
   order?: OrderDetailPayload;
   backCursor?: string;
   transitionsRef?: string;
+  refreshRef?: string;
+  addNoteRef?: string;
   freshness: OrderFreshness;
+}
+
+export interface OrderLookupResult extends Omit<OrderDetailResult, 'state'> {
+  state: OrderDetailResult['state'] | 'MALFORMED_ORDER_NUMBER' | 'AMBIGUOUS';
+}
+
+export interface OrderRefreshResult extends Omit<OrderDetailResult, 'state'> {
+  state: OrderDetailResult['state'] | 'RETRYABLE' | 'FAILED';
+}
+
+export type OrderNoteState =
+  | 'OK'
+  | 'CANCELLED'
+  | 'INVALID_NOTE'
+  | 'IN_PROGRESS'
+  | 'AMBIGUOUS'
+  | 'RETRYABLE'
+  | 'FAILED'
+  | 'NOT_FOUND'
+  | 'DELETED'
+  | 'NO_ACTIVE_STORE'
+  | 'UNAUTHORIZED'
+  | 'CONTEXT_CHANGED'
+  | 'FORBIDDEN_ROLE'
+  | 'EXPIRED_REF';
+
+export type OrderNoteVisibility = 'INTERNAL' | 'CUSTOMER';
+
+export interface OrderNoteOptionsResult {
+  state: OrderNoteState;
+  ref?: string;
+  visibilities?: OrderNoteVisibility[];
+}
+
+export interface OrderNoteStartResult {
+  state: OrderNoteState;
+  inputRef?: string;
+  detailRef?: string;
+  visibility?: OrderNoteVisibility;
+  maxLength?: number;
+}
+
+export interface OrderNotePrepareResult {
+  state: OrderNoteState;
+  confirmRef?: string;
+  detailRef?: string;
+  visibility?: OrderNoteVisibility;
+  preview?: string;
+}
+
+export interface OrderNoteMutationResult {
+  state: OrderNoteState;
+  detailRef?: string;
+  visibility?: OrderNoteVisibility;
+  orderNumber?: string;
 }
 
 export interface OrderTransitionsResult {
@@ -181,6 +240,21 @@ export class InternalBackendClient {
     return parseOrderListResult(value);
   }
 
+  async lookupOrder(
+    identity: TelegramIdentity,
+    orderNumber: string
+  ): Promise<OrderLookupResult> {
+    const value = await this.post<unknown>('orders/lookup', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+      orderNumber,
+    });
+
+    return parseOrderLookupResult(value);
+  }
+
   async orderDetail(
     identity: TelegramIdentity,
     ref: string
@@ -194,6 +268,110 @@ export class InternalBackendClient {
     });
 
     return parseOrderDetailResult(value);
+  }
+
+  async refreshOrder(
+    identity: TelegramIdentity,
+    ref: string
+  ): Promise<OrderRefreshResult> {
+    const value = await this.post<unknown>(
+      'orders/refresh',
+      identity,
+      {
+        telegram: {
+          userId: identity.telegramUserId,
+          chatId: identity.telegramChatId,
+        },
+        ref,
+      },
+      this.configuration.statusWriteTimeoutMs ?? 50_000
+    );
+
+    return parseOrderRefreshResult(value);
+  }
+
+  async orderNoteOptions(
+    identity: TelegramIdentity,
+    ref: string
+  ): Promise<OrderNoteOptionsResult> {
+    const value = await this.post<unknown>('orders/notes/options', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+      ref,
+    });
+
+    return parseOrderNoteOptionsResult(value);
+  }
+
+  async startOrderNote(
+    identity: TelegramIdentity,
+    ref: string,
+    visibility: OrderNoteVisibility
+  ): Promise<OrderNoteStartResult> {
+    const value = await this.post<unknown>('orders/notes/start', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+      ref,
+      visibility,
+    });
+
+    return parseOrderNoteStartResult(value);
+  }
+
+  async prepareOrderNote(
+    identity: TelegramIdentity,
+    ref: string,
+    note: string
+  ): Promise<OrderNotePrepareResult> {
+    const value = await this.post<unknown>('orders/notes/prepare', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+      ref,
+      note,
+    });
+
+    return parseOrderNotePrepareResult(value);
+  }
+
+  async cancelOrderNote(
+    identity: TelegramIdentity,
+    ref: string
+  ): Promise<OrderNoteMutationResult> {
+    const value = await this.post<unknown>('orders/notes/cancel', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+      ref,
+    });
+
+    return parseOrderNoteMutationResult(value);
+  }
+
+  async confirmOrderNote(
+    identity: TelegramIdentity,
+    ref: string
+  ): Promise<OrderNoteMutationResult> {
+    const value = await this.post<unknown>(
+      'orders/notes/confirm',
+      identity,
+      {
+        telegram: {
+          userId: identity.telegramUserId,
+          chatId: identity.telegramChatId,
+        },
+        ref,
+      },
+      this.configuration.statusWriteTimeoutMs ?? 50_000
+    );
+
+    return parseOrderNoteMutationResult(value);
   }
 
   async orderTransitions(
@@ -307,15 +485,48 @@ function parseOrderListResult(value: unknown): OrderListResult {
 }
 
 function parseOrderDetailResult(value: unknown): OrderDetailResult {
-  const record = requireRecord(value);
-  const allowedStates = new Set([
+  return parseOrderDetailLike(value, [
     'OK',
     'NOT_FOUND',
     'DELETED',
     'CONTEXT_CHANGED',
     'NO_ACTIVE_STORE',
     'UNAUTHORIZED',
-  ]);
+  ]) as OrderDetailResult;
+}
+
+function parseOrderLookupResult(value: unknown): OrderLookupResult {
+  return parseOrderDetailLike(value, [
+    'OK',
+    'NOT_FOUND',
+    'DELETED',
+    'CONTEXT_CHANGED',
+    'NO_ACTIVE_STORE',
+    'UNAUTHORIZED',
+    'MALFORMED_ORDER_NUMBER',
+    'AMBIGUOUS',
+  ]) as OrderLookupResult;
+}
+
+function parseOrderRefreshResult(value: unknown): OrderRefreshResult {
+  return parseOrderDetailLike(value, [
+    'OK',
+    'NOT_FOUND',
+    'DELETED',
+    'CONTEXT_CHANGED',
+    'NO_ACTIVE_STORE',
+    'UNAUTHORIZED',
+    'RETRYABLE',
+    'FAILED',
+  ]) as OrderRefreshResult;
+}
+
+function parseOrderDetailLike(
+  value: unknown,
+  states: readonly string[]
+): OrderDetailResult | OrderLookupResult | OrderRefreshResult {
+  const record = requireRecord(value);
+  const allowedStates = new Set(states);
 
   if (
     !allowedStates.has(String(record['state'])) ||
@@ -323,7 +534,11 @@ function parseOrderDetailResult(value: unknown): OrderDetailResult {
     (record['backCursor'] !== undefined &&
       !isCallbackReference(record['backCursor'])) ||
     (record['transitionsRef'] !== undefined &&
-      !isCallbackReference(record['transitionsRef'], 'd'))
+      !isCallbackReference(record['transitionsRef'], 'd')) ||
+    (record['refreshRef'] !== undefined &&
+      !isCallbackReference(record['refreshRef'], 'd')) ||
+    (record['addNoteRef'] !== undefined &&
+      !isCallbackReference(record['addNoteRef'], 'd'))
   ) {
     throw new MalformedBackendResponseError();
   }
@@ -351,8 +566,104 @@ function parseOrderDetailResult(value: unknown): OrderDetailResult {
     ...(typeof record['transitionsRef'] === 'string'
       ? { transitionsRef: record['transitionsRef'] }
       : {}),
+    ...(typeof record['refreshRef'] === 'string'
+      ? { refreshRef: record['refreshRef'] }
+      : {}),
+    ...(typeof record['addNoteRef'] === 'string'
+      ? { addNoteRef: record['addNoteRef'] }
+      : {}),
     freshness: record['freshness'],
   };
+}
+
+function parseOrderNoteOptionsResult(value: unknown): OrderNoteOptionsResult {
+  const record = parseOrderNoteBase(value);
+
+  if (
+    record['state'] === 'OK' &&
+    (!isCallbackReference(record['ref'], 'd') ||
+      !Array.isArray(record['visibilities']) ||
+      !record['visibilities'].every(isNoteVisibility))
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return record as unknown as OrderNoteOptionsResult;
+}
+
+function parseOrderNoteStartResult(value: unknown): OrderNoteStartResult {
+  const record = parseOrderNoteBase(value);
+
+  if (
+    record['state'] === 'OK' &&
+    (!isCallbackReference(record['inputRef'], 'i') ||
+      !isCallbackReference(record['detailRef'], 'd') ||
+      !isNoteVisibility(record['visibility']) ||
+      typeof record['maxLength'] !== 'number' ||
+      !Number.isSafeInteger(record['maxLength']))
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return record as unknown as OrderNoteStartResult;
+}
+
+function parseOrderNotePrepareResult(value: unknown): OrderNotePrepareResult {
+  const record = parseOrderNoteBase(value);
+
+  if (
+    record['state'] === 'OK' &&
+    (!isCallbackReference(record['confirmRef'], 'c') ||
+      !isCallbackReference(record['detailRef'], 'd') ||
+      !isNoteVisibility(record['visibility']) ||
+      !isString(record['preview']))
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return record as unknown as OrderNotePrepareResult;
+}
+
+function parseOrderNoteMutationResult(value: unknown): OrderNoteMutationResult {
+  const record = parseOrderNoteBase(value);
+
+  if (
+    (record['detailRef'] !== undefined &&
+      !isCallbackReference(record['detailRef'], 'd')) ||
+    (record['visibility'] !== undefined &&
+      !isNoteVisibility(record['visibility'])) ||
+    (record['orderNumber'] !== undefined && !isString(record['orderNumber']))
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return record as unknown as OrderNoteMutationResult;
+}
+
+function parseOrderNoteBase(value: unknown): Record<string, unknown> {
+  const record = requireRecord(value);
+  const states = new Set([
+    'OK',
+    'CANCELLED',
+    'INVALID_NOTE',
+    'IN_PROGRESS',
+    'AMBIGUOUS',
+    'RETRYABLE',
+    'FAILED',
+    'NOT_FOUND',
+    'DELETED',
+    'NO_ACTIVE_STORE',
+    'UNAUTHORIZED',
+    'CONTEXT_CHANGED',
+    'FORBIDDEN_ROLE',
+    'EXPIRED_REF',
+  ]);
+
+  if (!states.has(String(record['state']))) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return record;
 }
 
 function parseOrderTransitionsResult(value: unknown): OrderTransitionsResult {
@@ -473,13 +784,39 @@ function parseOrderDetailPayload(value: unknown): OrderDetailPayload {
       !isIsoDate(record['wcModifiedAt']) ||
       !Array.isArray(record['lineItems']) ||
       !record['lineItems'].every(isOrderLineItem) ||
-      !isScalarRecord(record['totals'])
+      !isScalarRecord(record['totals']) ||
+      (record['payment'] !== undefined &&
+        !isPaymentContext(record['payment'])) ||
+      (record['shipping'] !== undefined &&
+        !isShippingContext(record['shipping']))
     ) {
       throw new MalformedBackendResponseError();
     }
   }
 
   return record as unknown as OrderDetailPayload;
+}
+
+function isPaymentContext(value: unknown): boolean {
+  const record = asRecord(value);
+
+  return Boolean(
+    record &&
+    (record['method'] === null || isString(record['method'])) &&
+    typeof record['paid'] === 'boolean'
+  );
+}
+
+function isShippingContext(value: unknown): boolean {
+  const record = asRecord(value);
+
+  return Boolean(
+    record &&
+    Array.isArray(record['methods']) &&
+    record['methods'].every(isString) &&
+    Array.isArray(record['addressLines']) &&
+    record['addressLines'].every(isString)
+  );
 }
 
 function isOrderLineItem(value: unknown): boolean {
@@ -521,7 +858,7 @@ function isNullableCallbackReference(value: unknown): boolean {
 
 function isCallbackReference(
   value: unknown,
-  prefix: 'p' | 'd' | 's' = 'p'
+  prefix: 'p' | 'd' | 's' | 'i' | 'c' = 'p'
 ): value is string {
   return (
     typeof value === 'string' &&
@@ -530,6 +867,10 @@ function isCallbackReference(
     ) &&
     value.length <= 64
   );
+}
+
+function isNoteVisibility(value: unknown): value is OrderNoteVisibility {
+  return value === 'INTERNAL' || value === 'CUSTOMER';
 }
 
 function isStatus(value: unknown): boolean {

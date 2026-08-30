@@ -22,6 +22,8 @@ export interface OrderProjection {
   totals: Prisma.InputJsonObject;
   customerSnapshot: Prisma.InputJsonObject;
   lineItemsSnapshot: Prisma.InputJsonArray;
+  paymentSnapshot: Prisma.InputJsonObject;
+  shippingLinesSnapshot: Prisma.InputJsonArray;
   wcCreatedAt: Date;
   wcModifiedAt: Date;
   remoteDeletedAt: Date | null;
@@ -83,10 +85,18 @@ export function mapWooCommerceOrder(payload: unknown): OrderProjection {
       wcOrderId
     );
     const lineItems = record['line_items'];
+    const shippingLines = record['shipping_lines'] ?? [];
 
     if (!Array.isArray(lineItems)) {
       throw new OrderPayloadMappingError(
         'malformed-order-line-items',
+        wcOrderId
+      );
+    }
+
+    if (!Array.isArray(shippingLines)) {
+      throw new OrderPayloadMappingError(
+        'malformed-order-shipping-lines',
         wcOrderId
       );
     }
@@ -115,6 +125,37 @@ export function mapWooCommerceOrder(payload: unknown): OrderProjection {
         shipping,
       }) as Prisma.InputJsonObject,
       lineItemsSnapshot: canonicalizeJson(lineItems) as Prisma.InputJsonArray,
+      paymentSnapshot: canonicalizeJson({
+        method: normalizeOptionalString(record['payment_method'], wcOrderId),
+        method_title: normalizeOptionalString(
+          record['payment_method_title'],
+          wcOrderId
+        ),
+        paid: hasPaidDate(
+          record['date_paid_gmt'] ?? record['date_paid'],
+          wcOrderId
+        ),
+      }) as Prisma.InputJsonObject,
+      shippingLinesSnapshot: canonicalizeJson(
+        shippingLines.map((line) => {
+          const shippingLine = requireRecord(
+            line,
+            'malformed-order-shipping-lines',
+            wcOrderId
+          );
+
+          return {
+            method_id: normalizeOptionalString(
+              shippingLine['method_id'],
+              wcOrderId
+            ),
+            method_title: normalizeOptionalString(
+              shippingLine['method_title'],
+              wcOrderId
+            ),
+          };
+        })
+      ) as Prisma.InputJsonArray,
       wcCreatedAt: requireGmtDate(
         record['date_created_gmt'],
         'malformed-order-created-at',
@@ -152,6 +193,8 @@ export function orderProjectionFingerprint(
     totals: projection.totals,
     customerSnapshot: projection.customerSnapshot,
     lineItemsSnapshot: projection.lineItemsSnapshot,
+    paymentSnapshot: projection.paymentSnapshot,
+    shippingLinesSnapshot: projection.shippingLinesSnapshot,
     wcCreatedAt: projection.wcCreatedAt.toISOString(),
     wcModifiedAt: projection.wcModifiedAt.toISOString(),
     remoteDeletedAt: projection.remoteDeletedAt?.toISOString() ?? null,
@@ -296,4 +339,32 @@ function normalizeCustomerId(value: unknown): Prisma.InputJsonValue | null {
   }
 
   throw new OrderPayloadMappingError('malformed-order-customer');
+}
+
+function normalizeOptionalString(
+  value: unknown,
+  wcOrderId: string
+): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value !== 'string') {
+    throw new OrderPayloadMappingError('malformed-order-context', wcOrderId);
+  }
+
+  const normalized = value.trim();
+  return normalized === '' ? null : normalized;
+}
+
+function hasPaidDate(value: unknown, wcOrderId: string): boolean {
+  if (value === null || value === undefined || value === '') {
+    return false;
+  }
+
+  if (typeof value !== 'string') {
+    throw new OrderPayloadMappingError('malformed-order-payment', wcOrderId);
+  }
+
+  return true;
 }

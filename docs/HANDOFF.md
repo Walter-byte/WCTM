@@ -769,6 +769,56 @@ Final closure evidence:
 Phase 4 is complete. Its exit criterion is met through the implemented MVP
 order-management path. This does not complete or narrow the full MVP.
 
+### Phase 5 — Core Store Management (MVP) (in progress)
+
+#### M17 — Order Workflow Completion (implemented; awaiting review)
+
+- `/order <number>` performs exact current-Store projected lookup only. The
+  backend derives Telegram account, private chat, active Membership, tenant,
+  and exactly one active Store; duplicate exact values fail safely rather than
+  selecting arbitrarily. OWNER, ADMIN, and MEMBER may read.
+- M11 detail references now expose Refresh for all readers. One logical bounded
+  M6 single-order GET is reconciled exclusively through M9; M17 adds no polling,
+  queue, alternate synchronization path, or background refresh.
+- Order projection migration
+  `20260830120000_m17_order_workflow_completion` adds only
+  `payment_snapshot` and `shipping_lines_snapshot`. Telegram detail returns
+  method/title and paid/unpaid information plus shipping method and minimized
+  address lines. Transaction ID, phone, email, credentials, and raw payloads are
+  not exposed.
+- OWNER and ADMIN can create internal (`customer_note=false`) or
+  customer-visible (`customer_note=true`) WooCommerce notes. MEMBER receives no
+  Add Note action and backend mutation attempts return `FORBIDDEN_ROLE`.
+- The bot owns no note session or policy. Backend-issued `NOTE_INPUT` and
+  `NOTE_CONFIRM` references bind current account/chat/tenant/Store/order and
+  visibility. Telegram ForceReply carries only the opaque signed input
+  reference. Text is trimmed, non-empty, plain text, HTML-delimiter/control-
+  character rejected, and bounded to 1,000 characters before a safe preview and
+  mandatory Confirm/Cancel.
+- The short-lived draft body is AES-256-GCM encrypted because confirmation must
+  survive bot/backend restart. Its HMAC fingerprint binds approved content; the
+  body is cleared on cancellation or terminal action completion. The durable
+  `TelegramOrderNoteAction` stores context, visibility, fingerprint, claim
+  state, and safe result—not note text.
+- Confirm atomically claims the reference/action before one non-retried
+  WooCommerce note POST. Duplicate callbacks return the persisted result or a
+  safe in-progress state. Transport/timeout, malformed success, post-dispatch
+  persistence uncertainty, and stale in-flight claims become `AMBIGUOUS` and
+  are never redispatched. Definitive failures are persisted without replaying
+  the POST.
+- Successful creation writes `telegram.order.note.created` AuditLog metadata
+  containing only Store, visibility, and result. Note body and external payloads
+  are absent from audit and structured logs.
+- Automated evidence: Prisma validate/generate; 48 backend suites and 292 tests;
+  39 bot tests; build, typecheck, lint, format, and diff checks all pass. The
+  full 11-migration chain, including M17, applies cleanly to isolated PostgreSQL
+  16 and Prisma reports the schema up to date. Live refresh/internal
+  note/customer-visible note/replay/fault validation remains manual.
+
+M17 adds no dependency and does not change M6, M9, M11–M16 authentication,
+status, notification, navigation, onboarding, or connector contracts. Do not
+begin another Phase 5 milestone without approval.
+
 ---
 
 ## 5. Current Repository Structure
@@ -778,23 +828,26 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `main` at M16 merge commit `9e831a9`.
+Current branch: `feat/m17-order-workflow-completion`, based on `main` after M16
+merge commit `9e831a9`.
 
 ---
 
 ## 6. Current Blockers
 
-No Phase 4 or M16 blocker remains. A deployed M13 synthetic new-order
-notification-delivery result is still not recorded as PASS. Existing known
-issues and technical debt remain unchanged.
+No M17 implementation blocker remains. The full migration chain, including M17,
+applied cleanly to isolated PostgreSQL 16 and Prisma reported the schema up to
+date. Live WooCommerce/Telegram validation remains pending. A deployed M13
+synthetic new-order notification-delivery result is still not recorded as PASS.
+Existing known issues and technical debt remain unchanged.
 
 ---
 
 ## 7. Current Task
 
-No implementation task is active. Phase 5 — Core Store Management (MVP) is the
-next planned phase with the original full-MVP scope intact. Do not begin Phase
-5 without an approved task.
+M17 implementation is complete and awaits B/A review, merge, migration
+deployment, and live validation. Do not begin another Phase 5 task without
+approval.
 
 ---
 

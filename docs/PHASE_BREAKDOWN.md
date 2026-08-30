@@ -398,11 +398,38 @@ M16 was merged to `main` in `9e831a9`, deployed to the VPS, and smoke-tested
 through `/api/health`. The separate M13 deployed synthetic-notification check
 is not recorded as PASS by this validation.
 
-## Phase 5 — Core Store Management (MVP) ⬜ Planned
+## Phase 5 — Core Store Management (MVP) 🟨 In Progress
 
 - Orders, inventory, customers, payments, reports, and notifications
 - The original full MVP scope remains unchanged; Phase 4 closure does not mark
   the full MVP complete
+
+### M17 — Order Workflow Completion ✅ Implemented / Awaiting Review
+
+- Exact `/order <number>` lookup against the current backend-resolved Store,
+  with safe malformed, absent, ambiguous-exact, deleted, unauthorized, and
+  context-changed outcomes
+- OWNER, ADMIN, and MEMBER read access through the existing M11 detail and
+  signed-reference contract
+- One user-initiated authoritative M6 order refresh reconciled only through M9,
+  with no polling, alternate sync service, or background refresh path
+- Minimized payment method and paid/unpaid context plus shipping method and
+  fulfillment address lines; no transaction ID or contact fields
+- OWNER/ADMIN internal and customer-visible WooCommerce notes with bounded
+  plain-text entry, safe preview, mandatory confirmation, and cancellation;
+  MEMBER remains read-only
+- Stateless grammY transport using backend-owned short-lived context references,
+  encrypted transient draft content, and no bot database/session state
+- Purpose-specific durable note claims and results, one non-retried external
+  POST, safe replay, ambiguous-outcome protection, and secret-safe success audit
+- Migration `20260830120000_m17_order_workflow_completion`; no dependency,
+  Customer/Payment/Shipping model, workflow engine, queue, or service topology
+  added
+- Automated gates pass; the full migration chain applies cleanly to isolated
+  PostgreSQL 16 and Prisma reports it up to date; live WooCommerce/Telegram
+  refresh/note validation remains pending
+
+Do not begin another Phase 5 milestone without approval.
 
 ## Phase 6 — SaaS Platform ⬜ Planned
 

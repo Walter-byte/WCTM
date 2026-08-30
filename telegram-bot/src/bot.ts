@@ -5,6 +5,13 @@ import type {
   OrderDetailPayload,
   OrderDetailResult,
   OrderListResult,
+  OrderLookupResult,
+  OrderNoteMutationResult,
+  OrderNoteOptionsResult,
+  OrderNotePrepareResult,
+  OrderNoteStartResult,
+  OrderNoteVisibility,
+  OrderRefreshResult,
   OrderStatusUpdateResult,
   OrderSummary,
   OrderTransitionsResult,
@@ -27,6 +34,7 @@ const NO_ACTIVE_STORE_MESSAGE =
   'No single active store is available for this chat. Check Status before trying again.';
 const MALFORMED_RESPONSE_MESSAGE =
   'The service returned an unexpected response. Return Home or try again shortly.';
+const NOTE_REFERENCE_LABEL = 'Note reference:';
 
 const NAVIGATION_CALLBACKS = {
   home: 'nav:home',
@@ -38,6 +46,7 @@ const NAVIGATION_CALLBACKS = {
 export const BOT_COMMANDS = [
   { command: 'start', description: 'Open Home or link your account' },
   { command: 'orders', description: 'Open recent orders' },
+  { command: 'order', description: 'Open an exact order number' },
   { command: 'status', description: 'Check account and store access' },
   { command: 'help', description: 'Show available commands' },
   { command: 'unlink', description: 'Unlink this Telegram account' },
@@ -171,6 +180,25 @@ export function createBot(
     }
   });
 
+  bot.command('order', async (context) => {
+    const identity = privateIdentity(context);
+
+    if (!identity) {
+      return;
+    }
+
+    try {
+      const result = await dependencies.backend.lookupOrder(
+        identity,
+        context.match.trim()
+      );
+      await replyView(context, renderOrderLookup(result));
+    } catch (error: unknown) {
+      logTransportFailure(log, identity.updateId, error);
+      await replyView(context, renderTransportFailure(error, 'orders'));
+    }
+  });
+
   bot.callbackQuery('unlink:confirm', async (context) => {
     const identity = privateIdentity(context);
 
@@ -290,6 +318,171 @@ export function createBot(
   );
 
   bot.callbackQuery(
+    /^r:d\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/,
+    async (context) => {
+      const identity = privateIdentity(context);
+
+      if (!identity) {
+        await safeAnswerCallback(context);
+        return;
+      }
+
+      try {
+        const result = await dependencies.backend.refreshOrder(
+          identity,
+          context.callbackQuery.data.slice(2)
+        );
+        const rendered = renderOrderRefresh(result);
+
+        await safeAnswerCallback(context);
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      } catch (error: unknown) {
+        logTransportFailure(log, identity.updateId, error);
+        await safeAnswerCallback(context);
+        const rendered = renderTransportFailure(error, 'orders');
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      }
+    }
+  );
+
+  bot.callbackQuery(
+    /^n:d\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/,
+    async (context) => {
+      const identity = privateIdentity(context);
+
+      if (!identity) {
+        await safeAnswerCallback(context);
+        return;
+      }
+
+      try {
+        const detailRef = context.callbackQuery.data.slice(2);
+        const result = await dependencies.backend.orderNoteOptions(
+          identity,
+          detailRef
+        );
+        const rendered = renderOrderNoteOptions(result, detailRef);
+
+        await safeAnswerCallback(context);
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      } catch (error: unknown) {
+        logTransportFailure(log, identity.updateId, error);
+        await safeAnswerCallback(context);
+        const rendered = renderTransportFailure(error, 'orders');
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      }
+    }
+  );
+
+  bot.callbackQuery(
+    /^v:d\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}:(?:INTERNAL|CUSTOMER)$/,
+    async (context) => {
+      const identity = privateIdentity(context);
+
+      if (!identity) {
+        await safeAnswerCallback(context);
+        return;
+      }
+
+      const separator = context.callbackQuery.data.lastIndexOf(':');
+      const detailRef = context.callbackQuery.data.slice(2, separator);
+      const visibility = context.callbackQuery.data.slice(
+        separator + 1
+      ) as OrderNoteVisibility;
+
+      try {
+        const result = await dependencies.backend.startOrderNote(
+          identity,
+          detailRef,
+          visibility
+        );
+        const rendered = renderOrderNoteStart(result);
+
+        await safeAnswerCallback(context);
+        await editOrReply(context, rendered.text, rendered.keyboard);
+
+        if (result.state === 'OK' && result.inputRef && result.maxLength) {
+          await context.reply(
+            [
+              `Reply to this message with the plain-text note (maximum ${result.maxLength} characters).`,
+              '',
+              `${NOTE_REFERENCE_LABEL} ${result.inputRef}`,
+            ].join('\n'),
+            {
+              reply_markup: {
+                force_reply: true,
+                selective: true,
+                input_field_placeholder: 'Enter order note',
+              },
+            }
+          );
+        }
+      } catch (error: unknown) {
+        logTransportFailure(log, identity.updateId, error);
+        await safeAnswerCallback(context);
+        const rendered = renderTransportFailure(error, 'orders');
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      }
+    }
+  );
+
+  bot.callbackQuery(
+    /^nc:c\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/,
+    async (context) => {
+      const identity = privateIdentity(context);
+
+      if (!identity) {
+        await safeAnswerCallback(context);
+        return;
+      }
+
+      try {
+        const result = await dependencies.backend.confirmOrderNote(
+          identity,
+          context.callbackQuery.data.slice(3)
+        );
+        const rendered = renderOrderNoteMutation(result);
+
+        await safeAnswerCallback(context);
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      } catch (error: unknown) {
+        logTransportFailure(log, identity.updateId, error);
+        await safeAnswerCallback(context);
+        const rendered = renderTransportFailure(error, 'orders');
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      }
+    }
+  );
+
+  bot.callbackQuery(
+    /^x:[ic]\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/,
+    async (context) => {
+      const identity = privateIdentity(context);
+
+      if (!identity) {
+        await safeAnswerCallback(context);
+        return;
+      }
+
+      try {
+        const result = await dependencies.backend.cancelOrderNote(
+          identity,
+          context.callbackQuery.data.slice(2)
+        );
+        const rendered = renderOrderNoteMutation(result);
+
+        await safeAnswerCallback(context);
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      } catch (error: unknown) {
+        logTransportFailure(log, identity.updateId, error);
+        await safeAnswerCallback(context);
+        const rendered = renderTransportFailure(error, 'orders');
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      }
+    }
+  );
+
+  bot.callbackQuery(
     /^t:d\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/,
     async (context) => {
       const identity = privateIdentity(context);
@@ -350,6 +543,32 @@ export function createBot(
       }
     }
   );
+
+  bot.on('message:text', async (context) => {
+    const identity = privateIdentity(context);
+    const inputRef = noteInputReference(
+      context.message.reply_to_message &&
+        'text' in context.message.reply_to_message
+        ? context.message.reply_to_message.text
+        : undefined
+    );
+
+    if (!identity || !inputRef) {
+      return;
+    }
+
+    try {
+      const result = await dependencies.backend.prepareOrderNote(
+        identity,
+        inputRef,
+        context.message.text
+      );
+      await replyView(context, renderOrderNotePrepare(result, inputRef));
+    } catch (error: unknown) {
+      logTransportFailure(log, identity.updateId, error);
+      await replyView(context, renderTransportFailure(error, 'orders'));
+    }
+  });
 
   return bot;
 }
@@ -417,11 +636,12 @@ function renderHelp(): RenderedView {
       '',
       '/start — Open Home or link with a token',
       '/orders — Browse recent orders',
+      '/order <number> — Open one exact order number',
       '/status — Check account and store access',
       '/help — Show this command list',
       '/unlink — Unlink this Telegram account',
       '',
-      'Order details and status actions are available only through the secure buttons shown by the bot.',
+      'Order details, refresh, status changes, and permitted notes use the secure buttons shown by the bot.',
     ].join('\n'),
     keyboard: new InlineKeyboard()
       .text('Recent Orders', NAVIGATION_CALLBACKS.orders)
@@ -572,7 +792,9 @@ export function renderOrderDetail(result: OrderDetailResult): {
 
   const keyboard = orderDetailKeyboard(
     result.backCursor,
-    result.transitionsRef
+    result.transitionsRef,
+    result.refreshRef,
+    result.addNoteRef
   );
 
   if (result.state === 'NOT_FOUND' || !result.order) {
@@ -597,6 +819,175 @@ export function renderOrderDetail(result: OrderDetailResult): {
 
   return {
     text: renderActiveOrderDetail(result.order, result.freshness),
+    keyboard,
+  };
+}
+
+export function renderOrderLookup(result: OrderLookupResult): RenderedView {
+  if (result.state === 'MALFORMED_ORDER_NUMBER') {
+    return renderRecoveryView(
+      'Use /order <number> with one exact order number, for example /order 1001.',
+      'orders'
+    );
+  }
+
+  if (result.state === 'AMBIGUOUS') {
+    return renderRecoveryView(
+      'A single exact order could not be identified. No order was opened.',
+      'orders'
+    );
+  }
+
+  return renderOrderDetail(result as OrderDetailResult);
+}
+
+export function renderOrderRefresh(result: OrderRefreshResult): RenderedView {
+  if (result.state === 'OK' || result.state === 'DELETED') {
+    const rendered = renderOrderDetail(result as OrderDetailResult);
+
+    return {
+      text: `Order refreshed from WooCommerce.\n\n${rendered.text}`,
+      keyboard: rendered.keyboard,
+    };
+  }
+
+  if (result.state === 'RETRYABLE') {
+    return renderRecoveryView(
+      'WooCommerce could not be reached to refresh this order. No repeated refresh was started.',
+      'orders'
+    );
+  }
+
+  if (result.state === 'FAILED') {
+    return renderRecoveryView(
+      'WooCommerce returned an invalid refresh result. The existing order projection was not replaced.',
+      'orders'
+    );
+  }
+
+  return renderOrderDetail(result as OrderDetailResult);
+}
+
+export function renderOrderNoteOptions(
+  result: OrderNoteOptionsResult,
+  detailRef: string
+): RenderedView {
+  if (result.state !== 'OK' || !result.ref || !result.visibilities) {
+    return renderOrderNoteFailure(result.state, detailRef);
+  }
+
+  const keyboard = new InlineKeyboard();
+
+  for (const visibility of result.visibilities) {
+    keyboard
+      .text(noteVisibilityLabel(visibility), `v:${result.ref}:${visibility}`)
+      .row();
+  }
+
+  keyboard
+    .text('Back to Order', detailRef)
+    .row()
+    .text('Home', NAVIGATION_CALLBACKS.home);
+
+  return {
+    text: [
+      'Add Order Note',
+      '',
+      'Internal notes are visible to store staff only.',
+      'Customer-visible notes use WooCommerce customer-note delivery behavior.',
+      '',
+      'Choose visibility:',
+    ].join('\n'),
+    keyboard,
+  };
+}
+
+export function renderOrderNoteStart(
+  result: OrderNoteStartResult
+): RenderedView {
+  if (
+    result.state !== 'OK' ||
+    !result.inputRef ||
+    !result.detailRef ||
+    !result.visibility
+  ) {
+    return renderOrderNoteFailure(result.state, result.detailRef);
+  }
+
+  return {
+    text: [
+      'Add Order Note',
+      '',
+      `Visibility: ${noteVisibilityLabel(result.visibility)}`,
+      'Reply to the prompt with plain text. You will review it before anything is sent to WooCommerce.',
+    ].join('\n'),
+    keyboard: new InlineKeyboard()
+      .text('Cancel', `x:${result.inputRef}`)
+      .row()
+      .text('Back to Order', result.detailRef)
+      .row()
+      .text('Home', NAVIGATION_CALLBACKS.home),
+  };
+}
+
+export function renderOrderNotePrepare(
+  result: OrderNotePrepareResult,
+  inputRef: string
+): RenderedView {
+  if (
+    result.state !== 'OK' ||
+    !result.confirmRef ||
+    !result.detailRef ||
+    !result.visibility ||
+    result.preview === undefined
+  ) {
+    if (result.state === 'INVALID_NOTE') {
+      return {
+        text: 'The note must be non-empty plain text, at most 1,000 characters, without HTML markup or control characters. No note was created.',
+        keyboard: new InlineKeyboard()
+          .text('Cancel', `x:${inputRef}`)
+          .row()
+          .text('Home', NAVIGATION_CALLBACKS.home),
+      };
+    }
+
+    return renderOrderNoteFailure(result.state, result.detailRef);
+  }
+
+  return {
+    text: [
+      'Confirm Order Note',
+      '',
+      `Visibility: ${noteVisibilityLabel(result.visibility)}`,
+      `Preview: ${result.preview}`,
+      '',
+      'Confirming creates one WooCommerce note. This action cannot be edited or deleted here.',
+    ].join('\n'),
+    keyboard: new InlineKeyboard()
+      .text('Confirm', `nc:${result.confirmRef}`)
+      .text('Cancel', `x:${result.confirmRef}`)
+      .row()
+      .text('Back to Order', result.detailRef)
+      .row()
+      .text('Home', NAVIGATION_CALLBACKS.home),
+  };
+}
+
+export function renderOrderNoteMutation(
+  result: OrderNoteMutationResult
+): RenderedView {
+  const keyboard = new InlineKeyboard();
+
+  if (result.detailRef) {
+    keyboard.text('Back to Order', result.detailRef).row();
+  } else {
+    keyboard.text('Recent Orders', NAVIGATION_CALLBACKS.orders).row();
+  }
+
+  keyboard.text('Home', NAVIGATION_CALLBACKS.home);
+
+  return {
+    text: orderNoteStateMessage(result),
     keyboard,
   };
 }
@@ -714,9 +1105,65 @@ function orderWriteStateMessage(
   }
 }
 
+function renderOrderNoteFailure(
+  state: OrderNoteMutationResult['state'],
+  detailRef?: string
+): RenderedView {
+  const keyboard = new InlineKeyboard();
+
+  if (detailRef) {
+    keyboard.text('Back to Order', detailRef).row();
+  } else {
+    keyboard.text('Recent Orders', NAVIGATION_CALLBACKS.orders).row();
+  }
+
+  keyboard.text('Home', NAVIGATION_CALLBACKS.home);
+
+  return { text: orderNoteStateMessage({ state }), keyboard };
+}
+
+function orderNoteStateMessage(result: OrderNoteMutationResult): string {
+  switch (result.state) {
+    case 'OK':
+      return `The ${noteVisibilityLabel(result.visibility ?? 'INTERNAL').toLowerCase()} note was created once in WooCommerce${result.orderNumber ? ` for order #${result.orderNumber}` : ''}.`;
+    case 'CANCELLED':
+      return 'Note creation was cancelled. Nothing was sent to WooCommerce.';
+    case 'FORBIDDEN_ROLE':
+      return 'Your membership can view orders but cannot create order notes.';
+    case 'UNAUTHORIZED':
+      return UNAUTHORIZED_ORDERS_MESSAGE;
+    case 'NO_ACTIVE_STORE':
+      return NO_ACTIVE_STORE_MESSAGE;
+    case 'CONTEXT_CHANGED':
+      return EXPIRED_LIST_MESSAGE;
+    case 'EXPIRED_REF':
+      return 'This note action expired. No note was created.';
+    case 'INVALID_NOTE':
+      return 'The note text is invalid. No note was created.';
+    case 'IN_PROGRESS':
+      return 'This note action is already being processed. It was not dispatched again.';
+    case 'AMBIGUOUS':
+      return 'WooCommerce may have received this note, but the result could not be confirmed. It will not be sent again automatically.';
+    case 'RETRYABLE':
+      return 'WooCommerce safely rejected or deferred this note request. It was not sent again; start a new note action if needed.';
+    case 'DELETED':
+      return 'This order was deleted in WooCommerce. No note was created.';
+    case 'NOT_FOUND':
+      return 'This order is no longer available. No note was created.';
+    default:
+      return 'WooCommerce did not create the note. It was not sent again.';
+  }
+}
+
+function noteVisibilityLabel(visibility: OrderNoteVisibility): string {
+  return visibility === 'CUSTOMER' ? 'Customer-visible' : 'Internal';
+}
+
 function orderDetailKeyboard(
   backCursor?: string,
-  transitionsRef?: string
+  transitionsRef?: string,
+  refreshRef?: string,
+  addNoteRef?: string
 ): InlineKeyboard {
   const keyboard = new InlineKeyboard();
 
@@ -730,8 +1177,28 @@ function orderDetailKeyboard(
     keyboard.row().text('Change Status', `t:${transitionsRef}`);
   }
 
+  if (refreshRef) {
+    keyboard.row().text('Refresh', `r:${refreshRef}`);
+  }
+
+  if (addNoteRef) {
+    keyboard.row().text('Add Note', `n:${addNoteRef}`);
+  }
+
   keyboard.row().text('Home', NAVIGATION_CALLBACKS.home);
   return keyboard;
+}
+
+function noteInputReference(text: string | undefined): string | undefined {
+  if (!text) {
+    return undefined;
+  }
+
+  const match = text.match(
+    /(?:^|\n)Note reference: (i\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16})(?:\n|$)/
+  );
+
+  return match?.[1];
 }
 
 function statusLabel(status: string): string {
@@ -799,12 +1266,20 @@ function renderActiveOrderDetail(
   const lines = (order.lineItems ?? []).map(
     (item) => `• ${item.name} × ${String(item.quantity)} — ${item.total}`
   );
+  const payment = order.payment
+    ? `Payment: ${order.payment.method ?? 'Not specified'} • ${order.payment.paid ? 'Paid' : 'Unpaid'}`
+    : undefined;
+  const shippingMethods = order.shipping?.methods.join(', ');
+  const shippingAddress = order.shipping?.addressLines.join(' • ');
 
   return [
     `Order #${order.orderNumber}`,
     `Status: ${order.status}`,
     `Customer: ${order.customerDisplayName}`,
     `Total: ${total === undefined ? '—' : String(total)} ${order.currency ?? ''}`.trim(),
+    ...(payment ? [payment] : []),
+    ...(shippingMethods ? [`Shipping: ${shippingMethods}`] : []),
+    ...(shippingAddress ? [`Ship to: ${shippingAddress}`] : []),
     `Created: ${order.wcCreatedAt ?? '—'}`,
     `Modified: ${order.wcModifiedAt ?? '—'}`,
     ...(lines.length > 0 ? ['', 'Items', ...lines] : []),
