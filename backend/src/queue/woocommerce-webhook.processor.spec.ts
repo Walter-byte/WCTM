@@ -158,6 +158,51 @@ function setup(
 }
 
 describe('WooCommerce order webhook worker lifecycle', () => {
+  it.each([
+    [
+      'order.created',
+      {
+        id: 101,
+        number: 'WC-101',
+        status: 'processing',
+        currency: 'USD',
+        discount_total: '0.00',
+        discount_tax: '0.00',
+        shipping_total: '5.00',
+        shipping_tax: '0.50',
+        cart_tax: '2.00',
+        total: '27.50',
+        total_tax: '2.50',
+        customer_id: 7,
+        billing: { first_name: 'Test', last_name: 'Customer' },
+        shipping: { city: 'Test City', country: 'IR' },
+        line_items: [
+          { id: 11, name: 'Test product', quantity: 1, total: '20.00' },
+        ],
+        date_created_gmt: '2026-08-31T08:00:00',
+        date_modified_gmt: '2026-08-31T08:00:00',
+      },
+    ],
+    ['order.deleted', { id: 101 }],
+  ])(
+    'claims a persisted RECEIVED %s event when its published job starts before QUEUED acknowledgement',
+    async (topic, payload) => {
+      const fixture = setup(WebhookEventStatus.RECEIVED);
+      fixture.event.topic = topic;
+      fixture.event.payload = payload;
+
+      await expect(fixture.processor.process(webhookJob())).resolves.toEqual(
+        expect.objectContaining({ processed: true })
+      );
+
+      expect(fixture.project).toHaveBeenCalledWith(
+        expect.objectContaining({ topic, payload })
+      );
+      expect(fixture.event.status).toBe(WebhookEventStatus.COMPLETED);
+      expect(fixture.event.processingAttemptCount).toBe(1);
+    }
+  );
+
   it('loads tenant and Store identity from the event Store relation', async () => {
     const fixture = setup();
 

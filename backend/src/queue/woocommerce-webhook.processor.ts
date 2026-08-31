@@ -120,6 +120,9 @@ export class WooCommerceWebhookProcessor {
       where: {
         id: job.data.webhookEventId,
         OR: [
+          // The persisted job may become runnable before ingestion records its
+          // post-enqueue QUEUED acknowledgement.
+          { status: WebhookEventStatus.RECEIVED },
           { status: WebhookEventStatus.QUEUED },
           {
             status: WebhookEventStatus.PROCESSING,

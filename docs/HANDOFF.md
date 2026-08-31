@@ -828,7 +828,7 @@ order-management path. This does not complete or narrow the full MVP.
 M17 adds no dependency and does not change M6, M9, M11–M16 authentication,
 status, notification, navigation, onboarding, or connector contracts.
 
-#### M18 — MVP Store Settings Foundation (implementation complete; awaiting review)
+#### M18 — MVP Store Settings Foundation (complete, merged, and deployed)
 
 - Migration `20260831120000_m18_store_settings_foundation` adds Tenant
   `timezone` plus `TenantLanguage.FA|EN` mapped to `fa|en`, Store nullable
@@ -884,7 +884,19 @@ status, notification, navigation, onboarding, or connector contracts.
   processing, `/stock`, search, reports, general localization, billing,
   dashboard, Store switching, connector logic, queue, or service topology.
 
-Do not begin another milestone before M18 review and approval.
+M18 migration, deployment, health, readiness, and live `/settings` persistence
+passed. Live validation also exposed a pre-existing M8/M9 publication race:
+the deterministic BullMQ job could start after M8 persisted `RECEIVED` but
+before its separate `QUEUED` acknowledgement. M9 refused that state before
+claiming its lease, so BullMQ could exhaust while
+`processing_attempt_count = 0`; the generic dead-letter fallback then stored
+`unexpected` / `webhook-processing-failed`. The narrow correction lets the
+already-published worker atomically claim `RECEIVED`, `QUEUED`, or an expired
+`PROCESSING` lease. Sanitized full `order.created` and WooCommerce's ID-only
+`order.deleted` regressions pass. This changes no payload mapping, retry count,
+M13 delivery contract, M18 settings policy, dependency, schema, or topology.
+
+Do not begin M19.
 
 ---
 
@@ -895,25 +907,24 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `feat/m18-store-settings-foundation`.
+Current branch: `main`.
 
 ---
 
 ## 6. Current Blockers
 
-M18 has no implementation or automated-validation blocker. Production
-migration/deployment and any owner-requested live `/settings` smoke remain
-bounded release-stage items. A deployed M13 synthetic new-order
-notification-delivery result is still not recorded as PASS. Existing known
-issues and technical debt remain unchanged.
+The M18 settings release has no remaining implementation blocker. The narrow
+webhook-race correction awaits production deployment. Existing failed events
+need bounded replay after deployment only when their missed projection or
+notification must be recovered; no new production order is required. Existing
+known issues and technical debt remain unchanged.
 
 ---
 
 ## 7. Current Task
 
-M18 — MVP Store Settings Foundation is implementation-, migration-, test-, and
-documentation-complete on `feat/m18-store-settings-foundation` and awaits
-review/merge/release direction. Do not begin another milestone.
+The active task is the M18 live-validation webhook inconsistency investigation
+and narrow M8/M9 corrective fix on `main`. Do not begin M19.
 
 ---
 

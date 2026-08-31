@@ -7,18 +7,18 @@ Version: 1.0
 Current Phase
 
 Phase 5 — Core Store Management (MVP) is in progress. M18 MVP Store Settings
-Foundation is implemented, migration-validated, documented, and automated-test
-complete on its feature branch; review, merge, production migration/deployment,
-and any owner-requested live Telegram smoke remain pending. M17 is fully closed.
+Foundation is merged and deployed; its migration, health, readiness, and live
+settings persistence checks passed. The production webhook-processing
+inconsistency found during M18 validation has a narrow M8/M9 race fix implemented
+and repository-validated on `main`, pending deployment. M17 is fully closed.
 Phase 4 and M1–M16 remain complete and unchanged.
 
 ---
 
 Current Task
 
-M18 — MVP Store Settings Foundation is the active approved task and is complete
-at implementation evidence stage. Do not begin another milestone before review
-and approval.
+The M18 live-validation webhook-processing inconsistency investigation and
+narrow M8/M9 corrective fix is the active approved task. Do not begin M19.
 
 ---
 
@@ -30,7 +30,7 @@ Project Version
 
 Repository
 
-Current branch: `feat/m18-store-settings-foundation`.
+Current branch: `main`.
 
 M18 implementation commit: `ef677f0 feat(settings): add MVP store settings
 foundation`. The final adversarial-audit hardening is committed separately on
@@ -187,6 +187,17 @@ WooCommerce core source verification confirmed stable ID-only
 therefore retains the Order snapshot while setting `remote_deleted_at`, and a
 restore re-projects the snapshot and clears that marker. Generic reconciliation
 not-found results remain terminal.
+
+M18 live validation exposed a pre-existing M8/M9 publication race. M8 persists
+`RECEIVED`, publishes the deterministic BullMQ job, and then acknowledges
+`QUEUED`; a worker could start between publication and that acknowledgement.
+M9 previously refused to claim `RECEIVED`, so all BullMQ attempts could exhaust
+before the processing lease incremented, after which the generic dead-letter
+fallback persisted `unexpected` / `webhook-processing-failed` with attempt count
+zero. The worker now atomically claims the published `RECEIVED` window as well
+as `QUEUED` and expired `PROCESSING`. Sanitized full `order.created` and ID-only
+`order.deleted` regressions pass without changing payload handling, M13 delivery,
+or M18 settings policy.
 
 Migration `20260723180000_order_projection` applied cleanly in an isolated
 PostgreSQL database. D-018 records projection ordering, canonical fingerprint,
@@ -599,7 +610,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-feat/m18-store-settings-foundation
+main
 
 ---
 
@@ -631,25 +642,24 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-M18 implementation has no code or automated-validation blocker. Production
-migration/deployment and any owner-requested live `/settings` smoke remain
-bounded release-stage validation items. The deployed M13 synthetic new-order
-notification result is still not recorded as PASS.
+The webhook race fix has no code or automated-validation blocker and awaits
+production deployment. Existing failed events require bounded replay after
+deployment if their missed projection or notification must be recovered; no new
+production order is required.
 
 ---
 
 Next Milestone
 
-Await M18 review, merge, and release direction. Do not begin the next milestone
-without approval.
+Deploy and validate only the webhook race fix when approved. Do not begin M19.
 
 ---
 
 Last Completed
 
-M18 MVP Store Settings Foundation is implementation-, migration-, test-, and
-documentation-complete on its feature branch. M17 remains the last merged and
-production-validated milestone.
+M18 MVP Store Settings Foundation is merged, deployed, and live settings
+validation passed. The corrective webhook-race implementation and repository
+validation are complete; production deployment remains pending.
 
 ---
 

@@ -412,12 +412,14 @@ one authoritative M6 single-order fetch. Missing or unreliable modification
 timestamps and otherwise malformed snapshots with a stable order ID use that
 same bounded reconciliation path.
 
-WebhookEvent processing uses a 30-second database lease. `QUEUED` events and
-expired `PROCESSING` leases may be claimed atomically; active leases do not
-duplicate projection work. Retryable reconciliation failures return to
-`QUEUED` for the existing three BullMQ attempts. Terminal or exhausted failures
-remain `FAILED` with an M6-normalized category, bounded safe code, attempt count,
-and failure timestamp.
+WebhookEvent processing uses a 30-second database lease. `RECEIVED` events
+whose deterministic job is already executing, `QUEUED` events, and expired
+`PROCESSING` leases may be claimed atomically; active leases do not duplicate
+projection work. Claiming the post-publication `RECEIVED` window prevents the
+worker from racing M8's separate `QUEUED` acknowledgement. Retryable
+reconciliation failures return to `QUEUED` for the existing three BullMQ
+attempts. Terminal or exhausted failures remain `FAILED` with an M6-normalized
+category, bounded safe code, attempt count, and failure timestamp.
 
 WooCommerce core source verification established that `order.deleted` builds an
 ID-only payload and `order.restored` builds the normal REST resource payload.
