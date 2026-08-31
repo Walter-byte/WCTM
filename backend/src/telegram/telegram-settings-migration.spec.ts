@@ -37,6 +37,24 @@ describe('M18 settings migration', () => {
     expect(schema).toContain('Int?');
   });
 
+  it('constrains category storage to a duplicate-free subset of the two enum values', () => {
+    expect(migration).toContain(
+      'CONSTRAINT "stores_enabled_notification_categories_check"'
+    );
+    expect(migration).toContain(
+      'cardinality("enabled_notification_categories") <= 2'
+    );
+    expect(migration).toContain(
+      'array_position("enabled_notification_categories", NULL) IS NULL'
+    );
+    expect(migration).toContain(
+      '\'ORDER_CREATED\'::"notification_category" = ANY("enabled_notification_categories")'
+    );
+    expect(migration).toContain(
+      '\'LOW_STOCK\'::"notification_category" = ANY("enabled_notification_categories")'
+    );
+  });
+
   it('enforces one Store/Membership preference and same-Tenant composite keys', () => {
     expect(schema).toContain('model StoreNotificationRecipient {');
     expect(schema).toContain('@@unique([storeId, membershipId])');

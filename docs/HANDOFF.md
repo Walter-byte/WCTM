@@ -868,9 +868,18 @@ status, notification, navigation, onboarding, or connector contracts.
   the schema up to date. Seeded pre-M18/new rows and database constraints proved
   backfill/defaults, nullable threshold, non-negative bound, recipient
   uniqueness, and cross-tenant rejection.
-- Automated evidence: 324 Jest backend tests, 24 backend Node smoke/contract
+- Final adversarial audit found one concrete storage gap: enum typing rejected
+  unsupported notification categories but the array could still hold duplicate
+  or null members. The same M18 migration now has a narrow database check for a
+  duplicate-free, null-free subset of `ORDER_CREATED`/`LOW_STOCK`. Fresh-chain
+  and representative pre-M18-row migration probes pass with the hardened SQL.
+- Real PostgreSQL/service probes verify duplicate category Enable and recipient
+  Select converge to one logical audit/state, opposing desired states serialize
+  without corruption, one of two same-reference inputs fails stale, and MEMBER
+  replay remains backend-denied.
+- Automated evidence: 332 Jest backend tests, 24 backend Node smoke/contract
   tests with one PHP-runtime skip, and 45 Telegram bot tests pass. Prisma,
-  build, typecheck, lint, formatting, and diff gates are final branch gates.
+  build, typecheck, lint, formatting, and diff gates pass.
 - D-024 is Accepted. M18 adds no dependency and no inventory/low-stock
   processing, `/stock`, search, reports, general localization, billing,
   dashboard, Store switching, connector logic, queue, or service topology.

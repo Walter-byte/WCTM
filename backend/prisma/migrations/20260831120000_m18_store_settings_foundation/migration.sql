@@ -33,6 +33,16 @@ ALTER TABLE "stores"
 ADD CONSTRAINT "stores_low_stock_threshold_check"
 CHECK ("low_stock_threshold" IS NULL OR ("low_stock_threshold" >= 0 AND "low_stock_threshold" <= 1000000));
 
+ALTER TABLE "stores"
+ADD CONSTRAINT "stores_enabled_notification_categories_check"
+CHECK (
+  cardinality("enabled_notification_categories") <= 2
+  AND array_position("enabled_notification_categories", NULL) IS NULL
+  AND cardinality("enabled_notification_categories") =
+    (CASE WHEN 'ORDER_CREATED'::"notification_category" = ANY("enabled_notification_categories") THEN 1 ELSE 0 END) +
+    (CASE WHEN 'LOW_STOCK'::"notification_category" = ANY("enabled_notification_categories") THEN 1 ELSE 0 END)
+);
+
 CREATE UNIQUE INDEX "stores_id_tenant_id_key" ON "stores"("id", "tenant_id");
 CREATE UNIQUE INDEX "memberships_id_tenant_id_key" ON "memberships"("id", "tenant_id");
 

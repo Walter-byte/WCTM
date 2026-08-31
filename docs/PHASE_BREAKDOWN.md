@@ -461,7 +461,11 @@ is not recorded as PASS by this validation.
 - Migration `20260831120000_m18_store_settings_foundation`; full 12-migration
   chain and seeded existing-row/new-row backfill checks pass on isolated
   PostgreSQL 16
-- Automated gates pass with 324 Jest backend tests, 24 backend Node
+- Final adversarial audit added a database check that rejects duplicate or null
+  category-array members; PostgreSQL enum typing continues to reject unsupported
+  categories. Real concurrency probes verified duplicate and opposing category/
+  recipient requests serialize without duplicate state or misleading no-op audit
+- Automated gates pass with 332 Jest backend tests, 24 backend Node
   smoke/contract tests (one PHP-runtime skip), and 45 Telegram bot tests, plus
   Prisma validation/generation, build, typecheck, lint, and focused migration
   constraints

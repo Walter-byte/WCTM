@@ -32,8 +32,9 @@ Repository
 
 Current branch: `feat/m18-store-settings-foundation`.
 
-Preferred M18 implementation commit: `feat(settings): add MVP store settings
-foundation`.
+M18 implementation commit: `ef677f0 feat(settings): add MVP store settings
+foundation`. The final adversarial-audit hardening is committed separately on
+the same branch.
 
 M17 implementation commit: `feat(orders): complete MVP order workflow`.
 
@@ -544,15 +545,22 @@ Migration `20260831120000_m18_store_settings_foundation` passed the complete
 12-migration chain on isolated PostgreSQL 16 and Prisma reported the schema up
 to date. Seeded pre-M18 rows verified English/UTC and legacy Store backfill;
 new rows verified Persian/UTC defaults. Database checks rejected negative
-thresholds, duplicate recipients, and cross-tenant recipient mappings.
+thresholds, duplicate or null notification categories, duplicate recipients,
+and cross-tenant recipient mappings. The final adversarial audit found and
+closed the one concrete storage defect: PostgreSQL enum typing rejected unknown
+category values but did not itself reject duplicate enum-array members. The M18
+migration now enforces a duplicate-free, null-free subset of the two categories.
 
-Automated evidence passes: 324 Jest backend tests, 24 backend Node
+Automated evidence passes: 332 Jest backend tests, 24 backend Node
 smoke/contract tests with one environment-only PHP skip, and 45 Telegram bot
-tests. Prisma format/validate/generate, build, typecheck, lint, format, and diff
-checks are part of final branch verification. M18 adds no dependency and no
-inventory, low-stock processing, search, reporting, general localization,
-billing, dashboard, Store switching, connector behavior, queue, or new service
-topology. D-024 is Accepted.
+tests. Real isolated-database probes additionally verified concurrent duplicate
+category enable, duplicate recipient selection, opposing desired states, stale
+single-use input, MEMBER replay denial, safe audit counts, and database-level
+recipient isolation. Prisma format/validate/generate, build, typecheck, lint,
+format, and diff checks pass. M18 adds no dependency and no inventory, low-stock
+processing, search, reporting, general localization, billing, dashboard, Store
+switching, connector behavior, queue, or new service topology. D-024 remains
+Accepted and unchanged.
 
 ---
 

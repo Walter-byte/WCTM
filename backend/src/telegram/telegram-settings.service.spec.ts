@@ -39,7 +39,9 @@ function fixture() {
       id: 'sto_a',
       tenantId: 'ten_a',
       lowStockThreshold: null as number | null,
-      enabledNotificationCategories: [NotificationCategory.ORDER_CREATED],
+      enabledNotificationCategories: [
+        NotificationCategory.ORDER_CREATED,
+      ] as NotificationCategory[],
       notificationRecipientMode: NotificationRecipientMode.ALL_ELIGIBLE,
     },
     memberships: [
@@ -340,6 +342,13 @@ describe('M18 Telegram settings service', () => {
       value: '۵',
     });
     expect(test.state.store.lowStockThreshold).toBeNull();
+    await expect(
+      test.service.applyInput({
+        ...test.input,
+        ref: summary.settings!.actions!.thresholdInputRef,
+        value: '1000001',
+      })
+    ).resolves.toEqual({ state: 'INVALID_VALUE' });
 
     summary = await test.service.summary(test.input);
     await test.service.applyInput({
@@ -359,6 +368,10 @@ describe('M18 Telegram settings service', () => {
 
   it('uses absolute category actions and suppresses duplicate no-op audit', async () => {
     const test = fixture();
+    test.state.store.enabledNotificationCategories = [
+      NotificationCategory.ORDER_CREATED,
+      NotificationCategory.LOW_STOCK,
+    ];
     const summary = await test.service.summary(test.input);
     const category = summary.settings!.actions!.categories.find(
       (item) => item.category === NotificationCategory.ORDER_CREATED
@@ -367,8 +380,64 @@ describe('M18 Telegram settings service', () => {
     await test.service.applyAction({ ...test.input, ref: category.disableRef });
     await test.service.applyAction({ ...test.input, ref: category.disableRef });
 
-    expect(test.state.store.enabledNotificationCategories).toEqual([]);
+    expect(test.state.store.enabledNotificationCategories).toEqual([
+      NotificationCategory.LOW_STOCK,
+    ]);
     expect(test.auditLogs).toHaveLength(1);
+
+    await test.service.applyAction({ ...test.input, ref: category.enableRef });
+    await test.service.applyAction({ ...test.input, ref: category.enableRef });
+    expect(test.state.store.enabledNotificationCategories).toEqual([
+      NotificationCategory.LOW_STOCK,
+      NotificationCategory.ORDER_CREATED,
+    ]);
+    expect(test.auditLogs).toHaveLength(2);
+  });
+
+  it('consumes an input reference once and rejects stale replay without overwriting state', async () => {
+    const test = fixture();
+    const summary = await test.service.summary(test.input);
+    const ref = summary.settings!.actions!.thresholdInputRef;
+
+    await expect(
+      test.service.applyInput({ ...test.input, ref, value: '5' })
+    ).resolves.toMatchObject({ state: 'OK' });
+    await expect(
+      test.service.applyInput({ ...test.input, ref, value: '8' })
+    ).resolves.toEqual({ state: 'EXPIRED_REF' });
+
+    expect(test.state.store.lowStockThreshold).toBe(5);
+    expect(test.auditLogs).toHaveLength(1);
+  });
+
+  it('rejects wrong-purpose and signature-substituted settings references', async () => {
+    const test = fixture();
+    const summary = await test.service.summary(test.input);
+    const timezoneRef = summary.settings!.actions!.timezoneInputRef;
+    const languageRef = summary.settings!.actions!.languages[0]!.ref;
+    const [languagePrefix, languageId] = languageRef.split('.');
+    const timezoneSignature = timezoneRef.split('.')[2]!;
+
+    await expect(
+      test.service.applyAction({ ...test.input, ref: timezoneRef })
+    ).resolves.toEqual({ state: 'CONTEXT_CHANGED' });
+    await expect(
+      test.service.applyInput({
+        ...test.input,
+        ref: languageRef,
+        value: 'Asia/Tehran',
+      })
+    ).resolves.toEqual({ state: 'CONTEXT_CHANGED' });
+    await expect(
+      test.service.applyAction({
+        ...test.input,
+        ref: `${languagePrefix}.${languageId}.${timezoneSignature}`,
+      })
+    ).resolves.toEqual({ state: 'CONTEXT_CHANGED' });
+
+    expect(test.state.tenant.language).toBe(TenantLanguage.EN);
+    expect(test.state.tenant.timezone).toBe('UTC');
+    expect(test.auditLogs).toHaveLength(0);
   });
 
   it('supports SELECTED with zero recipients and tenant-scoped add/remove', async () => {
@@ -459,14 +528,21 @@ describe('M18 timezone validation', () => {
     ['UTC', 'UTC'],
     [' Asia/Tehran ', 'Asia/Tehran'],
     ['America/New_York', 'America/New_York'],
+    ['Europe/Paris', 'Europe/Paris'],
+    ['asia/tehran', 'Asia/Tehran'],
   ])('accepts %s', (input, expected) => {
     expect(canonicalTimezone(input)).toBe(expected);
   });
 
-  it.each(['', 'PST', 'GMT', 'Invalid/Nowhere', 'Asia Tehran'])(
-    'rejects %s',
-    (input) => {
-      expect(canonicalTimezone(input)).toBeUndefined();
-    }
-  );
+  it.each([
+    '',
+    '   ',
+    'PST',
+    'GMT',
+    'Invalid/Nowhere',
+    'Asia Tehran',
+    'A'.repeat(65),
+  ])('rejects %s', (input) => {
+    expect(canonicalTimezone(input)).toBeUndefined();
+  });
 });
