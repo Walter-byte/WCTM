@@ -15,6 +15,9 @@ import type {
   OrderStatusUpdateResult,
   OrderSummary,
   OrderTransitionsResult,
+  SettingsInputStartResult,
+  SettingsResult,
+  SettingsSummary,
   TelegramAuthorizationStatus,
   TelegramIdentity,
 } from './internal-backend.client';
@@ -35,12 +38,14 @@ const NO_ACTIVE_STORE_MESSAGE =
 const MALFORMED_RESPONSE_MESSAGE =
   'The service returned an unexpected response. Return Home or try again shortly.';
 const NOTE_REFERENCE_LABEL = 'Note reference:';
+const SETTINGS_REFERENCE_LABEL = 'Settings reference:';
 
 const NAVIGATION_CALLBACKS = {
   home: 'nav:home',
   orders: 'nav:orders',
   status: 'nav:status',
   help: 'nav:help',
+  settings: 'nav:settings',
 } as const;
 
 export const BOT_COMMANDS = [
@@ -48,6 +53,7 @@ export const BOT_COMMANDS = [
   { command: 'orders', description: 'Open recent orders' },
   { command: 'order', description: 'Open an exact order number' },
   { command: 'status', description: 'Check account and store access' },
+  { command: 'settings', description: 'View or manage store settings' },
   { command: 'help', description: 'Show available commands' },
   { command: 'unlink', description: 'Unlink this Telegram account' },
 ] as const;
@@ -148,6 +154,24 @@ export function createBot(
     }
 
     await replyView(context, renderHelp());
+  });
+
+  bot.command('settings', async (context) => {
+    const identity = privateIdentity(context);
+
+    if (!identity) {
+      return;
+    }
+
+    try {
+      await replyView(
+        context,
+        renderSettings(await dependencies.backend.settings(identity))
+      );
+    } catch (error: unknown) {
+      logTransportFailure(log, identity.updateId, error);
+      await replyView(context, renderTransportFailure(error, 'settings'));
+    }
   });
 
   bot.command('unlink', async (context) => {
@@ -260,6 +284,92 @@ export function createBot(
   bot.callbackQuery(NAVIGATION_CALLBACKS.help, async (context) => {
     await handleViewCallback(context, async () => renderHelp(), log);
   });
+
+  bot.callbackQuery(NAVIGATION_CALLBACKS.settings, async (context) => {
+    await handleViewCallback(
+      context,
+      async (identity) =>
+        renderSettings(await dependencies.backend.settings(identity)),
+      log,
+      'settings'
+    );
+  });
+
+  bot.callbackQuery(
+    /^sg:g\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/,
+    async (context) => {
+      const identity = privateIdentity(context);
+
+      if (!identity) {
+        await safeAnswerCallback(context);
+        return;
+      }
+
+      try {
+        const result = await dependencies.backend.applySettingsAction(
+          identity,
+          context.callbackQuery.data.slice(3)
+        );
+        const rendered = renderSettings(result);
+        await safeAnswerCallback(context);
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      } catch (error: unknown) {
+        logTransportFailure(log, identity.updateId, error);
+        await safeAnswerCallback(context);
+        const rendered = renderTransportFailure(error, 'settings');
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      }
+    }
+  );
+
+  bot.callbackQuery(
+    /^si:g\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/,
+    async (context) => {
+      const identity = privateIdentity(context);
+
+      if (!identity) {
+        await safeAnswerCallback(context);
+        return;
+      }
+
+      try {
+        const result = await dependencies.backend.startSettingsInput(
+          identity,
+          context.callbackQuery.data.slice(3)
+        );
+        const rendered = renderSettingsInputStart(result);
+        await safeAnswerCallback(context);
+        await editOrReply(context, rendered.text, rendered.keyboard);
+
+        if (result.state === 'OK' && result.inputRef && result.purpose) {
+          await context.reply(
+            [
+              result.purpose === 'TIMEZONE'
+                ? 'Reply with a canonical IANA timezone, for example Asia/Tehran.'
+                : 'Reply with a non-negative whole-number low-stock threshold.',
+              '',
+              `${SETTINGS_REFERENCE_LABEL} ${result.inputRef}`,
+            ].join('\n'),
+            {
+              reply_markup: {
+                force_reply: true,
+                selective: true,
+                input_field_placeholder:
+                  result.purpose === 'TIMEZONE'
+                    ? 'Asia/Tehran'
+                    : 'Enter threshold',
+              },
+            }
+          );
+        }
+      } catch (error: unknown) {
+        logTransportFailure(log, identity.updateId, error);
+        await safeAnswerCallback(context);
+        const rendered = renderTransportFailure(error, 'settings');
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      }
+    }
+  );
 
   bot.callbackQuery(
     /^p\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/,
@@ -546,27 +656,41 @@ export function createBot(
 
   bot.on('message:text', async (context) => {
     const identity = privateIdentity(context);
-    const inputRef = noteInputReference(
+    const replyText =
       context.message.reply_to_message &&
-        'text' in context.message.reply_to_message
+      'text' in context.message.reply_to_message
         ? context.message.reply_to_message.text
-        : undefined
-    );
+        : undefined;
+    const inputRef = noteInputReference(replyText);
+    const settingsRef = settingsInputReference(replyText);
 
-    if (!identity || !inputRef) {
+    if (!identity || (!inputRef && !settingsRef)) {
       return;
     }
 
     try {
+      if (settingsRef) {
+        const result = await dependencies.backend.applySettingsInput(
+          identity,
+          settingsRef,
+          context.message.text
+        );
+        await replyView(context, renderSettings(result));
+        return;
+      }
+
       const result = await dependencies.backend.prepareOrderNote(
         identity,
-        inputRef,
+        inputRef!,
         context.message.text
       );
-      await replyView(context, renderOrderNotePrepare(result, inputRef));
+      await replyView(context, renderOrderNotePrepare(result, inputRef!));
     } catch (error: unknown) {
       logTransportFailure(log, identity.updateId, error);
-      await replyView(context, renderTransportFailure(error, 'orders'));
+      await replyView(
+        context,
+        renderTransportFailure(error, settingsRef ? 'settings' : 'orders')
+      );
     }
   });
 
@@ -638,6 +762,7 @@ function renderHelp(): RenderedView {
       '/orders — Browse recent orders',
       '/order <number> — Open one exact order number',
       '/status — Check account and store access',
+      '/settings — View or manage store settings',
       '/help — Show this command list',
       '/unlink — Unlink this Telegram account',
       '',
@@ -650,14 +775,166 @@ function renderHelp(): RenderedView {
   };
 }
 
+export function renderSettings(result: SettingsResult): RenderedView {
+  if (result.state !== 'OK' || !result.settings) {
+    return renderRecoveryView(
+      settingsStateMessage(result.state),
+      result.state === 'UNAUTHORIZED' || result.state === 'NO_ACTIVE_STORE'
+        ? 'status'
+        : 'settings'
+    );
+  }
+
+  const settings = result.settings;
+  const categories = settings.enabledNotificationCategories.map(
+    notificationCategoryLabel
+  );
+  const recipients = settings.recipients
+    .filter((recipient) => recipient.selected)
+    .map(
+      (recipient) =>
+        `• ${recipient.displayName}${recipient.availability === 'UNAVAILABLE' ? ' — unavailable' : ''}`
+    );
+  const keyboard = new InlineKeyboard();
+
+  if (settings.editable && settings.actions) {
+    for (const language of settings.actions.languages) {
+      keyboard.text(
+        `${settings.language === language.language ? '✓ ' : ''}${language.language === 'FA' ? 'Persian' : 'English'}`,
+        `sg:${language.ref}`
+      );
+    }
+
+    keyboard
+      .row()
+      .text('Set Timezone', `si:${settings.actions.timezoneInputRef}`)
+      .row()
+      .text('Set Threshold', `si:${settings.actions.thresholdInputRef}`)
+      .text('Clear Threshold', `sg:${settings.actions.thresholdClearRef}`);
+
+    for (const category of settings.actions.categories) {
+      keyboard
+        .row()
+        .text(
+          `${category.enabled ? 'Disable' : 'Enable'} ${notificationCategoryLabel(category.category)}`,
+          `sg:${category.enabled ? category.disableRef : category.enableRef}`
+        );
+    }
+
+    for (const mode of settings.actions.recipientModes) {
+      keyboard
+        .row()
+        .text(
+          `${settings.recipientMode === mode.mode ? '✓ ' : ''}${recipientModeLabel(mode.mode)}`,
+          `sg:${mode.ref}`
+        );
+    }
+
+    for (const recipient of settings.recipients) {
+      if (!recipient.actionRef || !recipient.action) {
+        continue;
+      }
+
+      const action = recipient.action === 'SELECT' ? 'Select' : 'Remove';
+      const availability =
+        recipient.availability === 'UNAVAILABLE' ? ' (unavailable)' : '';
+      const label = `${action} ${recipient.displayName}${availability}`;
+      keyboard
+        .row()
+        .text(
+          label.length <= 64 ? label : `${label.slice(0, 61)}...`,
+          `sg:${recipient.actionRef}`
+        );
+    }
+  }
+
+  keyboard.row().text('Home', NAVIGATION_CALLBACKS.home);
+
+  return {
+    text: [
+      'Store Settings',
+      '',
+      `Language: ${settings.language === 'FA' ? 'Persian' : 'English'}`,
+      `Timezone: ${settings.timezone}`,
+      `Low-stock threshold: ${settings.lowStockThreshold === null ? 'Not configured' : settings.lowStockThreshold}`,
+      `Notifications: ${categories.length > 0 ? categories.join(', ') : 'None'}`,
+      `Recipients: ${recipientModeLabel(settings.recipientMode)}`,
+      `Selected: ${settings.selectedRecipientCount} • currently available: ${settings.availableRecipientCount}`,
+      ...(recipients.length > 0
+        ? ['', 'Selected managers', ...recipients]
+        : []),
+      ...(!settings.editable
+        ? ['', 'Your membership has read-only access to settings.']
+        : []),
+    ].join('\n'),
+    keyboard,
+  };
+}
+
+function renderSettingsInputStart(
+  result: SettingsInputStartResult
+): RenderedView {
+  if (result.state !== 'OK' || !result.purpose || !result.inputRef) {
+    return renderRecoveryView(
+      settingsStateMessage(result.state),
+      result.state === 'UNAUTHORIZED' || result.state === 'NO_ACTIVE_STORE'
+        ? 'status'
+        : 'settings'
+    );
+  }
+
+  return {
+    text:
+      result.purpose === 'TIMEZONE'
+        ? 'Timezone entry is ready. Reply to the new prompt with a canonical IANA timezone.'
+        : 'Threshold entry is ready. Reply to the new prompt with a non-negative whole number.',
+    keyboard: new InlineKeyboard()
+      .text('Back to Settings', NAVIGATION_CALLBACKS.settings)
+      .row()
+      .text('Home', NAVIGATION_CALLBACKS.home),
+  };
+}
+
+function settingsStateMessage(state: SettingsResult['state']): string {
+  switch (state) {
+    case 'FORBIDDEN_ROLE':
+      return 'Your membership can view settings but cannot change them.';
+    case 'UNAUTHORIZED':
+      return 'This chat is not authorized to view store settings.';
+    case 'NO_ACTIVE_STORE':
+      return NO_ACTIVE_STORE_MESSAGE;
+    case 'INVALID_VALUE':
+      return 'That setting value is invalid. Nothing changed. Reply to the original prompt again or reopen Settings.';
+    case 'EXPIRED_REF':
+      return 'This settings input expired or was already used. Nothing changed.';
+    case 'CONTEXT_CHANGED':
+      return 'This settings action expired or the active context changed. Nothing changed.';
+    default:
+      return 'Settings are unavailable. Return Home and try again.';
+  }
+}
+
+function notificationCategoryLabel(
+  category: 'ORDER_CREATED' | 'LOW_STOCK'
+): string {
+  return category === 'ORDER_CREATED' ? 'New order' : 'Low stock';
+}
+
+function recipientModeLabel(mode: SettingsSummary['recipientMode']): string {
+  return mode === 'ALL_ELIGIBLE'
+    ? 'All eligible managers'
+    : 'Selected managers';
+}
+
 function renderRecoveryView(
   text: string,
-  primary: 'orders' | 'status' | 'help'
+  primary: 'orders' | 'status' | 'help' | 'settings'
 ): RenderedView {
   const labels = {
     orders: 'Refresh Recent Orders',
     status: 'Check Status',
     help: 'Help',
+    settings: 'Settings',
   } as const;
 
   return {
@@ -671,7 +948,7 @@ function renderRecoveryView(
 
 function renderTransportFailure(
   error: unknown,
-  primary: 'orders' | 'status' | 'help' = 'help'
+  primary: 'orders' | 'status' | 'help' | 'settings' = 'help'
 ): RenderedView {
   return renderRecoveryView(transportFailureMessage(error), primary);
 }
@@ -679,6 +956,8 @@ function renderTransportFailure(
 function homeKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
     .text('Recent Orders', NAVIGATION_CALLBACKS.orders)
+    .row()
+    .text('Settings', NAVIGATION_CALLBACKS.settings)
     .row()
     .text('Status', NAVIGATION_CALLBACKS.status)
     .text('Help', NAVIGATION_CALLBACKS.help);
@@ -1201,6 +1480,18 @@ function noteInputReference(text: string | undefined): string | undefined {
   return match?.[1];
 }
 
+function settingsInputReference(text: string | undefined): string | undefined {
+  if (!text) {
+    return undefined;
+  }
+
+  const match = text.match(
+    /(?:^|\n)Settings reference: (g\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16})(?:\n|$)/
+  );
+
+  return match?.[1];
+}
+
 function statusLabel(status: string): string {
   const words = status.replace(/-/g, ' ');
   return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
@@ -1210,7 +1501,7 @@ async function handleViewCallback(
   context: Context,
   render: (identity: TelegramIdentity) => Promise<RenderedView>,
   log: (record: Readonly<Record<string, unknown>>) => void,
-  recovery: 'orders' | 'status' | 'help' = 'help'
+  recovery: 'orders' | 'status' | 'help' | 'settings' = 'help'
 ): Promise<void> {
   const identity = privateIdentity(context);
 

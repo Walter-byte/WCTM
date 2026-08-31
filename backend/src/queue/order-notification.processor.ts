@@ -169,7 +169,11 @@ export class OrderNotificationProcessor {
       return this.persistFailure(
         job.data,
         TelegramOrderNotificationState.TERMINAL_FAILURE,
-        prepared.state === 'UNAUTHORIZED' ? 'authorization' : 'order',
+        prepared.state === 'UNAUTHORIZED'
+          ? 'authorization'
+          : prepared.state === 'DISABLED'
+            ? 'policy'
+            : 'order',
         `notification-${prepared.state.toLowerCase()}`
       );
     }

@@ -708,4 +708,51 @@ Accepted.
 
 ---
 
-Next decision number: D-024.
+## D-024
+
+Date
+
+2026-08-31
+
+Decision
+
+MVP settings ownership is explicit: Tenant owns timezone and language, while
+Store owns low-stock threshold, enabled notification categories, and manager
+recipient policy. There are no Store-specific timezone/language overrides and
+no generic settings/property-bag model.
+
+Selected notification recipients reference Memberships, never Telegram
+accounts, user IDs, chat IDs, or chat authorizations. M10 remains the sole
+authority for Telegram linking and private-chat authorization. A selected
+Membership is usable only while current backend state still resolves its active
+tenant Membership, permitted role, active M10 Telegram account, authorized
+private chat, and exact current Store context. Unlinking does not delete the
+preference, and legitimate relinking of the same Membership may restore future
+eligibility without transferring authorization.
+
+Recipient modes are legacy-compatible `ALL_ELIGIBLE` and explicit `SELECTED`.
+`SELECTED` with no selected Memberships means no recipients. M13 remains the
+backend-owned delivery state machine and gains only category/recipient filtering
+at scheduling plus policy revalidation before dispatch. Existing delivery
+history is retained.
+
+The grammY bot remains stateless and presentation-only. Settings callbacks and
+next-message inputs use short-lived, opaque, signed, account/chat/Tenant/Store-
+bound backend references. M18 stores `fa`/`en`, IANA timezone, threshold, and
+the two approved categories only; it does not implement M19 inventory, M20
+search/reporting, or M21 general localization.
+
+Reason
+
+Direct ownership and Membership-based selection preserve tenant isolation,
+M10 authorization authority, M13 delivery semantics, unlink/relink continuity,
+and duplicate-safe Telegram actions without a generic configuration system or
+bot-owned state.
+
+Status
+
+Accepted.
+
+---
+
+Next decision number: D-025.

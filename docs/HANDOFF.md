@@ -2,7 +2,7 @@
 
 **Generated:** 2026-07-19
 
-**Updated:** 2026-08-30
+**Updated:** 2026-08-31
 
 **Reason:** Transitioning implementation agent from GapCode to Codex GPT
 
@@ -43,7 +43,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-023)
+## 3. Architectural Decisions (D-001–D-024)
 
 | ID    | Decision                                                                                                                                                                                             | Status   |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -70,8 +70,9 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-021 | OWNER/ADMIN Telegram order-status writes using server-derived targets, single-effect HMAC references, durable idempotency, one WooCommerce dispatch, and authoritative/lost-response reconciliation  | Accepted |
 | D-022 | Private-pilot setup/readiness tooling with no reset or force path, hidden JWT internals, a public Caddy HTTPS gate, manual synthetic-order creation, and no public onboarding claim                  | Accepted |
 | D-023 | Backend-owned durable new-order notification delivery with existing M10/M11 authorization, M11/M12 actions, deterministic M5 jobs, conservative ambiguous outcomes, and stateless bot-only transport | Accepted |
+| D-024 | Tenant-owned timezone/language, Store-owned threshold/category/recipient policy, Membership-selected recipients under M10 authority, M13-only filtering, and stateless bot settings references       | Accepted |
 
-Next decision number: **D-024**, if a future task produces a genuine
+Next decision number: **D-025**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -825,8 +826,56 @@ order-management path. This does not complete or narrow the full MVP.
 - M17 operational validation passed; M17 is fully closed.
 
 M17 adds no dependency and does not change M6, M9, M11–M16 authentication,
-status, notification, navigation, onboarding, or connector contracts. The next
-planned milestone is M18 — MVP Store Settings Foundation. Do not begin M18.
+status, notification, navigation, onboarding, or connector contracts.
+
+#### M18 — MVP Store Settings Foundation (implementation complete; awaiting review)
+
+- Migration `20260831120000_m18_store_settings_foundation` adds Tenant
+  `timezone` plus `TenantLanguage.FA|EN` mapped to `fa|en`, Store nullable
+  low-stock threshold,
+  exactly two notification categories, and `ALL_ELIGIBLE|SELECTED` recipient
+  mode. Existing Tenant rows backfill to `UTC`/English; future Tenant language
+  defaults to Persian. Existing Stores retain `ORDER_CREATED`,
+  `ALL_ELIGIBLE`, and an unset threshold.
+- `StoreNotificationRecipient` is the only preference mapping. Composite
+  Store+Tenant and Membership+Tenant foreign keys reject cross-tenant rows, and
+  Store+Membership uniqueness makes selection concurrency-safe. No Telegram
+  account, user ID, chat ID, or authorization row is persisted as a preference.
+- OWNER and ADMIN may mutate; MEMBER may read the same effective summary but
+  receives no mutation actions and is rejected by backend authorization if an
+  endpoint is called directly. Every request re-resolves the M10 account,
+  authorized private chat, active Membership/role, Tenant, and exact-one active
+  Store.
+- `/settings` is integrated into M14 Home/navigation. Language, category, mode,
+  and recipient mutations are absolute desired-state actions. Timezone and
+  threshold use short-lived signed backend references embedded in ForceReply;
+  the bot has no session, Prisma, PostgreSQL, Redis-owned policy, or identifier
+  resolution.
+- M13 scheduling first requires `ORDER_CREATED`. `ALL_ELIGIBLE` preserves the
+  previous eligible set; `SELECTED` intersects it with configured Memberships,
+  including the explicit zero-recipient case. Before dispatch, M13 revalidates
+  the current category/mode/selection plus all existing M10 authorization and
+  context. Historical deliveries remain untouched and are never resent merely
+  by re-enabling a category.
+- Unlinking makes a selected Membership ineligible without deleting its
+  preference. Legitimate relinking of that same Membership restores eligibility
+  for future notifications; no other Membership inherits it.
+- Successful logical mutations create one `telegram.settings.updated` AuditLog
+  with safe setting/count/result metadata. No-op replays create no duplicate
+  state-change audit. Recipient PII, raw Membership IDs, Telegram/chat IDs, and
+  arbitrary input are excluded.
+- Full isolated PostgreSQL 16 validation applied all 12 migrations and reported
+  the schema up to date. Seeded pre-M18/new rows and database constraints proved
+  backfill/defaults, nullable threshold, non-negative bound, recipient
+  uniqueness, and cross-tenant rejection.
+- Automated evidence: 324 Jest backend tests, 24 backend Node smoke/contract
+  tests with one PHP-runtime skip, and 45 Telegram bot tests pass. Prisma,
+  build, typecheck, lint, formatting, and diff gates are final branch gates.
+- D-024 is Accepted. M18 adds no dependency and no inventory/low-stock
+  processing, `/stock`, search, reports, general localization, billing,
+  dashboard, Store switching, connector logic, queue, or service topology.
+
+Do not begin another milestone before M18 review and approval.
 
 ---
 
@@ -837,22 +886,25 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `main`.
+Current branch: `feat/m18-store-settings-foundation`.
 
 ---
 
 ## 6. Current Blockers
 
-M17 has no blockers; all required validation is complete. A deployed M13
-synthetic new-order notification-delivery result is still not recorded as PASS.
-Existing known issues and technical debt remain unchanged.
+M18 has no implementation or automated-validation blocker. Production
+migration/deployment and any owner-requested live `/settings` smoke remain
+bounded release-stage items. A deployed M13 synthetic new-order
+notification-delivery result is still not recorded as PASS. Existing known
+issues and technical debt remain unchanged.
 
 ---
 
 ## 7. Current Task
 
-M17 is fully closed. M18 — MVP Store Settings Foundation is the next planned
-milestone. Do not begin M18 without an approved task.
+M18 — MVP Store Settings Foundation is implementation-, migration-, test-, and
+documentation-complete on `feat/m18-store-settings-foundation` and awaits
+review/merge/release direction. Do not begin another milestone.
 
 ---
 

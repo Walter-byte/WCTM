@@ -288,6 +288,20 @@ describe('M13 durable notification delivery', () => {
     expect(fixture.send).not.toHaveBeenCalled();
   });
 
+  it('terminally skips delivery when settings disable policy after scheduling', async () => {
+    const fixture = setup();
+    fixture.prepareOrderNotification.mockResolvedValueOnce({
+      state: 'DISABLED',
+    });
+
+    await expect(fixture.processor.process(job())).resolves.toMatchObject({
+      outcome: 'terminal_failure',
+    });
+    expect(fixture.delivery.failureCategory).toBe('policy');
+    expect(fixture.delivery.failureCode).toBe('notification-disabled');
+    expect(fixture.send).not.toHaveBeenCalled();
+  });
+
   it('fails closed on tenant or Store job mismatch', async () => {
     const fixture = setup();
 

@@ -7,6 +7,7 @@ import { telegramRedeemSchema } from './dto/telegram-internal.dto';
 import { TelegramInternalController } from './telegram-internal.controller';
 import type { TelegramLinkingService } from './telegram-linking.service';
 import type { TelegramOrderService } from './telegram-order.service';
+import type { TelegramSettingsService } from './telegram-settings.service';
 
 describe('TelegramInternalController authentication boundaries', () => {
   const prototype = TelegramInternalController.prototype;
@@ -52,6 +53,18 @@ describe('TelegramInternalController authentication boundaries', () => {
     expect(
       Reflect.getMetadata(IS_PUBLIC_KEY, prototype.updateOrderStatus)
     ).toBe(true);
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, prototype.settingsSummary)).toBe(
+      true
+    );
+    expect(
+      Reflect.getMetadata(IS_PUBLIC_KEY, prototype.applySettingsAction)
+    ).toBe(true);
+    expect(
+      Reflect.getMetadata(IS_PUBLIC_KEY, prototype.startSettingsInput)
+    ).toBe(true);
+    expect(
+      Reflect.getMetadata(IS_PUBLIC_KEY, prototype.applySettingsInput)
+    ).toBe(true);
   });
 
   it('rejects a body/header update identity mismatch before service access', () => {
@@ -60,7 +73,8 @@ describe('TelegramInternalController authentication boundaries', () => {
       {
         status,
       } as unknown as TelegramLinkingService,
-      {} as TelegramOrderService
+      {} as TelegramOrderService,
+      {} as never
     );
 
     expect(() =>
@@ -112,7 +126,8 @@ describe('TelegramInternalController authentication boundaries', () => {
     const list = jest.fn();
     const controller = new TelegramInternalController(
       {} as TelegramLinkingService,
-      { list } as unknown as TelegramOrderService
+      { list } as unknown as TelegramOrderService,
+      {} as never
     );
 
     expect(() =>
@@ -124,5 +139,22 @@ describe('TelegramInternalController authentication boundaries', () => {
       )
     ).toThrow(UnauthorizedException);
     expect(list).not.toHaveBeenCalled();
+  });
+
+  it('requires a valid Telegram update header before settings service access', () => {
+    const summary = jest.fn();
+    const controller = new TelegramInternalController(
+      {} as TelegramLinkingService,
+      {} as TelegramOrderService,
+      { summary } as unknown as TelegramSettingsService
+    );
+
+    expect(() =>
+      controller.settingsSummary(
+        { telegram: { userId: '1001', chatId: '1001' } },
+        'not-an-update-id'
+      )
+    ).toThrow(UnauthorizedException);
+    expect(summary).not.toHaveBeenCalled();
   });
 });

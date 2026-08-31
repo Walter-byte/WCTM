@@ -49,7 +49,12 @@ test('Home, Recent Orders, order detail, and Back reuse existing stateless endpo
 
   const home = apiCalls.find((call) => call.method === 'sendMessage');
   assert.match(home.payload.text, /WooCommerce Management/);
-  assert.deepEqual(callbacks(home), ['nav:orders', 'nav:status', 'nav:help']);
+  assert.deepEqual(callbacks(home), [
+    'nav:orders',
+    'nav:settings',
+    'nav:status',
+    'nav:help',
+  ]);
 
   const detailEdit = apiCalls
     .filter((call) => call.method === 'editMessageText')
@@ -219,7 +224,7 @@ test('/help and command discovery list existing functionality only', async () =>
 
   assert.deepEqual(
     BOT_COMMANDS.map(({ command }) => command),
-    ['start', 'orders', 'order', 'status', 'help', 'unlink']
+    ['start', 'orders', 'order', 'status', 'settings', 'help', 'unlink']
   );
   const message = apiCalls.find((call) => call.method === 'sendMessage');
   for (const command of BOT_COMMANDS) {
@@ -244,7 +249,12 @@ test('M14 navigation edit failures fall back to one reply with the same actions'
   );
   const reply = apiCalls.find((call) => call.method === 'sendMessage');
   assert.match(reply.payload.text, /WooCommerce Management/);
-  assert.deepEqual(callbacks(reply), ['nav:orders', 'nav:status', 'nav:help']);
+  assert.deepEqual(callbacks(reply), [
+    'nav:orders',
+    'nav:settings',
+    'nav:status',
+    'nav:help',
+  ]);
 });
 
 function readyStatus() {

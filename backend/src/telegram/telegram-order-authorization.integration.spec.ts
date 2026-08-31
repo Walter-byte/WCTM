@@ -37,7 +37,8 @@ describe('M11 internal Telegram order authorization integration', () => {
     }));
     const controller = new TelegramInternalController(
       {} as TelegramLinkingService,
-      { list } as unknown as TelegramOrderService
+      { list } as unknown as TelegramOrderService,
+      {} as never
     );
 
     expect(guard.canActivate(executionContext('test-internal-api-key'))).toBe(

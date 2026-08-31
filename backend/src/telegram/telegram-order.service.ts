@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import {
   MembershipRole,
+  NotificationCategory,
+  NotificationRecipientMode,
   Prisma,
   StoreStatus,
   TelegramChatType,
@@ -301,6 +303,7 @@ export interface TelegramOrderStatusUpdateResult {
 interface TelegramOrderContext {
   accountId: string;
   userId: string;
+  membershipId: string;
   telegramChatId: bigint;
   tenantId: string;
   storeId: string;
@@ -317,6 +320,7 @@ interface NewReference {
 }
 
 export interface TelegramOrderNotificationRecipient {
+  membershipId?: string;
   telegramAccountId: string;
   telegramChatAuthorizationId: string;
   telegramUserId: string;
@@ -324,7 +328,7 @@ export interface TelegramOrderNotificationRecipient {
 }
 
 export type TelegramPreparedOrderNotification =
-  | { state: 'UNAUTHORIZED' | 'NOT_FOUND' | 'DELETED' }
+  | { state: 'UNAUTHORIZED' | 'NOT_FOUND' | 'DELETED' | 'DISABLED' }
   | {
       state: 'OK';
       orderNumber: string;
@@ -388,6 +392,7 @@ export class TelegramOrderService {
         resolution.context.storeId === storeId
       ) {
         recipients.push({
+          membershipId: resolution.context.membershipId,
           telegramAccountId: candidate.telegramAccountId,
           telegramChatAuthorizationId: candidate.id,
           telegramUserId: candidate.telegramAccount.telegramUserId.toString(),
@@ -413,6 +418,8 @@ export class TelegramOrderService {
     if (
       resolution.state !== 'OK' ||
       resolution.context.accountId !== recipient.telegramAccountId ||
+      (recipient.membershipId !== undefined &&
+        resolution.context.membershipId !== recipient.membershipId) ||
       resolution.context.tenantId !== tenantId ||
       resolution.context.storeId !== storeId
     ) {
@@ -420,6 +427,37 @@ export class TelegramOrderService {
     }
 
     const context = resolution.context;
+    const policy = await this.prisma.store.findFirst({
+      where: {
+        id: storeId,
+        tenantId,
+        deletedAt: null,
+        status: StoreStatus.ACTIVE,
+        tenant: { deletedAt: null },
+      },
+      select: {
+        enabledNotificationCategories: true,
+        notificationRecipientMode: true,
+        selectedNotificationRecipients: {
+          where: { membershipId: context.membershipId },
+          select: { id: true },
+          take: 1,
+        },
+      },
+    });
+
+    if (
+      !policy ||
+      !policy.enabledNotificationCategories.includes(
+        NotificationCategory.ORDER_CREATED
+      ) ||
+      (policy.notificationRecipientMode ===
+        NotificationRecipientMode.SELECTED &&
+        policy.selectedNotificationRecipients.length === 0)
+    ) {
+      return { state: 'DISABLED' };
+    }
+
     const order = await this.prisma.order.findFirst({
       where: {
         tenantId,
@@ -1844,6 +1882,7 @@ export class TelegramOrderService {
         },
       },
       select: {
+        id: true,
         tenantId: true,
         role: true,
       },
@@ -1879,6 +1918,7 @@ export class TelegramOrderService {
       context: {
         accountId: account.id,
         userId: account.userId,
+        membershipId: membership.id,
         telegramChatId,
         tenantId: membership.tenantId,
         storeId: stores[0]!.id,

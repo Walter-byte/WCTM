@@ -437,7 +437,43 @@ is not recorded as PASS by this validation.
   were not required because automated/adversarial coverage was accepted
 - M17 operational validation passed and M17 is fully closed
 
-Next planned milestone: M18 — MVP Store Settings Foundation. Do not begin M18.
+### M18 — MVP Store Settings Foundation ✅ Implementation Complete / Awaiting Review
+
+- Tenant-owned `timezone` and typed `FA`/`EN` language settings; existing
+  Tenants backfill to `UTC`/English while new Tenants default to Persian/`UTC`
+- Store-owned nullable bounded low-stock threshold, exactly
+  `ORDER_CREATED`/`LOW_STOCK` categories, and legacy-compatible
+  `ALL_ELIGIBLE` or explicit `SELECTED` recipient mode
+- One Store↔Membership recipient mapping with composite same-Tenant foreign
+  keys and Store+Membership uniqueness; no Telegram identity is persisted in
+  recipient preferences
+- Backend-only OWNER/ADMIN mutation and OWNER/ADMIN/MEMBER read authorization
+  after current M10 exact-account/private-chat/Membership/Tenant/Store
+  resolution
+- Stateless `/settings` and Home navigation with compact read-only MEMBER
+  summaries, absolute desired-state callbacks, opaque signed references, and
+  backend-owned expiring timezone/threshold input contexts
+- M13 scheduling skips disabled `ORDER_CREATED`, applies selected-Membership
+  intersection, and revalidates category, recipient mode, selected Membership,
+  and all existing M10 authorization before dispatch
+- Successful state changes emit safe `telegram.settings.updated` AuditLog rows;
+  no-op replays emit no misleading duplicate audit
+- Migration `20260831120000_m18_store_settings_foundation`; full 12-migration
+  chain and seeded existing-row/new-row backfill checks pass on isolated
+  PostgreSQL 16
+- Automated gates pass with 324 Jest backend tests, 24 backend Node
+  smoke/contract tests (one PHP-runtime skip), and 45 Telegram bot tests, plus
+  Prisma validation/generation, build, typecheck, lint, and focused migration
+  constraints
+- D-024 records the locked ownership, Membership-recipient, M10/M13, stateless
+  bot, and later-milestone exclusion boundaries
+- No inventory query/detection, `/stock`, search, report, general localization,
+  billing, dashboard, Store switching, connector logic, dependency, queue, or
+  service-topology change
+
+M18 is complete on `feat/m18-store-settings-foundation` and awaits review,
+merge, production migration/deployment, and any owner-requested live Telegram
+smoke validation. Do not begin the next milestone without approval.
 
 ## Phase 6 — SaaS Platform ⬜ Planned
 
