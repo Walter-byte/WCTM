@@ -1,4 +1,8 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
+import {
+  NotificationCategory,
+  NotificationRecipientMode,
+} from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 
 import { readWooCommerceOrderId } from '../orders/order-payload.mapper';
@@ -23,6 +27,30 @@ export class OrderNotificationScheduler {
       return;
     }
 
+    const settings = await this.prisma.store.findFirst({
+      where: {
+        id: event.store.id,
+        tenantId: event.store.tenantId,
+        deletedAt: null,
+      },
+      select: {
+        enabledNotificationCategories: true,
+        notificationRecipientMode: true,
+        selectedNotificationRecipients: {
+          select: { membershipId: true },
+        },
+      },
+    });
+
+    if (
+      !settings ||
+      !settings.enabledNotificationCategories.includes(
+        NotificationCategory.ORDER_CREATED
+      )
+    ) {
+      return;
+    }
+
     const wcOrderId = readWooCommerceOrderId(event.payload);
     const order = await this.prisma.order.findFirst({
       where: {
@@ -37,10 +65,24 @@ export class OrderNotificationScheduler {
       throw new Error('Projected Order is unavailable for notification');
     }
 
-    const recipients = await this.telegramOrders.eligibleNotificationRecipients(
+    const eligible = await this.telegramOrders.eligibleNotificationRecipients(
       event.store.tenantId,
       event.store.id
     );
+    const selectedMembershipIds = new Set(
+      settings.selectedNotificationRecipients.map(
+        (recipient) => recipient.membershipId
+      )
+    );
+    const recipients =
+      settings.notificationRecipientMode ===
+      NotificationRecipientMode.ALL_ELIGIBLE
+        ? eligible
+        : eligible.filter(
+            (recipient) =>
+              recipient.membershipId !== undefined &&
+              selectedMembershipIds.has(recipient.membershipId)
+          );
 
     for (const recipient of recipients) {
       const delivery =

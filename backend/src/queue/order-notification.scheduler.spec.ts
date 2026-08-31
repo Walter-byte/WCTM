@@ -1,4 +1,8 @@
 import { describe, expect, it, jest } from '@jest/globals';
+import {
+  NotificationCategory,
+  NotificationRecipientMode,
+} from '@prisma/client';
 
 import type { ProjectableWebhookEvent } from '../orders/order-projection.service';
 import type { PrismaService } from '../prisma/prisma.service';
@@ -25,6 +29,7 @@ const event = (): ProjectableWebhookEvent => ({
 
 function setup(recipientCount: number) {
   const recipients = Array.from({ length: recipientCount }, (_, index) => ({
+    membershipId: `mem_${index + 1}`,
     telegramAccountId: `tga_${index + 1}`,
     telegramChatAuthorizationId: `tca_${index + 1}`,
     telegramUserId: String(1001 + index),
@@ -46,8 +51,19 @@ function setup(recipientCount: number) {
   const addOrderNotificationJob = jest
     .fn<QueueRuntimeService['addOrderNotificationJob']>()
     .mockResolvedValue({ id: 'job' } as never);
+  const findStoreSettings = jest.fn(async () => ({
+    enabledNotificationCategories: [
+      NotificationCategory.ORDER_CREATED,
+    ] as NotificationCategory[],
+    notificationRecipientMode:
+      NotificationRecipientMode.ALL_ELIGIBLE as NotificationRecipientMode,
+    selectedNotificationRecipients: [] as Array<{ membershipId: string }>,
+  }));
   const scheduler = new OrderNotificationScheduler(
     {
+      store: {
+        findFirst: findStoreSettings,
+      },
       order: { findFirst: jest.fn(async () => ({ id: 'ord_a' })) },
       telegramOrderNotificationDelivery: { upsert },
     } as unknown as PrismaService,
@@ -57,7 +73,13 @@ function setup(recipientCount: number) {
     { addOrderNotificationJob } as unknown as QueueRuntimeService
   );
 
-  return { scheduler, recipients, upsert, addOrderNotificationJob };
+  return {
+    scheduler,
+    recipients,
+    upsert,
+    addOrderNotificationJob,
+    findStoreSettings,
+  };
 }
 
 describe('M13 order notification scheduling', () => {
@@ -136,6 +158,54 @@ describe('M13 order notification scheduling', () => {
     const fixture = setup(1);
 
     await fixture.scheduler.schedule({ ...event(), topic: 'order.updated' });
+
+    expect(fixture.upsert).not.toHaveBeenCalled();
+  });
+
+  it('schedules nothing when ORDER_CREATED is disabled', async () => {
+    const fixture = setup(2);
+    fixture.findStoreSettings.mockResolvedValueOnce({
+      enabledNotificationCategories: [NotificationCategory.LOW_STOCK],
+      notificationRecipientMode: NotificationRecipientMode.ALL_ELIGIBLE,
+      selectedNotificationRecipients: [],
+    });
+
+    await fixture.scheduler.schedule(event());
+
+    expect(fixture.upsert).not.toHaveBeenCalled();
+    expect(fixture.addOrderNotificationJob).not.toHaveBeenCalled();
+  });
+
+  it('intersects SELECTED Memberships with the currently eligible set', async () => {
+    const fixture = setup(3);
+    fixture.findStoreSettings.mockResolvedValueOnce({
+      enabledNotificationCategories: [NotificationCategory.ORDER_CREATED],
+      notificationRecipientMode: NotificationRecipientMode.SELECTED,
+      selectedNotificationRecipients: [{ membershipId: 'mem_2' }],
+    });
+
+    await fixture.scheduler.schedule(event());
+
+    expect(fixture.upsert).toHaveBeenCalledTimes(1);
+    expect(fixture.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({
+          telegramAccountId: 'tga_2',
+          telegramChatAuthorizationId: 'tca_2',
+        }),
+      })
+    );
+  });
+
+  it('treats SELECTED with zero Memberships as no recipients', async () => {
+    const fixture = setup(2);
+    fixture.findStoreSettings.mockResolvedValueOnce({
+      enabledNotificationCategories: [NotificationCategory.ORDER_CREATED],
+      notificationRecipientMode: NotificationRecipientMode.SELECTED,
+      selectedNotificationRecipients: [],
+    });
+
+    await fixture.scheduler.schedule(event());
 
     expect(fixture.upsert).not.toHaveBeenCalled();
   });

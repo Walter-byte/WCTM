@@ -6,18 +6,19 @@ Version: 1.0
 
 Current Phase
 
-Phase 5 — Core Store Management (MVP) is in progress. M17 Order Workflow
-Completion is complete, B-reviewed with `MERGE`, merged, migrated, deployed,
-and operationally validated on the real Store. Phase 4 and M1–M16 remain
-complete and unchanged. M12 real-store validation remains complete to the
-extent recorded in `docs/validation/M12_REAL_STORE_VALIDATION.md`.
+Phase 5 — Core Store Management (MVP) is in progress. M18 MVP Store Settings
+Foundation is implemented, migration-validated, documented, and automated-test
+complete on its feature branch; review, merge, production migration/deployment,
+and any owner-requested live Telegram smoke remain pending. M17 is fully closed.
+Phase 4 and M1–M16 remain complete and unchanged.
 
 ---
 
 Current Task
 
-M17 Order Workflow Completion is fully closed. The next planned milestone is
-M18 — MVP Store Settings Foundation; do not begin M18 without an approved task.
+M18 — MVP Store Settings Foundation is the active approved task and is complete
+at implementation evidence stage. Do not begin another milestone before review
+and approval.
 
 ---
 
@@ -29,7 +30,11 @@ Project Version
 
 Repository
 
-Current branch: `main`.
+Current branch: `feat/m18-store-settings-foundation`.
+
+M18 implementation commit: `ef677f0 feat(settings): add MVP store settings
+foundation`. The final adversarial-audit hardening is committed separately on
+the same branch.
 
 M17 implementation commit: `feat(orders): complete MVP order workflow`.
 
@@ -494,6 +499,69 @@ duplicate, MEMBER, cross-tenant, or ambiguous-response testing was required;
 those cases were accepted from automated/adversarial coverage. M17 operational
 validation passed and M17 is fully closed.
 
+M18 adds Tenant-owned `timezone` and `language` directly to the existing Tenant
+model. Timezone accepts canonical IANA-style identifiers through the Node 20
+`Intl` runtime, including `UTC` and `Asia/Tehran`, without a dependency.
+Language is the typed `TenantLanguage` enum with exactly `FA` and `EN`, mapped
+to persisted `fa` and `en` codes.
+
+Store now owns nullable `lowStockThreshold`, the exact
+`ORDER_CREATED`/`LOW_STOCK` category array, and
+`NotificationRecipientMode.ALL_ELIGIBLE` or `SELECTED`. The migration backfills
+existing Tenants to `UTC`/English and existing Stores to `ORDER_CREATED`,
+`ALL_ELIGIBLE`, and an unset threshold. Future Tenants default to Persian and
+`UTC`; no timezone is inferred.
+
+`StoreNotificationRecipient` selects a Membership through composite
+Store+Tenant and Membership+Tenant foreign keys plus Store+Membership
+uniqueness. It stores no Telegram identity. Inactive or unlinked selected
+Memberships remain configured but cannot receive delivery; a legitimate relink
+of the same Membership restores future eligibility through current M10 state.
+
+The backend-only Telegram settings service re-resolves account, private chat,
+active Membership/role, Tenant, and exact-one active Store for every request.
+OWNER and ADMIN receive absolute set/select/remove actions; MEMBER receives the
+same summary without mutation references and is denied by backend policy if a
+mutation endpoint is called manually. Settings references are short-lived,
+opaque, HMAC-authenticated, and account/chat/Tenant/Store bound. Timezone and
+threshold next-message contexts are stored only in the backend and consumed on
+successful application; the bot owns no session or Prisma state.
+
+M13 remains unchanged except for Store policy filtering. Scheduling requires
+`ORDER_CREATED` to be enabled. `ALL_ELIGIBLE` retains the existing recipient
+set; `SELECTED` intersects it with configured Memberships and an empty selected
+set sends to nobody. Pre-dispatch preparation revalidates category, mode,
+selected Membership, and all existing M10 authorization/context rules before
+the existing state machine and transport can send. Delivered history is not
+deleted or resent.
+
+Every successful logical mutation creates one safe
+`telegram.settings.updated` AuditLog record. Absolute no-op replays do not add
+duplicate audit rows. Recipient audit metadata contains action/count/result
+state only, not email, Telegram/chat identity, raw Membership identity, or user
+input.
+
+Migration `20260831120000_m18_store_settings_foundation` passed the complete
+12-migration chain on isolated PostgreSQL 16 and Prisma reported the schema up
+to date. Seeded pre-M18 rows verified English/UTC and legacy Store backfill;
+new rows verified Persian/UTC defaults. Database checks rejected negative
+thresholds, duplicate or null notification categories, duplicate recipients,
+and cross-tenant recipient mappings. The final adversarial audit found and
+closed the one concrete storage defect: PostgreSQL enum typing rejected unknown
+category values but did not itself reject duplicate enum-array members. The M18
+migration now enforces a duplicate-free, null-free subset of the two categories.
+
+Automated evidence passes: 332 Jest backend tests, 24 backend Node
+smoke/contract tests with one environment-only PHP skip, and 45 Telegram bot
+tests. Real isolated-database probes additionally verified concurrent duplicate
+category enable, duplicate recipient selection, opposing desired states, stale
+single-use input, MEMBER replay denial, safe audit counts, and database-level
+recipient isolation. Prisma format/validate/generate, build, typecheck, lint,
+format, and diff checks pass. M18 adds no dependency and no inventory, low-stock
+processing, search, reporting, general localization, billing, dashboard, Store
+switching, connector behavior, queue, or new service topology. D-024 remains
+Accepted and unchanged.
+
 ---
 
 Infrastructure
@@ -531,7 +599,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-feat/m17-order-workflow-completion
+feat/m18-store-settings-foundation
 
 ---
 
@@ -563,22 +631,25 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-M17 has no blockers; all required validation is complete. The deployed M13
-synthetic new-order notification result is still not recorded as PASS.
+M18 implementation has no code or automated-validation blocker. Production
+migration/deployment and any owner-requested live `/settings` smoke remain
+bounded release-stage validation items. The deployed M13 synthetic new-order
+notification result is still not recorded as PASS.
 
 ---
 
 Next Milestone
 
-M18 — MVP Store Settings Foundation is planned next. Do not begin M18 without
-an approved task.
+Await M18 review, merge, and release direction. Do not begin the next milestone
+without approval.
 
 ---
 
 Last Completed
 
-M17 Order Workflow Completion is complete, merged, production-migrated,
-deployed, operationally validated with PASS, and fully closed.
+M18 MVP Store Settings Foundation is implementation-, migration-, test-, and
+documentation-complete on its feature branch. M17 remains the last merged and
+production-validated milestone.
 
 ---
 
@@ -590,4 +661,4 @@ Excellent
 
 Last Updated
 
-2026-08-30
+2026-08-31

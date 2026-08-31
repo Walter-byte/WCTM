@@ -288,6 +288,48 @@ describe('M13 durable notification delivery', () => {
     expect(fixture.send).not.toHaveBeenCalled();
   });
 
+  it('terminally skips delivery when settings disable policy after scheduling', async () => {
+    const fixture = setup();
+    fixture.prepareOrderNotification.mockResolvedValueOnce({
+      state: 'DISABLED',
+    });
+
+    await expect(fixture.processor.process(job())).resolves.toMatchObject({
+      outcome: 'terminal_failure',
+    });
+    expect(fixture.delivery.failureCategory).toBe('policy');
+    expect(fixture.delivery.failureCode).toBe('notification-disabled');
+    expect(fixture.send).not.toHaveBeenCalled();
+  });
+
+  it('does not resurrect a policy-suppressed delivery after settings are re-enabled', async () => {
+    const fixture = setup();
+    fixture.prepareOrderNotification.mockResolvedValueOnce({
+      state: 'DISABLED',
+    });
+
+    await fixture.processor.process(job());
+    fixture.prepareOrderNotification.mockResolvedValueOnce({
+      state: 'OK',
+      orderNumber: '101',
+      status: 'processing',
+      currency: 'IRR',
+      total: '1000',
+      customerDisplayName: 'Manager',
+      viewOrderRef: 'd.AAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBB',
+      changeStatusAvailable: false,
+    });
+
+    await expect(fixture.processor.process(job())).resolves.toMatchObject({
+      outcome: 'already_final',
+    });
+    expect(fixture.prepareOrderNotification).toHaveBeenCalledTimes(1);
+    expect(fixture.send).not.toHaveBeenCalled();
+    expect(fixture.delivery.state).toBe(
+      TelegramOrderNotificationState.TERMINAL_FAILURE
+    );
+  });
+
   it('fails closed on tenant or Store job mismatch', async () => {
     const fixture = setup();
 

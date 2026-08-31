@@ -174,6 +174,62 @@ export interface OrderStatusUpdateResult {
   freshness?: OrderFreshness;
 }
 
+export type SettingsState =
+  | 'OK'
+  | 'NO_ACTIVE_STORE'
+  | 'UNAUTHORIZED'
+  | 'CONTEXT_CHANGED'
+  | 'FORBIDDEN_ROLE'
+  | 'INVALID_VALUE'
+  | 'EXPIRED_REF';
+
+export interface SettingsRecipient {
+  displayName: string;
+  selected: boolean;
+  availability: 'AVAILABLE' | 'UNAVAILABLE';
+  actionRef?: string;
+  action?: 'SELECT' | 'REMOVE';
+}
+
+export interface SettingsSummary {
+  language: 'FA' | 'EN';
+  timezone: string;
+  lowStockThreshold: number | null;
+  enabledNotificationCategories: Array<'ORDER_CREATED' | 'LOW_STOCK'>;
+  recipientMode: 'ALL_ELIGIBLE' | 'SELECTED';
+  selectedRecipientCount: number;
+  availableRecipientCount: number;
+  editable: boolean;
+  recipients: SettingsRecipient[];
+  actions?: {
+    languages: Array<{ language: 'FA' | 'EN'; ref: string }>;
+    timezoneInputRef: string;
+    thresholdInputRef: string;
+    thresholdClearRef: string;
+    categories: Array<{
+      category: 'ORDER_CREATED' | 'LOW_STOCK';
+      enabled: boolean;
+      enableRef: string;
+      disableRef: string;
+    }>;
+    recipientModes: Array<{
+      mode: 'ALL_ELIGIBLE' | 'SELECTED';
+      ref: string;
+    }>;
+  };
+}
+
+export interface SettingsResult {
+  state: SettingsState;
+  settings?: SettingsSummary;
+}
+
+export interface SettingsInputStartResult {
+  state: SettingsState;
+  purpose?: 'TIMEZONE' | 'THRESHOLD';
+  inputRef?: string;
+}
+
 export class BackendUnavailableError extends Error {
   constructor() {
     super('Backend is unavailable');
@@ -411,6 +467,64 @@ export class InternalBackendClient {
     return parseOrderStatusUpdateResult(value);
   }
 
+  async settings(identity: TelegramIdentity): Promise<SettingsResult> {
+    const value = await this.post<unknown>('settings/summary', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+    });
+
+    return parseSettingsResult(value);
+  }
+
+  async applySettingsAction(
+    identity: TelegramIdentity,
+    ref: string
+  ): Promise<SettingsResult> {
+    const value = await this.post<unknown>('settings/action', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+      ref,
+    });
+
+    return parseSettingsResult(value);
+  }
+
+  async startSettingsInput(
+    identity: TelegramIdentity,
+    ref: string
+  ): Promise<SettingsInputStartResult> {
+    const value = await this.post<unknown>('settings/input/start', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+      ref,
+    });
+
+    return parseSettingsInputStartResult(value);
+  }
+
+  async applySettingsInput(
+    identity: TelegramIdentity,
+    ref: string,
+    value: string
+  ): Promise<SettingsResult> {
+    const result = await this.post<unknown>('settings/input/apply', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+      ref,
+      value,
+    });
+
+    return parseSettingsResult(result);
+  }
+
   private async post<T>(
     path: string,
     identity: TelegramIdentity,
@@ -482,6 +596,207 @@ function parseOrderListResult(value: unknown): OrderListResult {
     previousCursor: record['previousCursor'] as string | null,
     freshness: record['freshness'],
   };
+}
+
+function parseSettingsResult(value: unknown): SettingsResult {
+  const record = requireRecord(value);
+  const states = new Set<SettingsState>([
+    'OK',
+    'NO_ACTIVE_STORE',
+    'UNAUTHORIZED',
+    'CONTEXT_CHANGED',
+    'FORBIDDEN_ROLE',
+    'INVALID_VALUE',
+    'EXPIRED_REF',
+  ]);
+  const state = String(record['state']) as SettingsState;
+
+  if (!states.has(state)) {
+    throw new MalformedBackendResponseError();
+  }
+
+  if (state !== 'OK') {
+    return { state };
+  }
+
+  const settings = parseSettingsSummary(record['settings']);
+  return { state, settings };
+}
+
+function parseSettingsInputStartResult(
+  value: unknown
+): SettingsInputStartResult {
+  const base = parseSettingsResultState(value);
+
+  if (base.state !== 'OK') {
+    return base;
+  }
+
+  const record = requireRecord(value);
+
+  if (
+    (record['purpose'] !== 'TIMEZONE' && record['purpose'] !== 'THRESHOLD') ||
+    !isCallbackReference(record['inputRef'], 'g')
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return {
+    state: 'OK',
+    purpose: record['purpose'],
+    inputRef: record['inputRef'],
+  };
+}
+
+function parseSettingsResultState(value: unknown): { state: SettingsState } {
+  const record = requireRecord(value);
+  const states = new Set<SettingsState>([
+    'OK',
+    'NO_ACTIVE_STORE',
+    'UNAUTHORIZED',
+    'CONTEXT_CHANGED',
+    'FORBIDDEN_ROLE',
+    'INVALID_VALUE',
+    'EXPIRED_REF',
+  ]);
+  const state = String(record['state']) as SettingsState;
+
+  if (!states.has(state)) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return { state };
+}
+
+function parseSettingsSummary(value: unknown): SettingsSummary {
+  const record = requireRecord(value);
+  const categories = record['enabledNotificationCategories'];
+  const recipients = record['recipients'];
+
+  if (
+    (record['language'] !== 'FA' && record['language'] !== 'EN') ||
+    !isString(record['timezone']) ||
+    !(
+      record['lowStockThreshold'] === null ||
+      (typeof record['lowStockThreshold'] === 'number' &&
+        Number.isSafeInteger(record['lowStockThreshold']) &&
+        record['lowStockThreshold'] >= 0)
+    ) ||
+    !Array.isArray(categories) ||
+    !categories.every(isNotificationCategory) ||
+    (record['recipientMode'] !== 'ALL_ELIGIBLE' &&
+      record['recipientMode'] !== 'SELECTED') ||
+    !isSafeCount(record['selectedRecipientCount']) ||
+    !isSafeCount(record['availableRecipientCount']) ||
+    typeof record['editable'] !== 'boolean' ||
+    !Array.isArray(recipients) ||
+    !recipients.every(isSettingsRecipient)
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  const actions =
+    record['actions'] === undefined
+      ? undefined
+      : parseSettingsActions(record['actions']);
+
+  if (record['editable'] !== Boolean(actions)) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return {
+    language: record['language'],
+    timezone: record['timezone'],
+    lowStockThreshold: record['lowStockThreshold'],
+    enabledNotificationCategories: categories,
+    recipientMode: record['recipientMode'],
+    selectedRecipientCount: record['selectedRecipientCount'],
+    availableRecipientCount: record['availableRecipientCount'],
+    editable: record['editable'],
+    recipients,
+    ...(actions ? { actions } : {}),
+  } as SettingsSummary;
+}
+
+function parseSettingsActions(
+  value: unknown
+): NonNullable<SettingsSummary['actions']> {
+  const record = requireRecord(value);
+  const languages = record['languages'];
+  const categories = record['categories'];
+  const recipientModes = record['recipientModes'];
+
+  if (
+    !Array.isArray(languages) ||
+    !languages.every((item) => {
+      const row = asRecord(item);
+      return Boolean(
+        row &&
+        (row['language'] === 'FA' || row['language'] === 'EN') &&
+        isCallbackReference(row['ref'], 'g')
+      );
+    }) ||
+    !isCallbackReference(record['timezoneInputRef'], 'g') ||
+    !isCallbackReference(record['thresholdInputRef'], 'g') ||
+    !isCallbackReference(record['thresholdClearRef'], 'g') ||
+    !Array.isArray(categories) ||
+    !categories.every((item) => {
+      const row = asRecord(item);
+      return Boolean(
+        row &&
+        isNotificationCategory(row['category']) &&
+        typeof row['enabled'] === 'boolean' &&
+        isCallbackReference(row['enableRef'], 'g') &&
+        isCallbackReference(row['disableRef'], 'g')
+      );
+    }) ||
+    !Array.isArray(recipientModes) ||
+    !recipientModes.every((item) => {
+      const row = asRecord(item);
+      return Boolean(
+        row &&
+        (row['mode'] === 'ALL_ELIGIBLE' || row['mode'] === 'SELECTED') &&
+        isCallbackReference(row['ref'], 'g')
+      );
+    })
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return record as unknown as NonNullable<SettingsSummary['actions']>;
+}
+
+function isSettingsRecipient(value: unknown): boolean {
+  const record = asRecord(value);
+
+  if (
+    !record ||
+    !isString(record['displayName']) ||
+    typeof record['selected'] !== 'boolean' ||
+    (record['availability'] !== 'AVAILABLE' &&
+      record['availability'] !== 'UNAVAILABLE')
+  ) {
+    return false;
+  }
+
+  if (record['actionRef'] === undefined && record['action'] === undefined) {
+    return true;
+  }
+
+  return (
+    isCallbackReference(record['actionRef'], 'g') &&
+    (record['action'] === 'SELECT' || record['action'] === 'REMOVE')
+  );
+}
+
+function isNotificationCategory(
+  value: unknown
+): value is 'ORDER_CREATED' | 'LOW_STOCK' {
+  return value === 'ORDER_CREATED' || value === 'LOW_STOCK';
+}
+
+function isSafeCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }
 
 function parseOrderDetailResult(value: unknown): OrderDetailResult {
@@ -858,7 +1173,7 @@ function isNullableCallbackReference(value: unknown): boolean {
 
 function isCallbackReference(
   value: unknown,
-  prefix: 'p' | 'd' | 's' | 'i' | 'c' = 'p'
+  prefix: 'p' | 'd' | 's' | 'i' | 'c' | 'g' = 'p'
 ): value is string {
   return (
     typeof value === 'string' &&

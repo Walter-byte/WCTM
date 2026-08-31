@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import {
   MembershipRole,
+  NotificationCategory,
+  NotificationRecipientMode,
   TelegramCallbackPurpose,
   TelegramOrderNoteActionState,
   TelegramOrderNoteVisibility,
@@ -150,6 +152,9 @@ function createFixture(orderCount = 18) {
     membershipCount: number;
     storeCount: number;
     activeStoreId: string;
+    enabledNotificationCategories: NotificationCategory[];
+    notificationRecipientMode: NotificationRecipientMode;
+    selectedMembershipIds: string[];
   } = {
     accountDeleted: false,
     chatRevoked: false,
@@ -158,6 +163,9 @@ function createFixture(orderCount = 18) {
     membershipCount: 1,
     storeCount: 1,
     activeStoreId: 'sto_a',
+    enabledNotificationCategories: [NotificationCategory.ORDER_CREATED],
+    notificationRecipientMode: NotificationRecipientMode.ALL_ELIGIBLE,
+    selectedMembershipIds: [],
   };
 
   const prisma = {
@@ -200,6 +208,7 @@ function createFixture(orderCount = 18) {
         state.membershipDeleted
           ? []
           : Array.from({ length: state.membershipCount }, (_, index) => ({
+              id: index === 0 ? 'mem_a' : `mem_${index + 1}`,
               tenantId: index === 0 ? 'ten_a' : `ten_${index + 1}`,
               role: state.membershipRole,
             }))
@@ -217,6 +226,11 @@ function createFixture(orderCount = 18) {
         baseUrl: 'https://shop.example',
         consumerKeyEncrypted: 'encrypted-key',
         consumerSecretEncrypted: 'encrypted-secret',
+        enabledNotificationCategories: state.enabledNotificationCategories,
+        notificationRecipientMode: state.notificationRecipientMode,
+        selectedNotificationRecipients: state.selectedMembershipIds.map(
+          (membershipId) => ({ id: `snr_${membershipId}` })
+        ),
       })),
     },
     order: {
@@ -580,6 +594,7 @@ describe('M13 recipient and existing action reuse', () => {
       fixture.service.eligibleNotificationRecipients('ten_a', 'sto_a')
     ).resolves.toEqual([
       {
+        membershipId: 'mem_a',
         telegramAccountId: 'tga_a',
         telegramChatAuthorizationId: 'tca_a',
         telegramUserId: '1001',
@@ -672,6 +687,68 @@ describe('M13 recipient and existing action reuse', () => {
       state: 'OK',
       changeStatusAvailable: false,
     });
+  });
+
+  it('revalidates category and selected Membership policy before dispatch', async () => {
+    const fixture = createFixture(1);
+    const recipient = {
+      membershipId: 'mem_a',
+      telegramAccountId: 'tga_a',
+      telegramChatAuthorizationId: 'tca_a',
+      telegramUserId: '1001',
+      telegramChatId: '1001',
+    };
+
+    fixture.state.enabledNotificationCategories = [];
+    await expect(
+      fixture.service.prepareOrderNotification(
+        recipient,
+        'ten_a',
+        'sto_a',
+        '1001'
+      )
+    ).resolves.toEqual({ state: 'DISABLED' });
+
+    fixture.state.enabledNotificationCategories = [
+      NotificationCategory.ORDER_CREATED,
+    ];
+    fixture.state.notificationRecipientMode =
+      NotificationRecipientMode.SELECTED;
+    await expect(
+      fixture.service.prepareOrderNotification(
+        recipient,
+        'ten_a',
+        'sto_a',
+        '1001'
+      )
+    ).resolves.toEqual({ state: 'DISABLED' });
+
+    fixture.state.selectedMembershipIds = ['mem_a'];
+    await expect(
+      fixture.service.prepareOrderNotification(
+        recipient,
+        'ten_a',
+        'sto_a',
+        '1001'
+      )
+    ).resolves.toMatchObject({ state: 'OK' });
+  });
+
+  it('keeps Membership identity authoritative across unlink and relink', async () => {
+    const fixture = createFixture(1);
+    fixture.state.notificationRecipientMode =
+      NotificationRecipientMode.SELECTED;
+    fixture.state.selectedMembershipIds = ['mem_a'];
+
+    fixture.state.chatRevoked = true;
+    await expect(
+      fixture.service.eligibleNotificationRecipients('ten_a', 'sto_a')
+    ).resolves.toEqual([]);
+
+    fixture.state.chatRevoked = false;
+    await expect(
+      fixture.service.eligibleNotificationRecipients('ten_a', 'sto_a')
+    ).resolves.toEqual([expect.objectContaining({ membershipId: 'mem_a' })]);
   });
 });
 

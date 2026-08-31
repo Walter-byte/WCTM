@@ -24,6 +24,9 @@ import {
   type TelegramOrderStatusUpdateDto,
   type TelegramOrderTransitionsDto,
   type TelegramStatusDto,
+  type TelegramSettingsInputDto,
+  type TelegramSettingsReferenceDto,
+  type TelegramSettingsSummaryDto,
   type TelegramUnlinkDto,
   telegramOrderDetailSchema,
   telegramOrderListSchema,
@@ -34,6 +37,9 @@ import {
   telegramOrderTransitionsSchema,
   telegramRedeemSchema,
   telegramStatusSchema,
+  telegramSettingsInputSchema,
+  telegramSettingsReferenceSchema,
+  telegramSettingsSummarySchema,
   telegramUnlinkSchema,
   telegramUpdateIdSchema,
 } from './dto/telegram-internal.dto';
@@ -58,12 +64,18 @@ import {
   type TelegramOrderTransitionsResult,
   TelegramOrderService,
 } from './telegram-order.service';
+import {
+  type TelegramSettingsInputStartResult,
+  type TelegramSettingsResult,
+  TelegramSettingsService,
+} from './telegram-settings.service';
 
 @Controller('internal/telegram')
 export class TelegramInternalController {
   constructor(
     private readonly linking: TelegramLinkingService,
-    private readonly orders: TelegramOrderService
+    private readonly orders: TelegramOrderService,
+    private readonly settings: TelegramSettingsService
   ) {}
 
   @Post('link-tokens')
@@ -251,6 +263,58 @@ export class TelegramInternalController {
   ): Promise<TelegramOrderStatusUpdateResult> {
     this.assertUpdateIdHeader(headerUpdateId);
     return this.orders.updateStatus(input);
+  }
+
+  @Post('settings/summary')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  settingsSummary(
+    @Body(new JoiValidationPipe(telegramSettingsSummarySchema))
+    input: TelegramSettingsSummaryDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramSettingsResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.settings.summary(input);
+  }
+
+  @Post('settings/action')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  applySettingsAction(
+    @Body(new JoiValidationPipe(telegramSettingsReferenceSchema))
+    input: TelegramSettingsReferenceDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramSettingsResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.settings.applyAction(input);
+  }
+
+  @Post('settings/input/start')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  startSettingsInput(
+    @Body(new JoiValidationPipe(telegramSettingsReferenceSchema))
+    input: TelegramSettingsReferenceDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramSettingsInputStartResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.settings.startInput(input);
+  }
+
+  @Post('settings/input/apply')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  applySettingsInput(
+    @Body(new JoiValidationPipe(telegramSettingsInputSchema))
+    input: TelegramSettingsInputDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramSettingsResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.settings.applyInput(input);
   }
 
   private assertUpdateId(bodyUpdateId: string, headerUpdateId?: string): void {

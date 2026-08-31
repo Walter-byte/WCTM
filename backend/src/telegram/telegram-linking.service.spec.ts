@@ -327,7 +327,8 @@ describe('TelegramLinkingService', () => {
     ]);
     const controller = new TelegramInternalController(
       fixture.service,
-      {} as TelegramOrderService
+      {} as TelegramOrderService,
+      {} as never
     );
 
     const issued = await controller.issueToken({
@@ -679,7 +680,8 @@ describe('TelegramLinkingService', () => {
     ]);
     const controller = new TelegramInternalController(
       fixture.service,
-      {} as TelegramOrderService
+      {} as TelegramOrderService,
+      {} as never
     );
     const m16Token = await controller.issueToken({
       sub: 'usr_m16',

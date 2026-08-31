@@ -8,7 +8,7 @@ const decimalIdentifier = Joi.string()
     BigInt(value) <= MAX_SIGNED_BIGINT ? value : helpers.error('number.max')
   );
 const callbackReference = Joi.string()
-  .pattern(/^[cdips]\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/)
+  .pattern(/^[cdgips]\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/)
   .max(64);
 export const TELEGRAM_ORDER_NOTE_MAX_LENGTH = 1000;
 
@@ -62,6 +62,18 @@ export type TelegramOrderTransitionsDto = TelegramOrderDetailDto;
 
 export interface TelegramOrderStatusUpdateDto extends TelegramOrderDetailDto {
   target: string;
+}
+
+export interface TelegramSettingsSummaryDto {
+  telegram: TelegramOrderIdentityDto;
+}
+
+export interface TelegramSettingsReferenceDto extends TelegramSettingsSummaryDto {
+  ref: string;
+}
+
+export interface TelegramSettingsInputDto extends TelegramSettingsReferenceDto {
+  value: string;
 }
 
 export const telegramRedeemSchema = Joi.object<TelegramRedeemDto>({
@@ -136,5 +148,24 @@ export const telegramOrderStatusUpdateSchema =
       .pattern(/^[a-z0-9-]{1,64}$/)
       .required(),
   });
+
+export const telegramSettingsSummarySchema =
+  Joi.object<TelegramSettingsSummaryDto>({
+    telegram: telegramOrderIdentitySchema,
+  });
+
+export const telegramSettingsReferenceSchema =
+  Joi.object<TelegramSettingsReferenceDto>({
+    telegram: telegramOrderIdentitySchema,
+    ref: callbackReference.required(),
+  });
+
+export const telegramSettingsInputSchema = Joi.object<TelegramSettingsInputDto>(
+  {
+    telegram: telegramOrderIdentitySchema,
+    ref: callbackReference.required(),
+    value: Joi.string().allow('').max(64).required(),
+  }
+);
 
 export const telegramUpdateIdSchema = decimalIdentifier.required();
