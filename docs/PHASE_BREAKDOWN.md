@@ -395,8 +395,8 @@ satisfied. Phase 4 followed and is now complete.
 
 Phase 4 closed on 2026-08-30. B returned MERGE, A live validation passed, and
 M16 was merged to `main` in `9e831a9`, deployed to the VPS, and smoke-tested
-through `/api/health`. The separate M13 deployed synthetic-notification check
-is not recorded as PASS by this validation.
+through `/api/health`. The previously pending M13 deployed synthetic-
+notification check later passed through the combined M18 live validation.
 
 ## Phase 5 — Core Store Management (MVP) 🟨 In Progress
 
@@ -437,7 +437,7 @@ is not recorded as PASS by this validation.
   were not required because automated/adversarial coverage was accepted
 - M17 operational validation passed and M17 is fully closed
 
-### M18 — MVP Store Settings Foundation ✅ Implementation Complete / Awaiting Review
+### M18 — MVP Store Settings Foundation ✅ Complete / Merged / Operationally Validated
 
 - Tenant-owned `timezone` and typed `FA`/`EN` language settings; existing
   Tenants backfill to `UTC`/English while new Tenants default to Persian/`UTC`
@@ -475,9 +475,23 @@ is not recorded as PASS by this validation.
   billing, dashboard, Store switching, connector logic, dependency, queue, or
   service-topology change
 
-M18 is complete on `feat/m18-store-settings-foundation` and awaits review,
-merge, production migration/deployment, and any owner-requested live Telegram
-smoke validation. Do not begin the next milestone without approval.
+Production migration, backend plus telegram-bot deployment, `/api/health`,
+`/api/health/readiness`, `/settings`, settings persistence, and timezone
+persistence passed. Enabled `ORDER_CREATED` delivery and View Order passed;
+disabled delivery was suppressed; re-enabling caused no historical resend; and
+the final newly created order produced exactly one Telegram notification in
+under one second. Its newest `order.created` WebhookEvent was `COMPLETED` with
+`processing_attempt_count = 1`. This combined validation also closes the prior
+M13 deployed synthetic-notification item as PASS.
+
+Validation exposed a pre-existing M8/M9 publication race, not an M18 defect.
+Commit `892fc925 fix(webhooks): close pre-claim publication race` makes the
+worker atomically claim `RECEIVED`, `QUEUED`, or expired `PROCESSING`. The fix
+is deployed and production-validated. M18 is fully complete and operationally
+validated.
+
+Next milestone: M19 — Inventory & Low-Stock MVP. No M19 implementation has
+started.
 
 ## Phase 6 — SaaS Platform ⬜ Planned
 

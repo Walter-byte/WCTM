@@ -7,18 +7,19 @@ Version: 1.0
 Current Phase
 
 Phase 5 — Core Store Management (MVP) is in progress. M18 MVP Store Settings
-Foundation is merged and deployed; its migration, health, readiness, and live
-settings persistence checks passed. The production webhook-processing
-inconsistency found during M18 validation has a narrow M8/M9 race fix implemented
-and repository-validated on `main`, pending deployment. M17 is fully closed.
-Phase 4 and M1–M16 remain complete and unchanged.
+Foundation is fully complete and operationally validated. Its migration,
+backend plus telegram-bot deployment, health, readiness, settings persistence,
+timezone persistence, and enabled/disabled/re-enabled `ORDER_CREATED` delivery
+behavior passed in production. The pre-existing M8/M9 publication race found
+during validation was fixed, deployed, and production-validated in `892fc925`.
+M17 is fully closed. Phase 4 and M1–M16 remain complete and unchanged.
 
 ---
 
 Current Task
 
-The M18 live-validation webhook-processing inconsistency investigation and
-narrow M8/M9 corrective fix is the active approved task. Do not begin M19.
+M18 documentation closure is the active approved task. The next milestone is
+M19 — Inventory & Low-Stock MVP; no M19 implementation has started.
 
 ---
 
@@ -35,6 +36,9 @@ Current branch: `main`.
 M18 implementation commit: `ef677f0 feat(settings): add MVP store settings
 foundation`. The final adversarial-audit hardening is committed separately on
 the same branch.
+
+Production defect-fix commit: `892fc925 fix(webhooks): close pre-claim
+publication race`.
 
 M17 implementation commit: `feat(orders): complete MVP order workflow`.
 
@@ -198,6 +202,12 @@ zero. The worker now atomically claims the published `RECEIVED` window as well
 as `QUEUED` and expired `PROCESSING`. Sanitized full `order.created` and ID-only
 `order.deleted` regressions pass without changing payload handling, M13 delivery,
 or M18 settings policy.
+
+Commit `892fc925` was deployed with the backend and telegram bot. The final
+newly created order after re-enabling `ORDER_CREATED` produced exactly one
+Telegram notification in under one second, and its newest `order.created`
+WebhookEvent completed with `processing_attempt_count = 1`. The production
+defect fix is complete and has no remaining deployment or validation item.
 
 Migration `20260723180000_order_projection` applied cleanly in an isolated
 PostgreSQL database. D-018 records projection ordering, canonical fingerprint,
@@ -573,6 +583,17 @@ processing, search, reporting, general localization, billing, dashboard, Store
 switching, connector behavior, queue, or new service topology. D-024 remains
 Accepted and unchanged.
 
+M18 production validation passed: migration application; backend plus
+telegram-bot deployment; `/api/health`; `/api/health/readiness`; `/settings`;
+settings and timezone persistence; enabled `ORDER_CREATED` delivery; View Order
+from the notification; disabled-category suppression; and no historical resend
+after re-enabling. The final newly created order after re-enable produced
+exactly one Telegram notification in under one second, with the newest
+`order.created` processed as `COMPLETED` on one processing attempt. This same
+combined live validation closes the previously pending deployed M13 synthetic-
+notification validation as PASS. M18 is fully complete and operationally
+validated.
+
 ---
 
 Infrastructure
@@ -642,24 +663,23 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-The webhook race fix has no code or automated-validation blocker and awaits
-production deployment. Existing failed events require bounded replay after
-deployment if their missed projection or notification must be recovered; no new
-production order is required.
+M18 has no remaining implementation, deployment, or operational-validation
+blocker. Existing known issues and technical debt remain unchanged.
 
 ---
 
 Next Milestone
 
-Deploy and validate only the webhook race fix when approved. Do not begin M19.
+M19 — Inventory & Low-Stock MVP. No M19 implementation has started.
 
 ---
 
 Last Completed
 
-M18 MVP Store Settings Foundation is merged, deployed, and live settings
-validation passed. The corrective webhook-race implementation and repository
-validation are complete; production deployment remains pending.
+M18 MVP Store Settings Foundation is fully complete and operationally validated.
+The pre-existing M8/M9 publication race fix in `892fc925` is deployed and
+production-validated, and the prior M13 deployed synthetic-notification item is
+closed as PASS through the combined M18 live validation.
 
 ---
 

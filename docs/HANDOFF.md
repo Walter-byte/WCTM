@@ -651,8 +651,9 @@ Bot transport:
 - New configuration: `BOT_INTERNAL_URL`, `BOT_INTERNAL_PORT`, and
   `BOT_DELIVERY_TIMEOUT_MS`. D-023 is Accepted.
 - Automated backend, bot, M8-M12 regression, build, type, lint, formatting,
-  Prisma validation/generation, and migration-structure tests pass. A deployed
-  synthetic M13 notification-delivery result is still not recorded as PASS.
+  Prisma validation/generation, and migration-structure tests pass. The
+  deployed synthetic M13 notification-delivery validation later passed through
+  the combined M18 live validation.
 
 #### M14 — Practical Telegram Management UX (complete and merged)
 
@@ -885,7 +886,16 @@ status, notification, navigation, onboarding, or connector contracts.
   dashboard, Store switching, connector logic, queue, or service topology.
 
 M18 migration, deployment, health, readiness, and live `/settings` persistence
-passed. Live validation also exposed a pre-existing M8/M9 publication race:
+passed, including settings and timezone persistence. Enabled `ORDER_CREATED`
+delivery and View Order passed; disabled-category suppression passed;
+re-enabling caused no historical resend; and the final newly created order
+produced exactly one Telegram notification in under one second. Its newest
+`order.created` WebhookEvent was `COMPLETED` with
+`processing_attempt_count = 1`. This combined validation also closes the prior
+M13 deployed synthetic-notification item as PASS. M18 is fully complete and
+operationally validated.
+
+Live validation also exposed a pre-existing M8/M9 publication race:
 the deterministic BullMQ job could start after M8 persisted `RECEIVED` but
 before its separate `QUEUED` acknowledgement. M9 refused that state before
 claiming its lease, so BullMQ could exhaust while
@@ -893,10 +903,14 @@ claiming its lease, so BullMQ could exhaust while
 `unexpected` / `webhook-processing-failed`. The narrow correction lets the
 already-published worker atomically claim `RECEIVED`, `QUEUED`, or an expired
 `PROCESSING` lease. Sanitized full `order.created` and WooCommerce's ID-only
-`order.deleted` regressions pass. This changes no payload mapping, retry count,
-M13 delivery contract, M18 settings policy, dependency, schema, or topology.
+`order.deleted` regressions pass. Commit `892fc925 fix(webhooks): close
+pre-claim publication race` is deployed and production-validated. This
+completed production defect fix changes no payload mapping, retry count, M13
+delivery contract, M18 settings policy, dependency, schema, or topology and was
+not caused by M18.
 
-Do not begin M19.
+Next milestone: M19 — Inventory & Low-Stock MVP. No M19 implementation has
+started.
 
 ---
 
@@ -913,18 +927,15 @@ Current branch: `main`.
 
 ## 6. Current Blockers
 
-The M18 settings release has no remaining implementation blocker. The narrow
-webhook-race correction awaits production deployment. Existing failed events
-need bounded replay after deployment only when their missed projection or
-notification must be recovered; no new production order is required. Existing
-known issues and technical debt remain unchanged.
+M18 has no remaining implementation, deployment, or operational-validation
+blocker. Existing known issues and technical debt remain unchanged.
 
 ---
 
 ## 7. Current Task
 
-The active task is the M18 live-validation webhook inconsistency investigation
-and narrow M8/M9 corrective fix on `main`. Do not begin M19.
+The active task is canonical documentation closure for M18. The next milestone
+is M19 — Inventory & Low-Stock MVP; no M19 implementation has started.
 
 ---
 

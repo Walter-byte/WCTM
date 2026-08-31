@@ -236,10 +236,9 @@ new architectural or product decision was required for Phase 4 closure.
 
 Next operator action:
 
-- Await an approved Phase 5 implementation task; do not start Phase 5 from this
-  documentation closure
-- Retain the separate M13 deployed synthetic-notification validation item; it
-  is not promoted to PASS by the M16 onboarding evidence
+- The separate M13 deployed synthetic-notification validation item passed
+  through the combined M18 live validation
+- Await the approved M19 implementation task; no M19 implementation has started
 
 Exit Criteria
 
@@ -251,7 +250,16 @@ the implemented MVP order-management path.
 ## Phase 5 — Core Store Management (MVP)
 
 Status:
-⬜ Pending
+🟨 In Progress
+
+Completed milestones:
+
+- M17 — Order Workflow Completion
+- M18 — MVP Store Settings Foundation, fully operationally validated
+
+Next milestone:
+
+- M19 — Inventory & Low-Stock MVP; not started
 
 Modules
 
