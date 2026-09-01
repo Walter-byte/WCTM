@@ -462,6 +462,7 @@ model TelegramChatAuthorization {
   orderNotifications     TelegramOrderNotificationDelivery[]
   inventoryNotifications TelegramInventoryNotificationDelivery[]
 
+  @@unique([id, telegramAccountId])
   @@index([telegramAccountId])
   @@index([activeTenantId])
   @@index([activeStoreId])
@@ -690,7 +691,7 @@ model TelegramInventoryNotificationDelivery {
   store                       Store                              @relation(fields: [storeId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Cascade)
   inventoryItem               InventoryItem                      @relation(fields: [inventoryItemId, tenantId, storeId], references: [id, tenantId, storeId], onDelete: Restrict, onUpdate: Cascade)
   telegramAccount             TelegramAccount                    @relation(fields: [telegramAccountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  telegramChatAuthorization   TelegramChatAuthorization          @relation(fields: [telegramChatAuthorizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  telegramChatAuthorization   TelegramChatAuthorization          @relation(fields: [telegramChatAuthorizationId, telegramAccountId], references: [id, telegramAccountId], onDelete: Restrict, onUpdate: Cascade)
   sourceWebhookEvent          WebhookEvent                       @relation(fields: [sourceWebhookEventId, tenantId, storeId], references: [id, tenantId, storeId], onDelete: Restrict, onUpdate: Cascade)
 
   @@unique([inventoryItemId, incidentGeneration, alertLevel, telegramChatAuthorizationId])

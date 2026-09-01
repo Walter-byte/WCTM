@@ -57,6 +57,10 @@ ALTER TABLE "webhook_events"
   ADD CONSTRAINT "webhook_events_id_tenant_id_store_id_key"
   UNIQUE ("id", "tenant_id", "store_id");
 
+ALTER TABLE "telegram_chat_authorizations"
+  ADD CONSTRAINT "telegram_chat_authorizations_id_telegram_account_id_key"
+  UNIQUE ("id", "telegram_account_id");
+
 CREATE TABLE "inventory_items" (
   "id" VARCHAR(64) NOT NULL,
   "tenant_id" VARCHAR(64) NOT NULL,
@@ -249,8 +253,8 @@ ALTER TABLE "telegram_inventory_notification_deliveries"
     FOREIGN KEY ("telegram_account_id") REFERENCES "telegram_accounts"("id")
     ON DELETE RESTRICT ON UPDATE CASCADE,
   ADD CONSTRAINT "telegram_inventory_notification_deliveries_telegram_chat_a_fkey"
-    FOREIGN KEY ("telegram_chat_authorization_id")
-    REFERENCES "telegram_chat_authorizations"("id")
+    FOREIGN KEY ("telegram_chat_authorization_id", "telegram_account_id")
+    REFERENCES "telegram_chat_authorizations"("id", "telegram_account_id")
     ON DELETE RESTRICT ON UPDATE CASCADE,
   ADD CONSTRAINT "telegram_inventory_notification_deliveries_source_webhook__fkey"
     FOREIGN KEY ("source_webhook_event_id", "tenant_id", "store_id")

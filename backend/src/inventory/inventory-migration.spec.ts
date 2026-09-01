@@ -63,6 +63,9 @@ describe('M19 inventory migration', () => {
     expect(migration).toContain(
       'FOREIGN KEY ("source_webhook_event_id", "tenant_id", "store_id")'
     );
+    expect(migration).toContain(
+      'FOREIGN KEY ("telegram_chat_authorization_id", "telegram_account_id")'
+    );
   });
 
   it('makes one incident-level-recipient delivery durably unique', () => {
