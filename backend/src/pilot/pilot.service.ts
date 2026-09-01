@@ -256,6 +256,10 @@ export class PilotService {
         deliveryUrl,
         webhookSecret
       );
+      await this.woocommerceClient(store).ensureRequiredInventoryWebhooks(
+        deliveryUrl,
+        webhookSecret
+      );
       await this.activatePilotStore(identity, store.id);
 
       const linked = await this.linkedTelegramContext(identity, store.id);

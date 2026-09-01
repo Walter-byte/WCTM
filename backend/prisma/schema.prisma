@@ -131,26 +131,78 @@ enum TelegramOrderNotificationState {
   @@map("telegram_order_notification_state")
 }
 
+enum InventorySyncState {
+  UNINITIALIZED
+  SYNCING
+  READY
+  FAILED
+
+  @@map("inventory_sync_state")
+}
+
+enum InventoryItemKind {
+  PRODUCT
+  VARIATION
+
+  @@map("inventory_item_kind")
+}
+
+enum InventoryAlertClassification {
+  OUT_OF_STOCK
+  LOW_STOCK
+  HEALTHY
+
+  @@map("inventory_alert_classification")
+}
+
+enum InventoryAlertLevel {
+  LOW_STOCK
+  OUT_OF_STOCK
+
+  @@map("inventory_alert_level")
+}
+
+enum TelegramInventoryReferencePurpose {
+  LIST_PAGE
+  ITEM_DETAIL
+
+  @@map("telegram_inventory_reference_purpose")
+}
+
+enum TelegramInventoryNotificationState {
+  PENDING
+  IN_FLIGHT
+  DELIVERED
+  RETRYABLE_FAILURE
+  TERMINAL_FAILURE
+  AMBIGUOUS
+
+  @@map("telegram_inventory_notification_state")
+}
+
 model Tenant {
-  id                         String                              @id @map("id") @db.VarChar(64)
-  name                       String                              @map("name") @db.VarChar(255)
-  plan                       TenantPlan                          @default(FREE) @map("plan")
-  timezone                   String                              @default("UTC") @map("timezone") @db.VarChar(64)
-  language                   TenantLanguage                      @default(FA) @map("language")
-  createdAt                  DateTime                            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                  DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt                  DateTime?                           @map("deleted_at") @db.Timestamptz(3)
-  memberships                Membership[]
-  stores                     Store[]
-  orders                     Order[]
-  webhookEvents              WebhookEvent[]
-  auditLogs                  AuditLog[]
-  telegramChatAuthorizations TelegramChatAuthorization[]         @relation("TelegramActiveTenant")
-  telegramCallbackReferences TelegramCallbackReference[]
-  telegramOrderStatusWrites  TelegramOrderStatusWrite[]
-  telegramOrderNoteActions   TelegramOrderNoteAction[]
-  telegramOrderNotifications TelegramOrderNotificationDelivery[]
-  telegramSettingsReferences TelegramSettingsReference[]
+  id                          String                                  @id @map("id") @db.VarChar(64)
+  name                        String                                  @map("name") @db.VarChar(255)
+  plan                        TenantPlan                              @default(FREE) @map("plan")
+  timezone                    String                                  @default("UTC") @map("timezone") @db.VarChar(64)
+  language                    TenantLanguage                          @default(FA) @map("language")
+  createdAt                   DateTime                                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                   DateTime                                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt                   DateTime?                               @map("deleted_at") @db.Timestamptz(3)
+  memberships                 Membership[]
+  stores                      Store[]
+  orders                      Order[]
+  webhookEvents               WebhookEvent[]
+  auditLogs                   AuditLog[]
+  telegramChatAuthorizations  TelegramChatAuthorization[]             @relation("TelegramActiveTenant")
+  telegramCallbackReferences  TelegramCallbackReference[]
+  telegramOrderStatusWrites   TelegramOrderStatusWrite[]
+  telegramOrderNoteActions    TelegramOrderNoteAction[]
+  telegramOrderNotifications  TelegramOrderNotificationDelivery[]
+  telegramSettingsReferences  TelegramSettingsReference[]
+  inventoryItems              InventoryItem[]
+  inventoryNotifications      TelegramInventoryNotificationDelivery[]
+  telegramInventoryReferences TelegramInventoryReference[]
 
   @@map("tenants")
 }
@@ -191,38 +243,53 @@ model Membership {
 }
 
 model Store {
-  id                             String                              @id @map("id") @db.VarChar(64)
-  tenantId                       String                              @map("tenant_id") @db.VarChar(64)
-  name                           String                              @map("name") @db.VarChar(255)
-  baseUrl                        String                              @map("base_url") @db.Text
-  status                         StoreStatus                         @default(PENDING) @map("status")
-  consumerKeyEncrypted           String                              @map("consumer_key_encrypted") @db.Text
-  consumerSecretEncrypted        String                              @map("consumer_secret_encrypted") @db.Text
-  webhookSecretEncrypted         String?                             @map("webhook_secret_encrypted") @db.Text
-  webhookEndpointKey             String?                             @unique @map("webhook_endpoint_key") @db.VarChar(64)
-  registrationTokenHash          String?                             @unique @map("registration_token_hash") @db.VarChar(64)
-  registrationTokenExpiresAt     DateTime?                           @map("registration_token_expires_at") @db.Timestamptz(3)
-  registrationTokenConsumedAt    DateTime?                           @map("registration_token_consumed_at") @db.Timestamptz(3)
-  pluginSecretHash               String?                             @map("plugin_secret_hash") @db.VarChar(64)
-  pluginRegisteredAt             DateTime?                           @map("plugin_registered_at") @db.Timestamptz(3)
-  lastSeenAt                     DateTime?                           @map("last_seen_at") @db.Timestamptz(3)
-  lastHealthyAt                  DateTime?                           @map("last_healthy_at") @db.Timestamptz(3)
-  lowStockThreshold              Int?                                @map("low_stock_threshold")
-  enabledNotificationCategories  NotificationCategory[]              @default([ORDER_CREATED]) @map("enabled_notification_categories")
-  notificationRecipientMode      NotificationRecipientMode           @default(ALL_ELIGIBLE) @map("notification_recipient_mode")
-  createdAt                      DateTime                            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt                      DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt                      DateTime?                           @map("deleted_at") @db.Timestamptz(3)
-  tenant                         Tenant                              @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  orders                         Order[]
-  webhookEvents                  WebhookEvent[]
-  telegramChatAuthorizations     TelegramChatAuthorization[]         @relation("TelegramActiveStore")
-  telegramCallbackReferences     TelegramCallbackReference[]
-  telegramOrderStatusWrites      TelegramOrderStatusWrite[]
-  telegramOrderNoteActions       TelegramOrderNoteAction[]
-  telegramOrderNotifications     TelegramOrderNotificationDelivery[]
-  selectedNotificationRecipients StoreNotificationRecipient[]
-  telegramSettingsReferences     TelegramSettingsReference[]
+  id                                      String                                  @id @map("id") @db.VarChar(64)
+  tenantId                                String                                  @map("tenant_id") @db.VarChar(64)
+  name                                    String                                  @map("name") @db.VarChar(255)
+  baseUrl                                 String                                  @map("base_url") @db.Text
+  status                                  StoreStatus                             @default(PENDING) @map("status")
+  consumerKeyEncrypted                    String                                  @map("consumer_key_encrypted") @db.Text
+  consumerSecretEncrypted                 String                                  @map("consumer_secret_encrypted") @db.Text
+  webhookSecretEncrypted                  String?                                 @map("webhook_secret_encrypted") @db.Text
+  webhookEndpointKey                      String?                                 @unique @map("webhook_endpoint_key") @db.VarChar(64)
+  registrationTokenHash                   String?                                 @unique @map("registration_token_hash") @db.VarChar(64)
+  registrationTokenExpiresAt              DateTime?                               @map("registration_token_expires_at") @db.Timestamptz(3)
+  registrationTokenConsumedAt             DateTime?                               @map("registration_token_consumed_at") @db.Timestamptz(3)
+  pluginSecretHash                        String?                                 @map("plugin_secret_hash") @db.VarChar(64)
+  pluginRegisteredAt                      DateTime?                               @map("plugin_registered_at") @db.Timestamptz(3)
+  lastSeenAt                              DateTime?                               @map("last_seen_at") @db.Timestamptz(3)
+  lastHealthyAt                           DateTime?                               @map("last_healthy_at") @db.Timestamptz(3)
+  lowStockThreshold                       Int?                                    @map("low_stock_threshold")
+  enabledNotificationCategories           NotificationCategory[]                  @default([ORDER_CREATED]) @map("enabled_notification_categories")
+  notificationRecipientMode               NotificationRecipientMode               @default(ALL_ELIGIBLE) @map("notification_recipient_mode")
+  inventoryNotificationPolicyVersion      Int                                     @default(0) @map("inventory_notification_policy_version")
+  inventorySyncState                      InventorySyncState                      @default(UNINITIALIZED) @map("inventory_sync_state")
+  inventoryBootstrapStartedAt             DateTime?                               @map("inventory_bootstrap_started_at") @db.Timestamptz(3)
+  inventoryBootstrapCompletedAt           DateTime?                               @map("inventory_bootstrap_completed_at") @db.Timestamptz(3)
+  inventoryBootstrapFailedAt              DateTime?                               @map("inventory_bootstrap_failed_at") @db.Timestamptz(3)
+  inventoryBootstrapFailureCode           String?                                 @map("inventory_bootstrap_failure_code") @db.VarChar(191)
+  inventoryBootstrapProductPage           Int                                     @default(1) @map("inventory_bootstrap_product_page")
+  inventoryBootstrapVariationPage         Int                                     @default(1) @map("inventory_bootstrap_variation_page")
+  inventoryBootstrapParentIds             String[]                                @default([]) @map("inventory_bootstrap_parent_ids")
+  inventoryBootstrapProductsDone          Boolean                                 @default(false) @map("inventory_bootstrap_products_done")
+  inventoryBootstrapRevision              Int                                     @default(0) @map("inventory_bootstrap_revision")
+  inventoryBootstrapLeaseAt               DateTime?                               @map("inventory_bootstrap_lease_at") @db.Timestamptz(3)
+  createdAt                               DateTime                                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                               DateTime                                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt                               DateTime?                               @map("deleted_at") @db.Timestamptz(3)
+  tenant                                  Tenant                                  @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  orders                                  Order[]
+  webhookEvents                           WebhookEvent[]
+  telegramChatAuthorizations              TelegramChatAuthorization[]             @relation("TelegramActiveStore")
+  telegramCallbackReferences              TelegramCallbackReference[]
+  telegramOrderStatusWrites               TelegramOrderStatusWrite[]
+  telegramOrderNoteActions                TelegramOrderNoteAction[]
+  telegramOrderNotifications              TelegramOrderNotificationDelivery[]
+  selectedNotificationRecipients          StoreNotificationRecipient[]
+  telegramSettingsReferences              TelegramSettingsReference[]
+  inventoryItems                          InventoryItem[]
+  telegramInventoryReferences             TelegramInventoryReference[]
+  telegramInventoryNotificationDeliveries TelegramInventoryNotificationDelivery[]
 
   @@unique([tenantId, baseUrl])
   @@unique([id, tenantId])
@@ -231,31 +298,33 @@ model Store {
 }
 
 model WebhookEvent {
-  id                     String                              @id @map("id") @db.VarChar(64)
-  tenantId               String                              @map("tenant_id") @db.VarChar(64)
-  storeId                String                              @map("store_id") @db.VarChar(64)
-  webhookId              String                              @map("webhook_id") @db.VarChar(191)
-  deliveryId             String                              @map("delivery_id") @db.VarChar(191)
-  dedupeKey              String                              @map("dedupe_key") @db.VarChar(255)
-  topic                  String                              @map("topic") @db.VarChar(191)
-  payload                Json                                @map("payload") @db.JsonB
-  status                 WebhookEventStatus                  @default(RECEIVED) @map("status")
-  receivedAt             DateTime                            @default(now()) @map("received_at") @db.Timestamptz(3)
-  queuedAt               DateTime?                           @map("queued_at") @db.Timestamptz(3)
-  processingStartedAt    DateTime?                           @map("processing_started_at") @db.Timestamptz(3)
-  processingAttemptCount Int                                 @default(0) @map("processing_attempt_count")
-  failureCategory        String?                             @map("failure_category") @db.VarChar(32)
-  failureMessage         String?                             @map("failure_message") @db.VarChar(191)
-  lastFailureAt          DateTime?                           @map("last_failure_at") @db.Timestamptz(3)
-  completedAt            DateTime?                           @map("completed_at") @db.Timestamptz(3)
-  failedAt               DateTime?                           @map("failed_at") @db.Timestamptz(3)
-  createdAt              DateTime                            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt              DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  tenant                 Tenant                              @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  store                  Store                               @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  id                     String                                  @id @map("id") @db.VarChar(64)
+  tenantId               String                                  @map("tenant_id") @db.VarChar(64)
+  storeId                String                                  @map("store_id") @db.VarChar(64)
+  webhookId              String                                  @map("webhook_id") @db.VarChar(191)
+  deliveryId             String                                  @map("delivery_id") @db.VarChar(191)
+  dedupeKey              String                                  @map("dedupe_key") @db.VarChar(255)
+  topic                  String                                  @map("topic") @db.VarChar(191)
+  payload                Json                                    @map("payload") @db.JsonB
+  status                 WebhookEventStatus                      @default(RECEIVED) @map("status")
+  receivedAt             DateTime                                @default(now()) @map("received_at") @db.Timestamptz(3)
+  queuedAt               DateTime?                               @map("queued_at") @db.Timestamptz(3)
+  processingStartedAt    DateTime?                               @map("processing_started_at") @db.Timestamptz(3)
+  processingAttemptCount Int                                     @default(0) @map("processing_attempt_count")
+  failureCategory        String?                                 @map("failure_category") @db.VarChar(32)
+  failureMessage         String?                                 @map("failure_message") @db.VarChar(191)
+  lastFailureAt          DateTime?                               @map("last_failure_at") @db.Timestamptz(3)
+  completedAt            DateTime?                               @map("completed_at") @db.Timestamptz(3)
+  failedAt               DateTime?                               @map("failed_at") @db.Timestamptz(3)
+  createdAt              DateTime                                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime                                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant                 Tenant                                  @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  store                  Store                                   @relation(fields: [storeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   telegramNotifications  TelegramOrderNotificationDelivery[]
+  inventoryNotifications TelegramInventoryNotificationDelivery[]
 
   @@unique([storeId, dedupeKey])
+  @@unique([id, tenantId, storeId])
   @@index([tenantId])
   @@index([storeId])
   @@map("webhook_events")
@@ -310,21 +379,23 @@ model AuditLog {
 }
 
 model TelegramAccount {
-  id                 String                              @id @map("id") @db.VarChar(64)
-  telegramUserId     BigInt                              @unique @map("telegram_user_id")
-  userId             String                              @unique @map("user_id") @db.VarChar(64)
-  lastRedeemUpdateId BigInt?                             @map("last_redeem_update_id")
-  lastUnlinkUpdateId BigInt?                             @map("last_unlink_update_id")
-  createdAt          DateTime                            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt          DateTime?                           @map("deleted_at") @db.Timestamptz(3)
-  user               User                                @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  chatAuthorizations TelegramChatAuthorization[]
-  callbackReferences TelegramCallbackReference[]
-  orderStatusWrites  TelegramOrderStatusWrite[]
-  orderNoteActions   TelegramOrderNoteAction[]
-  orderNotifications TelegramOrderNotificationDelivery[]
-  settingsReferences TelegramSettingsReference[]
+  id                     String                                  @id @map("id") @db.VarChar(64)
+  telegramUserId         BigInt                                  @unique @map("telegram_user_id")
+  userId                 String                                  @unique @map("user_id") @db.VarChar(64)
+  lastRedeemUpdateId     BigInt?                                 @map("last_redeem_update_id")
+  lastUnlinkUpdateId     BigInt?                                 @map("last_unlink_update_id")
+  createdAt              DateTime                                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime                                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt              DateTime?                               @map("deleted_at") @db.Timestamptz(3)
+  user                   User                                    @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  chatAuthorizations     TelegramChatAuthorization[]
+  callbackReferences     TelegramCallbackReference[]
+  orderStatusWrites      TelegramOrderStatusWrite[]
+  orderNoteActions       TelegramOrderNoteAction[]
+  orderNotifications     TelegramOrderNotificationDelivery[]
+  inventoryNotifications TelegramInventoryNotificationDelivery[]
+  inventoryReferences    TelegramInventoryReference[]
+  settingsReferences     TelegramSettingsReference[]
 
   @@index([userId])
   @@map("telegram_accounts")
@@ -376,19 +447,20 @@ model TelegramSettingsReference {
 }
 
 model TelegramChatAuthorization {
-  id                 String                              @id @map("id") @db.VarChar(64)
-  telegramAccountId  String                              @map("telegram_account_id") @db.VarChar(64)
-  telegramChatId     BigInt                              @unique @map("telegram_chat_id")
-  chatType           TelegramChatType                    @map("chat_type")
-  activeTenantId     String?                             @map("active_tenant_id") @db.VarChar(64)
-  activeStoreId      String?                             @map("active_store_id") @db.VarChar(64)
-  revokedAt          DateTime?                           @map("revoked_at") @db.Timestamptz(3)
-  createdAt          DateTime                            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt          DateTime                            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  telegramAccount    TelegramAccount                     @relation(fields: [telegramAccountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  activeTenant       Tenant?                             @relation("TelegramActiveTenant", fields: [activeTenantId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  activeStore        Store?                              @relation("TelegramActiveStore", fields: [activeStoreId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  orderNotifications TelegramOrderNotificationDelivery[]
+  id                     String                                  @id @map("id") @db.VarChar(64)
+  telegramAccountId      String                                  @map("telegram_account_id") @db.VarChar(64)
+  telegramChatId         BigInt                                  @unique @map("telegram_chat_id")
+  chatType               TelegramChatType                        @map("chat_type")
+  activeTenantId         String?                                 @map("active_tenant_id") @db.VarChar(64)
+  activeStoreId          String?                                 @map("active_store_id") @db.VarChar(64)
+  revokedAt              DateTime?                               @map("revoked_at") @db.Timestamptz(3)
+  createdAt              DateTime                                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime                                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  telegramAccount        TelegramAccount                         @relation(fields: [telegramAccountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  activeTenant           Tenant?                                 @relation("TelegramActiveTenant", fields: [activeTenantId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  activeStore            Store?                                  @relation("TelegramActiveStore", fields: [activeStoreId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  orderNotifications     TelegramOrderNotificationDelivery[]
+  inventoryNotifications TelegramInventoryNotificationDelivery[]
 
   @@index([telegramAccountId])
   @@index([activeTenantId])
@@ -529,4 +601,103 @@ model TelegramOrderNotificationDelivery {
   @@index([sourceWebhookEventId])
   @@index([state])
   @@map("telegram_order_notification_deliveries")
+}
+
+model InventoryItem {
+  id                           String                                  @id @map("id") @db.VarChar(64)
+  tenantId                     String                                  @map("tenant_id") @db.VarChar(64)
+  storeId                      String                                  @map("store_id") @db.VarChar(64)
+  wcItemId                     String                                  @map("wc_item_id") @db.VarChar(32)
+  parentWcProductId            String?                                 @map("parent_wc_product_id") @db.VarChar(32)
+  kind                         InventoryItemKind                       @map("kind")
+  displayName                  String                                  @map("display_name") @db.VarChar(255)
+  sku                          String?                                 @map("sku") @db.VarChar(191)
+  variationContext             Json                                    @map("variation_context") @db.JsonB
+  managesStock                 Boolean                                 @map("manages_stock")
+  stockQuantity                Decimal?                                @map("stock_quantity") @db.Decimal(20, 6)
+  stockStatus                  String                                  @map("stock_status") @db.VarChar(32)
+  wcModifiedAt                 DateTime                                @map("wc_modified_at") @db.Timestamptz(3)
+  projectionFingerprint        String                                  @map("projection_fingerprint") @db.VarChar(64)
+  lastSyncedAt                 DateTime                                @map("last_synced_at") @db.Timestamptz(3)
+  lastWebhookReceivedAt        DateTime?                               @map("last_webhook_received_at") @db.Timestamptz(3)
+  remoteDeletedAt              DateTime?                               @map("remote_deleted_at") @db.Timestamptz(3)
+  alertClassification          InventoryAlertClassification            @default(HEALTHY) @map("alert_classification")
+  incidentGeneration           Int                                     @default(0) @map("incident_generation")
+  lowAlertSourceWebhookEventId String?                                 @map("low_alert_source_webhook_event_id") @db.VarChar(64)
+  lowAlertRecipientsCapturedAt DateTime?                               @map("low_alert_recipients_captured_at") @db.Timestamptz(3)
+  outAlertSourceWebhookEventId String?                                 @map("out_alert_source_webhook_event_id") @db.VarChar(64)
+  outAlertRecipientsCapturedAt DateTime?                               @map("out_alert_recipients_captured_at") @db.Timestamptz(3)
+  createdAt                    DateTime                                @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                    DateTime                                @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant                       Tenant                                  @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  store                        Store                                   @relation(fields: [storeId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Cascade)
+  notifications                TelegramInventoryNotificationDelivery[]
+  callbackReferences           TelegramInventoryReference[]
+
+  @@unique([storeId, wcItemId])
+  @@unique([id, tenantId, storeId])
+  @@index([tenantId, storeId])
+  @@index([storeId, alertClassification, remoteDeletedAt])
+  @@map("inventory_items")
+}
+
+model TelegramInventoryReference {
+  id                String                            @id @map("id") @db.VarChar(64)
+  telegramAccountId String                            @map("telegram_account_id") @db.VarChar(64)
+  telegramChatId    BigInt                            @map("telegram_chat_id")
+  tenantId          String                            @map("tenant_id") @db.VarChar(64)
+  storeId           String                            @map("store_id") @db.VarChar(64)
+  purpose           TelegramInventoryReferencePurpose @map("purpose")
+  pageOffset        Int?                              @map("page_offset")
+  inventoryItemId   String?                           @map("inventory_item_id") @db.VarChar(64)
+  backReferenceId   String?                           @map("back_reference_id") @db.VarChar(64)
+  expiresAt         DateTime                          @map("expires_at") @db.Timestamptz(3)
+  createdAt         DateTime                          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                          @updatedAt @map("updated_at") @db.Timestamptz(3)
+  telegramAccount   TelegramAccount                   @relation(fields: [telegramAccountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  tenant            Tenant                            @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  store             Store                             @relation(fields: [storeId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Cascade)
+  inventoryItem     InventoryItem?                    @relation(fields: [inventoryItemId, tenantId, storeId], references: [id, tenantId, storeId], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([telegramAccountId])
+  @@index([telegramChatId])
+  @@index([tenantId, storeId])
+  @@index([expiresAt])
+  @@map("telegram_inventory_references")
+}
+
+model TelegramInventoryNotificationDelivery {
+  id                          String                             @id @map("id") @db.VarChar(64)
+  tenantId                    String                             @map("tenant_id") @db.VarChar(64)
+  storeId                     String                             @map("store_id") @db.VarChar(64)
+  inventoryItemId             String                             @map("inventory_item_id") @db.VarChar(64)
+  incidentGeneration          Int                                @map("incident_generation")
+  alertLevel                  InventoryAlertLevel                @map("alert_level")
+  policyVersion               Int                                @map("policy_version")
+  telegramAccountId           String                             @map("telegram_account_id") @db.VarChar(64)
+  telegramChatAuthorizationId String                             @map("telegram_chat_authorization_id") @db.VarChar(64)
+  sourceWebhookEventId        String                             @map("source_webhook_event_id") @db.VarChar(64)
+  state                       TelegramInventoryNotificationState @default(PENDING) @map("state")
+  attemptCount                Int                                @default(0) @map("attempt_count")
+  lastAttemptAt               DateTime?                          @map("last_attempt_at") @db.Timestamptz(3)
+  telegramMessageId           BigInt?                            @map("telegram_message_id")
+  failureCategory             String?                            @map("failure_category") @db.VarChar(32)
+  failureCode                 String?                            @map("failure_code") @db.VarChar(191)
+  deliveredAt                 DateTime?                          @map("delivered_at") @db.Timestamptz(3)
+  createdAt                   DateTime                           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt                   DateTime                           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  tenant                      Tenant                             @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  store                       Store                              @relation(fields: [storeId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Cascade)
+  inventoryItem               InventoryItem                      @relation(fields: [inventoryItemId, tenantId, storeId], references: [id, tenantId, storeId], onDelete: Restrict, onUpdate: Cascade)
+  telegramAccount             TelegramAccount                    @relation(fields: [telegramAccountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  telegramChatAuthorization   TelegramChatAuthorization          @relation(fields: [telegramChatAuthorizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  sourceWebhookEvent          WebhookEvent                       @relation(fields: [sourceWebhookEventId, tenantId, storeId], references: [id, tenantId, storeId], onDelete: Restrict, onUpdate: Cascade)
+
+  @@unique([inventoryItemId, incidentGeneration, alertLevel, telegramChatAuthorizationId])
+  @@index([tenantId, storeId])
+  @@index([storeId, inventoryItemId])
+  @@index([telegramAccountId])
+  @@index([sourceWebhookEventId])
+  @@index([state])
+  @@map("telegram_inventory_notification_deliveries")
 }

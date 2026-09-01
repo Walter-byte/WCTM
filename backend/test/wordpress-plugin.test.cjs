@@ -34,12 +34,16 @@ test('connector stores sensitive material with autoload disabled and never rende
   assert.doesNotMatch(plugin, /error_log|trigger_error/);
 });
 
-test('connector installs and verifies every required order webhook before health confirmation', () => {
+test('connector installs and verifies every required order and inventory webhook before health confirmation', () => {
   for (const topic of [
     'order.created',
     'order.updated',
     'order.deleted',
     'order.restored',
+    'product.created',
+    'product.updated',
+    'product.deleted',
+    'product.restored',
   ]) {
     assert.match(plugin, new RegExp(topic.replace('.', '\\.')));
   }

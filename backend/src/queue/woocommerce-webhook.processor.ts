@@ -6,9 +6,14 @@ import {
   OrderProjectionFailure,
   OrderProjectionService,
 } from '../orders/order-projection.service';
+import {
+  InventoryProjectionFailure,
+  InventoryProjectionService,
+} from '../inventory/inventory-projection.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WOOCOMMERCE_WEBHOOK_JOB_NAME } from './queue.constants';
 import { OrderNotificationScheduler } from './order-notification.scheduler';
+import { InventoryNotificationScheduler } from './inventory-notification.scheduler';
 
 export interface WooCommerceWebhookJobData {
   webhookEventId: string;
@@ -99,8 +104,10 @@ export class WooCommerceWebhookProcessor {
   constructor(
     private readonly prisma: PrismaService,
     private readonly orderProjection: OrderProjectionService,
+    private readonly inventoryProjection: InventoryProjectionService,
     @Inject(forwardRef(() => OrderNotificationScheduler))
-    private readonly notificationScheduler: OrderNotificationScheduler
+    private readonly notificationScheduler: OrderNotificationScheduler,
+    private readonly inventoryNotificationScheduler: InventoryNotificationScheduler
   ) {}
 
   async process(
@@ -150,12 +157,27 @@ export class WooCommerceWebhookProcessor {
     }
 
     try {
-      await this.orderProjection.project(event);
-      await this.notificationScheduler.schedule(event);
+      if (event.topic.startsWith('order.')) {
+        await this.orderProjection.project(event);
+        await this.notificationScheduler.schedule(event);
+      } else if (event.topic.startsWith('product.')) {
+        const signals = await this.inventoryProjection.projectWebhook(event);
+
+        for (const signal of signals) {
+          await this.inventoryNotificationScheduler.schedule(
+            event.store.tenantId,
+            event.store.id,
+            signal
+          );
+        }
+      }
     } catch (error: unknown) {
       const diagnostic = this.failureDiagnostic(error);
       const retryable =
-        error instanceof OrderProjectionFailure ? error.retryable : true;
+        error instanceof OrderProjectionFailure ||
+        error instanceof InventoryProjectionFailure
+          ? error.retryable
+          : true;
 
       if (retryable) {
         await this.releaseForRetry(event.id, claimedAt, diagnostic);
@@ -327,7 +349,10 @@ export class WooCommerceWebhookProcessor {
   }
 
   private failureDiagnostic(error: unknown): FailureDiagnostic {
-    if (error instanceof OrderProjectionFailure) {
+    if (
+      error instanceof OrderProjectionFailure ||
+      error instanceof InventoryProjectionFailure
+    ) {
       return {
         category: error.category,
         message: error.code.slice(0, MAX_FAILURE_MESSAGE_LENGTH),

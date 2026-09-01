@@ -27,6 +27,27 @@ export const REQUIRED_ORDER_WEBHOOK_TOPICS = [
   'order.restored',
 ] as const;
 
+export const REQUIRED_INVENTORY_WEBHOOK_TOPICS = [
+  'product.created',
+  'product.updated',
+  'product.deleted',
+  'product.restored',
+] as const;
+
+const INVENTORY_FIELDS = [
+  'id',
+  'parent_id',
+  'type',
+  'name',
+  'sku',
+  'manage_stock',
+  'stock_quantity',
+  'stock_status',
+  'date_modified_gmt',
+  'attributes',
+  'variations',
+].join(',');
+
 interface WooCommerceWebhook {
   id: number;
   name: string;
@@ -88,6 +109,37 @@ export class WooCommerceClient {
     );
   }
 
+  fetchProduct(wcProductId: string): Promise<unknown> {
+    return this.requestWithTotalTimeout<unknown>(
+      `${this.productsUrl}/${encodeURIComponent(wcProductId)}?_fields=${encodeURIComponent(INVENTORY_FIELDS)}`
+    );
+  }
+
+  fetchProductVariation(
+    parentWcProductId: string,
+    wcVariationId: string
+  ): Promise<unknown> {
+    return this.requestWithTotalTimeout<unknown>(
+      `${this.productsUrl}/${encodeURIComponent(parentWcProductId)}/variations/${encodeURIComponent(wcVariationId)}?_fields=${encodeURIComponent(INVENTORY_FIELDS)}`
+    );
+  }
+
+  fetchProductsPage(page: number, perPage: number): Promise<unknown> {
+    return this.requestWithTotalTimeout<unknown>(
+      `${this.productsUrl}?page=${page}&per_page=${perPage}&orderby=id&order=asc&status=any&_fields=${encodeURIComponent(INVENTORY_FIELDS)}`
+    );
+  }
+
+  fetchProductVariationsPage(
+    parentWcProductId: string,
+    page: number,
+    perPage: number
+  ): Promise<unknown> {
+    return this.requestWithTotalTimeout<unknown>(
+      `${this.productsUrl}/${encodeURIComponent(parentWcProductId)}/variations?page=${page}&per_page=${perPage}&orderby=id&order=asc&_fields=${encodeURIComponent(INVENTORY_FIELDS)}`
+    );
+  }
+
   updateOrderStatus(wcOrderId: string, status: string): Promise<unknown> {
     return this.writeWithTotalTimeout<unknown>(
       'put',
@@ -112,9 +164,32 @@ export class WooCommerceClient {
     deliveryUrl: string,
     webhookSecret: string
   ): Promise<void> {
+    await this.ensureRequiredWebhooks(
+      REQUIRED_ORDER_WEBHOOK_TOPICS,
+      deliveryUrl,
+      webhookSecret
+    );
+  }
+
+  async ensureRequiredInventoryWebhooks(
+    deliveryUrl: string,
+    webhookSecret: string
+  ): Promise<void> {
+    await this.ensureRequiredWebhooks(
+      REQUIRED_INVENTORY_WEBHOOK_TOPICS,
+      deliveryUrl,
+      webhookSecret
+    );
+  }
+
+  private async ensureRequiredWebhooks(
+    topics: readonly string[],
+    deliveryUrl: string,
+    webhookSecret: string
+  ): Promise<void> {
     const existing = await this.listWebhooks();
 
-    for (const topic of REQUIRED_ORDER_WEBHOOK_TOPICS) {
+    for (const topic of topics) {
       const name = this.managedWebhookName(topic);
       const webhook =
         existing.find(
@@ -149,15 +224,22 @@ export class WooCommerceClient {
       }
     }
 
-    if (!(await this.hasRequiredOrderWebhooks(deliveryUrl))) {
+    if (!(await this.hasRequiredWebhooks(topics, deliveryUrl))) {
       throw new WooCommerceClientError('unexpected');
     }
   }
 
   async hasRequiredOrderWebhooks(deliveryUrl: string): Promise<boolean> {
+    return this.hasRequiredWebhooks(REQUIRED_ORDER_WEBHOOK_TOPICS, deliveryUrl);
+  }
+
+  private async hasRequiredWebhooks(
+    topics: readonly string[],
+    deliveryUrl: string
+  ): Promise<boolean> {
     const webhooks = await this.listWebhooks();
 
-    return REQUIRED_ORDER_WEBHOOK_TOPICS.every((topic) =>
+    return topics.every((topic) =>
       webhooks.some(
         (webhook) =>
           webhook.topic === topic &&
@@ -402,6 +484,10 @@ export class WooCommerceClient {
 
   private get ordersUrl(): string {
     return `${this.options.storeUrl.replace(/\/+$/, '')}/wp-json/wc/v3/orders`;
+  }
+
+  private get productsUrl(): string {
+    return `${this.options.storeUrl.replace(/\/+$/, '')}/wp-json/wc/v3/products`;
   }
 
   private get webhooksUrl(): string {

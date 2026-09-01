@@ -230,6 +230,43 @@ export interface SettingsInputStartResult {
   inputRef?: string;
 }
 
+export interface StockSummary {
+  ref: string;
+  displayName: string;
+  sku: string | null;
+  quantity: string | null;
+  stockStatus: string;
+  classification: 'LOW_STOCK' | 'OUT_OF_STOCK';
+  kind: 'PRODUCT' | 'VARIATION';
+}
+
+export interface StockListResult {
+  state:
+    | 'OK'
+    | 'SYNCING'
+    | 'SYNC_FAILED'
+    | 'NO_ACTIVE_STORE'
+    | 'UNAUTHORIZED'
+    | 'CONTEXT_CHANGED';
+  items: StockSummary[];
+  nextCursor: string | null;
+  previousCursor: string | null;
+  threshold: number | null;
+}
+
+export interface StockDetailPayload extends Omit<StockSummary, 'ref'> {
+  variationContext: Array<{ name: string; option: string }>;
+  threshold: number | null;
+  lastSyncedAt: string;
+}
+
+export interface StockDetailResult {
+  state:
+    'OK' | 'NOT_FOUND' | 'NO_ACTIVE_STORE' | 'UNAUTHORIZED' | 'CONTEXT_CHANGED';
+  item?: StockDetailPayload;
+  backCursor?: string;
+}
+
 export class BackendUnavailableError extends Error {
   constructor() {
     super('Backend is unavailable');
@@ -478,6 +515,36 @@ export class InternalBackendClient {
     return parseSettingsResult(value);
   }
 
+  async listStock(
+    identity: TelegramIdentity,
+    cursor?: string
+  ): Promise<StockListResult> {
+    const value = await this.post<unknown>('stock/list', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+      ...(cursor ? { cursor } : {}),
+    });
+
+    return parseStockListResult(value);
+  }
+
+  async stockDetail(
+    identity: TelegramIdentity,
+    ref: string
+  ): Promise<StockDetailResult> {
+    const value = await this.post<unknown>('stock/detail', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+      ref,
+    });
+
+    return parseStockDetailResult(value);
+  }
+
   async applySettingsAction(
     identity: TelegramIdentity,
     ref: string
@@ -621,6 +688,143 @@ function parseSettingsResult(value: unknown): SettingsResult {
 
   const settings = parseSettingsSummary(record['settings']);
   return { state, settings };
+}
+
+function parseStockListResult(value: unknown): StockListResult {
+  const record = requireRecord(value);
+  const states = new Set<StockListResult['state']>([
+    'OK',
+    'SYNCING',
+    'SYNC_FAILED',
+    'NO_ACTIVE_STORE',
+    'UNAUTHORIZED',
+    'CONTEXT_CHANGED',
+  ]);
+  const state = String(record['state']) as StockListResult['state'];
+
+  if (
+    !states.has(state) ||
+    !Array.isArray(record['items']) ||
+    !isNullableReference(record['nextCursor'], 'k') ||
+    !isNullableReference(record['previousCursor'], 'k') ||
+    !isNullableThreshold(record['threshold'])
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  const items = record['items'].map(parseStockSummary);
+
+  if (state !== 'OK' && items.length > 0) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return {
+    state,
+    items,
+    nextCursor: record['nextCursor'] as string | null,
+    previousCursor: record['previousCursor'] as string | null,
+    threshold: record['threshold'] as number | null,
+  };
+}
+
+function parseStockDetailResult(value: unknown): StockDetailResult {
+  const record = requireRecord(value);
+  const states = new Set<StockDetailResult['state']>([
+    'OK',
+    'NOT_FOUND',
+    'NO_ACTIVE_STORE',
+    'UNAUTHORIZED',
+    'CONTEXT_CHANGED',
+  ]);
+  const state = String(record['state']) as StockDetailResult['state'];
+
+  if (!states.has(state)) {
+    throw new MalformedBackendResponseError();
+  }
+
+  if (state !== 'OK') {
+    return { state };
+  }
+
+  if (!isCallbackReference(record['backCursor'], 'k')) {
+    throw new MalformedBackendResponseError();
+  }
+
+  const itemRecord = requireRecord(record['item']);
+  const summary = parseStockSummary({
+    ...itemRecord,
+    ref: referenceFixture('v'),
+  });
+  const variationContext = itemRecord['variationContext'];
+
+  if (
+    !Array.isArray(variationContext) ||
+    !variationContext.every((candidate) => {
+      const attribute = asRecord(candidate);
+      return Boolean(
+        attribute &&
+        isString(attribute['name']) &&
+        isString(attribute['option'])
+      );
+    }) ||
+    !isNullableThreshold(itemRecord['threshold']) ||
+    !isIsoDate(itemRecord['lastSyncedAt'])
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return {
+    state,
+    item: {
+      displayName: summary.displayName,
+      sku: summary.sku,
+      quantity: summary.quantity,
+      stockStatus: summary.stockStatus,
+      classification: summary.classification,
+      kind: summary.kind,
+      variationContext: variationContext as Array<{
+        name: string;
+        option: string;
+      }>,
+      threshold: itemRecord['threshold'] as number | null,
+      lastSyncedAt: itemRecord['lastSyncedAt'] as string,
+    },
+    backCursor: record['backCursor'],
+  };
+}
+
+function parseStockSummary(value: unknown): StockSummary {
+  const record = requireRecord(value);
+
+  if (
+    !isCallbackReference(record['ref'], 'v') ||
+    !isString(record['displayName']) ||
+    !(record['sku'] === null || isString(record['sku'])) ||
+    !(record['quantity'] === null || isString(record['quantity'])) ||
+    !isString(record['stockStatus']) ||
+    (record['classification'] !== 'LOW_STOCK' &&
+      record['classification'] !== 'OUT_OF_STOCK') ||
+    (record['kind'] !== 'PRODUCT' && record['kind'] !== 'VARIATION')
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return record as unknown as StockSummary;
+}
+
+function isNullableReference(value: unknown, prefix: 'k' | 'v'): boolean {
+  return value === null || isCallbackReference(value, prefix);
+}
+
+function isNullableThreshold(value: unknown): boolean {
+  return (
+    value === null ||
+    (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0)
+  );
+}
+
+function referenceFixture(prefix: 'k' | 'v'): string {
+  return `${prefix}.AAAAAAAAAAAAAAAA.AAAAAAAAAAAAAAAA`;
 }
 
 function parseSettingsInputStartResult(
@@ -1173,7 +1377,7 @@ function isNullableCallbackReference(value: unknown): boolean {
 
 function isCallbackReference(
   value: unknown,
-  prefix: 'p' | 'd' | 's' | 'i' | 'c' | 'g' = 'p'
+  prefix: 'p' | 'd' | 's' | 'i' | 'c' | 'g' | 'k' | 'v' = 'p'
 ): value is string {
   return (
     typeof value === 'string' &&

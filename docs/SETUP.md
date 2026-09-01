@@ -165,8 +165,8 @@ The setup command:
 4. prompts for the WooCommerce Store URL and REST credentials, with both
    credential values hidden from terminal echo;
 5. validates and encrypts the Store credentials, provisions the dedicated
-   webhook secret and endpoint key, and registers the four required order
-   webhooks at the public Caddy route;
+   webhook secret and endpoint key, and registers the four required order plus
+   four required product webhooks at the public Caddy route;
 6. prints the one-time `/start <token>` string for the private Telegram bot
    chat.
 
@@ -299,6 +299,16 @@ before accepting traffic, monitor terminal job-failure log events, and allow the
 backend process enough shutdown time to finish active work. M5 does not add a
 replay endpoint, scheduler, dead-letter service, or business queue.
 
+M19 reuses this same `operations` queue for one-time current-inventory
+initialization. The first `/stock` request for an uninitialized Store, or
+enabling the M18 `LOW_STOCK` category, schedules a deterministic bootstrap.
+Each job reads at most one bounded 25-row WooCommerce product or variation page
+and persists the next cursor before scheduling its continuation. Retry resumes
+from persisted progress; no operator-created SQL/JWT job, periodic polling,
+separate worker, queue, or scheduler is required. `/stock` reports `SYNCING` or
+a recoverable failure until the full current snapshot is `READY`, and bootstrap
+never sends historical low-stock notifications.
+
 ## Database Migrations
 
 The PostgreSQL schema is defined in `backend/prisma/schema.prisma`. Versioned
@@ -353,10 +363,16 @@ Without WooCommerce, the plugin still activates safely and displays an
 administrator notice. A successful fresh M7 response provides
 `pluginCredential`, `storeId`, `webhookSecret`, and `webhookEndpointKey` once.
 The connector stores required material with autoload disabled, installs and
-verifies the four required order webhooks, and then confirms backend health.
+verifies the four required order webhooks plus `product.created`,
+`product.updated`, `product.deleted`, and `product.restored`, and then confirms
+backend health. The existing Retry/reconciliation path adds missing product
+hooks to connected Stores without rotating credentials or retaining duplicate
+canonical hooks. Product hooks use the same endpoint key and HMAC secret; no
+inventory business rule runs in PHP.
 M7 registration promotes the Store from `PENDING` to `ACTIVE`, but M10
 link-token issuance remains forbidden until connector confirmation succeeds and
-backend verification records healthy webhook evidence.
+backend verification records healthy order-webhook evidence. M19 does not make
+M10 eligibility or M16 Store health depend on the product-hook set.
 
 The production connector hostname is DNS-only because some Iran-hosted
 WooCommerce environments cannot reach the Cloudflare-proxied public application

@@ -43,7 +43,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-024)
+## 3. Architectural Decisions (D-001–D-025)
 
 | ID    | Decision                                                                                                                                                                                             | Status   |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -71,8 +71,9 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-022 | Private-pilot setup/readiness tooling with no reset or force path, hidden JWT internals, a public Caddy HTTPS gate, manual synthetic-order creation, and no public onboarding claim                  | Accepted |
 | D-023 | Backend-owned durable new-order notification delivery with existing M10/M11 authorization, M11/M12 actions, deterministic M5 jobs, conservative ambiguous outcomes, and stateless bot-only transport | Accepted |
 | D-024 | Tenant-owned timezone/language, Store-owned threshold/category/recipient policy, Membership-selected recipients under M10 authority, M13-only filtering, and stateless bot settings references       | Accepted |
+| D-025 | WooCommerce-authoritative narrow inventory projection, core product-webhook updates, Store threshold policy, stock-owning item semantics, incident delivery, M18/M10 recipients, and no stock writes | Accepted |
 
-Next decision number: **D-025**, if a future task produces a genuine
+Next decision number: **D-026**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -909,8 +910,52 @@ completed production defect fix changes no payload mapping, retry count, M13
 delivery contract, M18 settings policy, dependency, schema, or topology and was
 not caused by M18.
 
-Next milestone: M19 — Inventory & Low-Stock MVP. No M19 implementation has
-started.
+### M19 — Inventory & Low-Stock MVP (Implementation Complete / Automated Validated)
+
+- `InventoryItem` is a minimized Store-scoped projection, unique by Store plus
+  WooCommerce stock-bearing item ID. It stores only identity/display, stock
+  ownership/quantity/status, modification/fingerprint, synchronization,
+  deletion, classification, and incident state. WooCommerce remains
+  authoritative; WCTM exposes no stock mutation.
+- Existing Stores backfill `UNINITIALIZED`. First `/stock` use or enabling
+  `LOW_STOCK` schedules deterministic, resumable 25-row product/variation units
+  on the existing operations queue. The Store becomes `READY` only after every
+  required page succeeds; bootstrap establishes a no-notification baseline.
+- The exact new core topics are `product.created`, `product.updated`,
+  `product.deleted`, and `product.restored`. M8 authentication/deduplication and
+  M9 order processing remain separate. Fresh pilot/connector setup installs,
+  and connector Retry reconciles, the complete eight-topic set with the
+  existing endpoint key and HMAC secret.
+- Managed products/variable parents represent their own stock pool;
+  independently managed variations are separate items; inherited variations
+  do not duplicate a parent pool. Explicit `outofstock` remains visible for an
+  unmanaged product or variation that does not inherit a parent pool.
+- WooCommerce `outofstock` is always `OUT_OF_STOCK`. Otherwise only managed
+  numeric quantity at or below non-null `Store.lowStockThreshold` is
+  `LOW_STOCK`; all else is `HEALTHY`. Threshold changes rebaseline without
+  alerting.
+- Durable per-item incidents support one LOW episode, one OUT episode or
+  escalation, duplicate suppression, recovery rearm, and later new decline.
+  Bootstrap/deletion/threshold/category/recipient changes do not resurrect
+  historical notifications; no back-in-stock delivery exists.
+- A dedicated inventory delivery relation applies M18 `LOW_STOCK` and exact
+  ALL_ELIGIBLE/SELECTED semantics, captures current recipients once, and
+  revalidates M10 authorization, the chat-authorization generation, Store
+  policy, and the captured policy generation before prepared-message dispatch.
+  Confirmed and ambiguous outcomes are never blindly resent.
+- `/stock` is private-chat read-only for OWNER, ADMIN, and MEMBER. It returns
+  explicit syncing/failure states, OUT before LOW, eight rows per page within a
+  200-row window, minimized detail, and context-bound short-lived signed
+  references without raw tenant/Store/WooCommerce IDs.
+- Migration `20260901120000_m19_inventory_low_stock`, complete migration-chain
+  deployment/status, representative pre-M19 backfill, and structural
+  uniqueness/isolation probes pass on isolated PostgreSQL 16. Focused and full
+  automated gates pass. D-025 is Accepted.
+
+Production migration/deployment, connector product-hook reconciliation,
+real-Store `/stock` bootstrap, and controlled healthy→low/repeat-low/recovery/
+new-decline validation remain manual post-merge acceptance. No live result is
+claimed. No M20 or later work is authorized.
 
 ---
 
@@ -921,21 +966,23 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `main`.
+Current branch: `feat/m19-inventory-low-stock`.
 
 ---
 
 ## 6. Current Blockers
 
-M18 has no remaining implementation, deployment, or operational-validation
-blocker. Existing known issues and technical debt remain unchanged.
+M19 has no known implementation blocker. B review, merge, production migration,
+backend/bot/connector deployment, product-hook reconciliation, real `/stock`
+bootstrap, and controlled stock-transition validation remain pending. Existing
+known issues and technical debt remain unchanged.
 
 ---
 
 ## 7. Current Task
 
-The active task is canonical documentation closure for M18. The next milestone
-is M19 — Inventory & Low-Stock MVP; no M19 implementation has started.
+The active task is M19 implementation, evidence, documentation, and commit
+closure. Stop after M19. No M20 or later implementation is authorized.
 
 ---
 

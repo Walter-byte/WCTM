@@ -166,6 +166,38 @@ describe('WooCommerceClient', () => {
     );
   });
 
+  it('uses bounded current-state product and variation reads with narrow fields', async () => {
+    const request = jest
+      .spyOn(axios, 'get')
+      .mockResolvedValue({ data: [{ id: 101 }] });
+    const inventoryClient = client();
+
+    await inventoryClient.fetchProduct('101');
+    await inventoryClient.fetchProductVariation('101', '202');
+    await inventoryClient.fetchProductsPage(2, 25);
+    await inventoryClient.fetchProductVariationsPage('101', 3, 25);
+
+    expect(request).toHaveBeenCalledTimes(4);
+    const urls = request.mock.calls.map((call) => String(call[0]));
+    expect(urls[0]).toMatch(/\/products\/101\?_fields=/);
+    expect(urls[1]).toMatch(/\/products\/101\/variations\/202\?_fields=/);
+    expect(urls[2]).toMatch(
+      /\/products\?page=2&per_page=25&orderby=id&order=asc&status=any&_fields=/
+    );
+    expect(urls[3]).toMatch(
+      /\/products\/101\/variations\?page=3&per_page=25&orderby=id&order=asc&_fields=/
+    );
+    for (const url of urls) {
+      const fields = decodeURIComponent(url.split('_fields=')[1] ?? '');
+      expect(fields).toContain('stock_quantity');
+      expect(fields).toContain('date_modified_gmt');
+      expect(fields).not.toMatch(/description|price|images|categories|tags/);
+    }
+    for (const call of request.mock.calls) {
+      expect(call[1]).toMatchObject({ timeout: 5000 });
+    }
+  });
+
   it('dispatches one status write without automatically retrying it', async () => {
     const payload = { id: 101, status: 'completed' };
     const request = jest
@@ -297,6 +329,51 @@ describe('WooCommerceClient', () => {
 
     expect(post).not.toHaveBeenCalled();
     expect(put).not.toHaveBeenCalled();
+  });
+
+  it('creates and verifies the four inventory webhooks with the shared endpoint and secret', async () => {
+    const deliveryUrl =
+      'https://pilot.example/api/webhooks/woocommerce/whk_endpoint';
+    const topics = [
+      'product.created',
+      'product.updated',
+      'product.deleted',
+      'product.restored',
+    ];
+    const get = jest
+      .spyOn(axios, 'get')
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({
+        data: topics.map((topic, index) => ({
+          id: index + 1,
+          name: `WC Telegram private pilot: ${topic}`,
+          status: 'active',
+          topic,
+          delivery_url: deliveryUrl,
+        })),
+      });
+    const post = jest
+      .spyOn(axios, 'post')
+      .mockResolvedValue({ data: { id: 1 } });
+
+    await expect(
+      client().ensureRequiredInventoryWebhooks(
+        deliveryUrl,
+        'webhook-secret-value'
+      )
+    ).resolves.toBeUndefined();
+
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(post).toHaveBeenCalledTimes(4);
+    expect(post.mock.calls.map((call) => call[1])).toEqual(
+      topics.map((topic) =>
+        expect.objectContaining({
+          topic,
+          delivery_url: deliveryUrl,
+          secret: 'webhook-secret-value',
+        })
+      )
+    );
   });
 
   it('verifies one shared HTTPS delivery URL for the exact server endpoint key', async () => {

@@ -11,12 +11,24 @@ import { StructuredLoggerService } from '../common/logging/structured-logger.ser
 import { ApplicationConfigService } from '../config/application-config.service';
 import {
   OPERATIONS_QUEUE_NAME,
+  INVENTORY_BOOTSTRAP_JOB_NAME,
+  INVENTORY_NOTIFICATION_JOB_NAME,
   ORDER_NOTIFICATION_JOB_NAME,
   REFERENCE_JOB_ATTEMPTS,
   REFERENCE_JOB_BACKOFF_MS,
   REFERENCE_JOB_NAME,
   WOOCOMMERCE_WEBHOOK_JOB_NAME,
 } from './queue.constants';
+import {
+  type InventoryBootstrapJobData,
+  type InventoryBootstrapJobResult,
+} from './inventory-bootstrap.scheduler';
+import { InventoryBootstrapProcessor } from './inventory-bootstrap.processor';
+import {
+  type InventoryNotificationJobData,
+  type InventoryNotificationJobResult,
+  InventoryNotificationProcessor,
+} from './inventory-notification.processor';
 import {
   type OrderNotificationJobData,
   type OrderNotificationJobResult,
@@ -48,16 +60,40 @@ type OrderNotificationJob = Job<
   OrderNotificationJobResult,
   typeof ORDER_NOTIFICATION_JOB_NAME
 >;
+type InventoryBootstrapJob = Job<
+  InventoryBootstrapJobData,
+  InventoryBootstrapJobResult,
+  typeof INVENTORY_BOOTSTRAP_JOB_NAME
+>;
+type InventoryNotificationJob = Job<
+  InventoryNotificationJobData,
+  InventoryNotificationJobResult,
+  typeof INVENTORY_NOTIFICATION_JOB_NAME
+>;
 type OperationsJob =
-  ReferenceJob | WooCommerceWebhookJob | OrderNotificationJob;
+  | ReferenceJob
+  | WooCommerceWebhookJob
+  | OrderNotificationJob
+  | InventoryBootstrapJob
+  | InventoryNotificationJob;
 type OperationsJobData =
-  ReferenceJobData | WooCommerceWebhookJobData | OrderNotificationJobData;
+  | ReferenceJobData
+  | WooCommerceWebhookJobData
+  | OrderNotificationJobData
+  | InventoryBootstrapJobData
+  | InventoryNotificationJobData;
 type OperationsJobResult =
-  ReferenceJobResult | WooCommerceWebhookJobResult | OrderNotificationJobResult;
+  | ReferenceJobResult
+  | WooCommerceWebhookJobResult
+  | OrderNotificationJobResult
+  | InventoryBootstrapJobResult
+  | InventoryNotificationJobResult;
 type OperationsJobName =
   | typeof REFERENCE_JOB_NAME
   | typeof WOOCOMMERCE_WEBHOOK_JOB_NAME
-  | typeof ORDER_NOTIFICATION_JOB_NAME;
+  | typeof ORDER_NOTIFICATION_JOB_NAME
+  | typeof INVENTORY_BOOTSTRAP_JOB_NAME
+  | typeof INVENTORY_NOTIFICATION_JOB_NAME;
 
 @Injectable()
 export class QueueRuntimeService
@@ -81,6 +117,10 @@ export class QueueRuntimeService
     @Inject(forwardRef(() => WooCommerceWebhookProcessor))
     private readonly webhookProcessor: WooCommerceWebhookProcessor,
     private readonly notificationProcessor: OrderNotificationProcessor,
+    @Inject(forwardRef(() => InventoryBootstrapProcessor))
+    private readonly inventoryBootstrapProcessor: InventoryBootstrapProcessor,
+    @Inject(forwardRef(() => InventoryNotificationProcessor))
+    private readonly inventoryNotificationProcessor: InventoryNotificationProcessor,
     private readonly logger: StructuredLoggerService
   ) {}
 
@@ -150,6 +190,32 @@ export class QueueRuntimeService
     return this.requiredQueue().add(ORDER_NOTIFICATION_JOB_NAME, data, {
       jobId,
     }) as Promise<OrderNotificationJob>;
+  }
+
+  async addInventoryBootstrapJob(
+    data: InventoryBootstrapJobData,
+    jobId: string
+  ): Promise<{ jobId: string }> {
+    const job = (await this.requiredQueue().add(
+      INVENTORY_BOOTSTRAP_JOB_NAME,
+      data,
+      { jobId }
+    )) as InventoryBootstrapJob;
+
+    return { jobId: String(job.id) };
+  }
+
+  async addInventoryNotificationJob(
+    data: InventoryNotificationJobData,
+    jobId: string
+  ): Promise<{ jobId: string }> {
+    const job = (await this.requiredQueue().add(
+      INVENTORY_NOTIFICATION_JOB_NAME,
+      data,
+      { jobId }
+    )) as InventoryNotificationJob;
+
+    return { jobId: String(job.id) };
   }
 
   async ping(): Promise<void> {
@@ -242,6 +308,30 @@ export class QueueRuntimeService
       }
     }
 
+    if (job.name === INVENTORY_BOOTSTRAP_JOB_NAME) {
+      try {
+        await this.inventoryBootstrapProcessor.markFailed(job.data, error);
+      } catch {
+        this.logger.error(
+          'Inventory bootstrap dead-letter state update failed',
+          { queue: OPERATIONS_QUEUE_NAME, jobId: job.id ?? null },
+          QueueRuntimeService.name
+        );
+      }
+    }
+
+    if (job.name === INVENTORY_NOTIFICATION_JOB_NAME) {
+      try {
+        await this.inventoryNotificationProcessor.markFailed(job.data);
+      } catch {
+        this.logger.error(
+          'Inventory notification dead-letter state update failed',
+          { queue: OPERATIONS_QUEUE_NAME, jobId: job.id ?? null },
+          QueueRuntimeService.name
+        );
+      }
+    }
+
     const tenantId =
       typeof job.data?.tenantId === 'string' &&
       job.data.tenantId.startsWith('ten_')
@@ -300,6 +390,18 @@ export class QueueRuntimeService
 
     if (job.name === ORDER_NOTIFICATION_JOB_NAME) {
       return this.notificationProcessor.process(job as OrderNotificationJob);
+    }
+
+    if (job.name === INVENTORY_BOOTSTRAP_JOB_NAME) {
+      return this.inventoryBootstrapProcessor.process(
+        job as InventoryBootstrapJob
+      );
+    }
+
+    if (job.name === INVENTORY_NOTIFICATION_JOB_NAME) {
+      return this.inventoryNotificationProcessor.process(
+        job as InventoryNotificationJob
+      );
     }
 
     return this.processor.process(job as ReferenceJob);

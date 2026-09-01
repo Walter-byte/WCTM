@@ -12,7 +12,16 @@ $GLOBALS['wctm_options'] = array(
     'wc_telegram_connector_webhook_endpoint_key' => 'whk_' . str_repeat('e', 32),
 );
 $GLOBALS['wctm_runtime_base_url'] = 'https://connector.wctm.walterbyte.com';
-$GLOBALS['wctm_topics'] = array('order.created', 'order.updated', 'order.deleted', 'order.restored');
+$GLOBALS['wctm_topics'] = array(
+    'order.created',
+    'order.updated',
+    'order.deleted',
+    'order.restored',
+    'product.created',
+    'product.updated',
+    'product.deleted',
+    'product.restored',
+);
 $GLOBALS['wctm_webhooks'] = array();
 $GLOBALS['wctm_health_calls'] = 0;
 $GLOBALS['wctm_health_before_reconciliation'] = false;
@@ -217,13 +226,13 @@ foreach ($GLOBALS['wctm_topics'] as $topic) {
 }
 
 $proxy = WC_Data_Store::load('webhook');
-if (method_exists($proxy, 'get_webhooks_ids') || count($proxy->get_webhooks_ids()) !== 16) {
+if (method_exists($proxy, 'get_webhooks_ids') || count($proxy->get_webhooks_ids()) !== 28) {
     throw new RuntimeException('Fixture does not reproduce WooCommerce proxy enumeration');
 }
 
 require dirname(__DIR__, 3) . '/wp-content/plugins/wc-telegram-connector.php';
 
-if (count(wc_telegram_connector_load_webhooks()) !== 16) {
+if (count(wc_telegram_connector_load_webhooks()) !== 28) {
     throw new RuntimeException('Connector loader did not enumerate through the WooCommerce proxy');
 }
 
@@ -253,15 +262,15 @@ foreach ($unrelated as $id => $webhook) {
         throw new RuntimeException('An unrelated webhook was changed');
     }
 }
-if (count($GLOBALS['wctm_webhooks']) !== 8 || $GLOBALS['wctm_create_calls'] !== 0 ||
-    $GLOBALS['wctm_delete_calls'] !== 8 || $GLOBALS['wctm_health_before_reconciliation']) {
+if (count($GLOBALS['wctm_webhooks']) !== 12 || $GLOBALS['wctm_create_calls'] !== 0 ||
+    $GLOBALS['wctm_delete_calls'] !== 16 || $GLOBALS['wctm_health_before_reconciliation']) {
     throw new RuntimeException('Duplicate reconciliation did not reach the expected boundary');
 }
 
 $after_first_retry = $GLOBALS['wctm_webhooks'];
 if (!wc_telegram_connector_install_and_confirm_webhooks() ||
     $after_first_retry !== $GLOBALS['wctm_webhooks'] || $GLOBALS['wctm_create_calls'] !== 0 ||
-    $GLOBALS['wctm_delete_calls'] !== 8 || $GLOBALS['wctm_health_calls'] !== 2) {
+    $GLOBALS['wctm_delete_calls'] !== 16 || $GLOBALS['wctm_health_calls'] !== 2) {
     throw new RuntimeException('Second Retry changed webhook count or identity');
 }
 

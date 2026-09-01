@@ -311,6 +311,27 @@ describe('WooCommerce webhook ingestion', () => {
     expect(fixture.publishedJobIds.size).toBe(1);
   });
 
+  it('authenticates and Store-scopes a product.updated delivery before deduplication', async () => {
+    const fixture = setup();
+    const body = Buffer.from(JSON.stringify({ id: 101, stock_quantity: 4 }));
+    const requestHeaders = {
+      ...headers(body, 'product-delivery-1'),
+      'x-wc-webhook-topic': 'product.updated',
+    };
+
+    await fixture.service.receive(ENDPOINT_A, requestHeaders, body);
+    await fixture.service.receive(ENDPOINT_A, requestHeaders, body);
+
+    expect(fixture.events).toHaveLength(1);
+    expect(fixture.events[0]).toMatchObject({
+      tenantId: 'ten_a',
+      storeId: 'sto_a',
+      deliveryId: 'product-delivery-1',
+      topic: 'product.updated',
+    });
+    expect(fixture.addWooCommerceWebhookJob).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects mutated raw bytes before JSON parsing or persistence', async () => {
     const fixture = setup();
     const original = Buffer.from('{"id":1}');

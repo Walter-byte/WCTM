@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WC Telegram Connector
  * Description: Lightweight connector between WooCommerce stores and WCTM.
- * Version: 0.2.2
+ * Version: 0.3.0
  * Author: WC-Telegram-SaaS
  * Update URI: https://wctm.walterbyte.com/plugins/wc-telegram-connector/
  * Requires PHP: 8.0
@@ -11,7 +11,7 @@
 
 defined('ABSPATH') || exit;
 
-define('WC_TELEGRAM_CONNECTOR_VERSION', '0.2.2');
+define('WC_TELEGRAM_CONNECTOR_VERSION', '0.3.0');
 define('WC_TELEGRAM_CONNECTOR_FILE', __FILE__);
 define('WC_TELEGRAM_CONNECTOR_MENU_SLUG', 'wc-telegram-connector');
 define('WC_TELEGRAM_CONNECTOR_OPTION_PREFIX', 'wc_telegram_connector_');
@@ -134,9 +134,9 @@ function wc_telegram_connector_render_admin_page(): void
     <div class="wrap">
         <h1><?php echo esc_html__('WCTM Connector', 'wc-telegram-connector'); ?></h1>
         <?php if ($status === 'connected') : ?>
-            <div class="notice notice-success"><p><?php echo esc_html__('Store connected and required order webhooks verified.', 'wc-telegram-connector'); ?></p></div>
+            <div class="notice notice-success"><p><?php echo esc_html__('Store connected and required order and inventory webhooks verified.', 'wc-telegram-connector'); ?></p></div>
         <?php elseif ($status === 'webhook_error') : ?>
-            <div class="notice notice-error"><p><?php echo esc_html__('Registration succeeded, but required order webhooks could not be verified. Retry setup below.', 'wc-telegram-connector'); ?></p></div>
+            <div class="notice notice-error"><p><?php echo esc_html__('Registration succeeded, but required order and inventory webhooks could not be verified. Retry setup below.', 'wc-telegram-connector'); ?></p></div>
         <?php elseif ($status === 'registration_error') : ?>
             <div class="notice notice-error"><p><?php echo esc_html__('Connection could not be completed. Issue a new registration token in WCTM and try again.', 'wc-telegram-connector'); ?></p></div>
         <?php endif; ?>
@@ -148,7 +148,7 @@ function wc_telegram_connector_render_admin_page(): void
         <?php if ($connected) : ?>
             <h2><?php echo esc_html__('Connected to WCTM', 'wc-telegram-connector'); ?></h2>
             <p><?php echo $healthy
-                ? esc_html__('All required WooCommerce order webhooks are active.', 'wc-telegram-connector')
+                ? esc_html__('All required WooCommerce order and inventory webhooks are active.', 'wc-telegram-connector')
                 : esc_html__('The connector is registered, but webhook setup needs attention.', 'wc-telegram-connector'); ?></p>
             <p><?php echo esc_html__('Stored connector and webhook secrets are intentionally hidden.', 'wc-telegram-connector'); ?></p>
             <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
@@ -291,7 +291,16 @@ function wc_telegram_connector_delivery_url(): string
 /** @return list<string> */
 function wc_telegram_connector_required_topics(): array
 {
-    return array('order.created', 'order.updated', 'order.deleted', 'order.restored');
+    return array(
+        'order.created',
+        'order.updated',
+        'order.deleted',
+        'order.restored',
+        'product.created',
+        'product.updated',
+        'product.deleted',
+        'product.restored'
+    );
 }
 
 function wc_telegram_connector_webhook_name(string $topic): string
