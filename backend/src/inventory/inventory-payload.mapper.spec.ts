@@ -73,6 +73,27 @@ describe('M19 WooCommerce inventory mapping and classification', () => {
     expect(mapped).not.toHaveProperty('price');
   });
 
+  it('keeps a managed product with WooCommerce null stock quantity restart-safe', () => {
+    const mapped = mapWooCommerceInventoryItem(
+      product({ manage_stock: true, stock_quantity: null })
+    );
+
+    expect(mapped).toMatchObject({
+      managesStock: true,
+      stockQuantity: null,
+      stockStatus: 'instock',
+      active: true,
+    });
+    expect(
+      classifyInventoryItem(
+        mapped.managesStock,
+        mapped.stockQuantity,
+        mapped.stockStatus,
+        5
+      )
+    ).toBe(InventoryAlertClassification.HEALTHY);
+  });
+
   it('represents independently managed variations with bounded context', () => {
     const mapped = mapWooCommerceInventoryItem(
       product({

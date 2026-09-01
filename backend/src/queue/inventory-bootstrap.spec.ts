@@ -4,6 +4,7 @@ import type { Job } from 'bullmq';
 
 import { EncryptionService } from '../common/encryption/encryption.service';
 import type { ApplicationConfigService } from '../config/application-config.service';
+import { mapWooCommerceInventoryItem } from '../inventory/inventory-payload.mapper';
 import type { InventoryProjectionService } from '../inventory/inventory-projection.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import {
@@ -98,7 +99,9 @@ function processorFixture() {
     }
   );
   const findFirst = jest.fn(async () => ({ ...store }));
-  const projectBootstrapPayload = jest.fn(async () => undefined);
+  const projectBootstrapPayload = jest.fn<
+    InventoryProjectionService['projectBootstrapPayload']
+  >(async () => undefined);
   const enqueue = jest.fn(async () => ({ jobId: 'next' }));
   const processor = new InventoryBootstrapProcessor(
     {
@@ -256,6 +259,33 @@ describe('M19 bounded resumable inventory bootstrap', () => {
     expect(fixture.store.inventorySyncState).toBe(InventorySyncState.READY);
     expect(fixture.store.inventoryBootstrapCompletedAt).toBeInstanceOf(Date);
     expect(fixture.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('completes the first product page when WooCommerce returns managed null stock', async () => {
+    const fixture = processorFixture();
+    const managedNullStock = inventoryPayload(101, {
+      manage_stock: true,
+      stock_quantity: null,
+      stock_status: 'instock',
+    });
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchProductsPage')
+      .mockResolvedValue([managedNullStock]);
+    fixture.projectBootstrapPayload.mockImplementation(
+      async (_store, payload) => {
+        expect(mapWooCommerceInventoryItem(payload)).toMatchObject({
+          managesStock: true,
+          stockQuantity: null,
+          active: true,
+        });
+      }
+    );
+
+    await expect(fixture.processor.process(job(1))).resolves.toMatchObject({
+      ready: true,
+    });
+    expect(fixture.store.inventorySyncState).toBe(InventorySyncState.READY);
+    expect(fixture.store.inventoryBootstrapProductPage).toBe(2);
   });
 
   it('persists product and variation progress across deterministic continuations', async () => {

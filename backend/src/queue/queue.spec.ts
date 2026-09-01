@@ -1,12 +1,16 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import type { Job } from 'bullmq';
+import { type Job, UnrecoverableError } from 'bullmq';
 
 import type { StructuredLoggerService } from '../common/logging/structured-logger.service';
 import type { ApplicationConfigService } from '../config/application-config.service';
 import type { TenantContextService } from '../tenant/tenant-context.service';
 import type { InventoryBootstrapProcessor } from './inventory-bootstrap.processor';
 import type { InventoryNotificationProcessor } from './inventory-notification.processor';
-import { REFERENCE_JOB_ATTEMPTS, REFERENCE_JOB_NAME } from './queue.constants';
+import {
+  INVENTORY_BOOTSTRAP_JOB_NAME,
+  REFERENCE_JOB_ATTEMPTS,
+  REFERENCE_JOB_NAME,
+} from './queue.constants';
 import { QueueRuntimeService } from './queue-runtime.service';
 import type { OrderNotificationProcessor } from './order-notification.processor';
 import { ReferenceJobProducer } from './reference-job.producer';
@@ -46,6 +50,11 @@ const notificationProcessor = (): OrderNotificationProcessor =>
 const inventoryBootstrapProcessor = (): InventoryBootstrapProcessor =>
   ({
     markFailed: jest.fn().mockResolvedValue(undefined as never),
+    failureDiagnostic: jest.fn(() => ({
+      failureCategory: 'unexpected',
+      failureCode: 'malformed-inventory-stock-quantity',
+      errorType: 'UnrecoverableError',
+    })),
   }) as unknown as InventoryBootstrapProcessor;
 
 const inventoryNotificationProcessor = (): InventoryNotificationProcessor =>
@@ -135,6 +144,50 @@ describe('M5 operations queue', () => {
     );
     expect(JSON.stringify(error.mock.calls)).not.toContain(
       'terminal secret-safe failure'
+    );
+  });
+
+  it('logs the safe inventory failure code and actual terminal attempt', async () => {
+    const error = jest.fn();
+    const bootstrapProcessor = inventoryBootstrapProcessor();
+    const runtime = new QueueRuntimeService(
+      {
+        app: { nodeEnv: 'test' },
+        redis: { url: 'redis://localhost:6379' },
+      } as ApplicationConfigService,
+      new ReferenceProcessor(),
+      webhookProcessor(),
+      notificationProcessor(),
+      bootstrapProcessor,
+      inventoryNotificationProcessor(),
+      { error } as unknown as StructuredLoggerService
+    );
+    const failedJob = {
+      id: 'inventory-bootstrap-sto_a-1',
+      name: INVENTORY_BOOTSTRAP_JOB_NAME,
+      data: { tenantId: 'ten_a', storeId: 'sto_a', revision: 1 },
+      attemptsMade: 1,
+      opts: { attempts: REFERENCE_JOB_ATTEMPTS },
+    } as never;
+
+    await runtime.handleFailed(
+      failedJob,
+      new UnrecoverableError('malformed-inventory-stock-quantity')
+    );
+
+    expect(bootstrapProcessor.markFailed).toHaveBeenCalledTimes(1);
+    expect(error).toHaveBeenCalledWith(
+      'Background job exhausted retry attempts',
+      expect.objectContaining({
+        jobName: INVENTORY_BOOTSTRAP_JOB_NAME,
+        attempts: 3,
+        attemptsMade: 1,
+        terminalReason: 'unrecoverable',
+        failureCategory: 'unexpected',
+        failureCode: 'malformed-inventory-stock-quantity',
+        errorType: 'UnrecoverableError',
+      }),
+      QueueRuntimeService.name
     );
   });
 

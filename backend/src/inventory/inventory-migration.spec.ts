@@ -14,6 +14,13 @@ describe('M19 inventory migration', () => {
     ),
     'utf8'
   );
+  const nullableManagedQuantityMigration = readFileSync(
+    resolve(
+      __dirname,
+      '../../prisma/migrations/20260901190000_m19_nullable_managed_stock_quantity/migration.sql'
+    ),
+    'utf8'
+  );
 
   it('backfills every existing Store to explicit uninitialized inventory', () => {
     expect(migration).toContain(
@@ -65,6 +72,18 @@ describe('M19 inventory migration', () => {
     );
     expect(migration).toContain(
       'FOREIGN KEY ("telegram_chat_authorization_id", "telegram_account_id")'
+    );
+  });
+
+  it('accepts WooCommerce managed stock with an unset quantity without weakening unmanaged shape', () => {
+    expect(nullableManagedQuantityMigration).toContain(
+      'DROP CONSTRAINT "inventory_items_stock_state_check"'
+    );
+    expect(nullableManagedQuantityMigration).toContain(
+      '"manages_stock" OR "stock_quantity" IS NULL'
+    );
+    expect(nullableManagedQuantityMigration).not.toMatch(
+      /ALTER COLUMN "stock_quantity" SET NOT NULL/
     );
   });
 

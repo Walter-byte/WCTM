@@ -45,6 +45,16 @@ interface ClaimedBootstrapStore extends InventoryProjectableStore {
   inventorySyncState: InventorySyncState;
 }
 
+export interface InventoryBootstrapFailureDiagnostic {
+  failureCategory: WooCommerceErrorCategory;
+  failureCode: string;
+  errorType:
+    | 'InventoryProjectionFailure'
+    | 'WooCommerceClientError'
+    | 'UnrecoverableError'
+    | 'UnexpectedError';
+}
+
 @Injectable()
 export class InventoryBootstrapProcessor {
   constructor(
@@ -146,6 +156,38 @@ export class InventoryBootstrapProcessor {
         inventoryBootstrapLeaseAt: null,
       },
     });
+  }
+
+  failureDiagnostic(error: unknown): InventoryBootstrapFailureDiagnostic {
+    if (error instanceof InventoryProjectionFailure) {
+      return {
+        failureCategory: error.category,
+        failureCode: this.failureCode(error),
+        errorType: 'InventoryProjectionFailure',
+      };
+    }
+
+    if (error instanceof WooCommerceClientError) {
+      return {
+        failureCategory: error.category,
+        failureCode: this.failureCode(error),
+        errorType: 'WooCommerceClientError',
+      };
+    }
+
+    if (error instanceof UnrecoverableError) {
+      return {
+        failureCategory: 'unexpected',
+        failureCode: this.failureCode(error),
+        errorType: 'UnrecoverableError',
+      };
+    }
+
+    return {
+      failureCategory: 'unexpected',
+      failureCode: 'inventory-bootstrap-failed',
+      errorType: 'UnexpectedError',
+    };
   }
 
   private async processOneUnit(
