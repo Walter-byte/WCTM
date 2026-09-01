@@ -342,6 +342,10 @@ export class QueueRuntimeService
       job.data.storeId.startsWith('sto_')
         ? job.data.storeId
         : undefined;
+    const inventoryBootstrapFailure =
+      job.name === INVENTORY_BOOTSTRAP_JOB_NAME
+        ? this.inventoryBootstrapProcessor.failureDiagnostic(error)
+        : undefined;
 
     this.logger.error(
       'Background job exhausted retry attempts',
@@ -352,6 +356,12 @@ export class QueueRuntimeService
         tenantId,
         ...(storeId ? { storeId } : {}),
         attempts,
+        attemptsMade: job.attemptsMade,
+        terminalReason:
+          error instanceof UnrecoverableError
+            ? 'unrecoverable'
+            : 'attempts-exhausted',
+        ...(inventoryBootstrapFailure ?? {}),
       },
       QueueRuntimeService.name
     );

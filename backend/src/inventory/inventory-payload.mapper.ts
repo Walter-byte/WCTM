@@ -275,7 +275,15 @@ function normalizeStockQuantity(
   value: unknown,
   wcItemId: string,
   parentWcProductId?: string
-): string {
+): string | null {
+  // WooCommerce can legitimately expose a managed-stock item whose persisted
+  // quantity is unset (for example after Quick Edit leaves the quantity
+  // blank). The stock status remains authoritative, while a missing numeric
+  // quantity cannot participate in WCTM threshold classification.
+  if (value === null) {
+    return null;
+  }
+
   const candidate =
     typeof value === 'number' && Number.isFinite(value)
       ? String(value)
