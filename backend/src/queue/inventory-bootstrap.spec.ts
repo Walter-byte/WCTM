@@ -288,6 +288,62 @@ describe('M19 bounded resumable inventory bootstrap', () => {
     expect(fixture.store.inventoryBootstrapProductPage).toBe(2);
   });
 
+  it('completes product page 1 when WooCommerce returns an empty name', async () => {
+    const fixture = processorFixture();
+    const unnamedProduct = inventoryPayload(101, { name: '', sku: '' });
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchProductsPage')
+      .mockResolvedValue([unnamedProduct]);
+    fixture.projectBootstrapPayload.mockImplementation(
+      async (_store, payload) => {
+        expect(mapWooCommerceInventoryItem(payload)).toMatchObject({
+          kind: 'PRODUCT',
+          displayName: 'Unnamed product',
+          wcItemId: '101',
+        });
+      }
+    );
+
+    await expect(fixture.processor.process(job(1))).resolves.toMatchObject({
+      ready: true,
+    });
+    expect(fixture.store.inventorySyncState).toBe(InventorySyncState.READY);
+    expect(fixture.store.inventoryBootstrapProductPage).toBe(2);
+    expect(fixture.store.inventoryBootstrapFailureCode).toBeNull();
+  });
+
+  it('completes a variation page when Woo name and SKU are empty', async () => {
+    const fixture = processorFixture();
+    fixture.store.inventoryBootstrapProductsDone = true;
+    fixture.store.inventoryBootstrapParentIds = ['101'];
+    const unnamedVariation = inventoryPayload(202, {
+      parent_id: 101,
+      type: 'variation',
+      name: '',
+      sku: '',
+      stock_quantity: 2,
+    });
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchProductVariationsPage')
+      .mockResolvedValue([unnamedVariation]);
+    fixture.projectBootstrapPayload.mockImplementation(
+      async (_store, payload) => {
+        expect(mapWooCommerceInventoryItem(payload)).toMatchObject({
+          kind: 'VARIATION',
+          displayName: 'Unnamed variation',
+          wcItemId: '202',
+          parentWcProductId: '101',
+        });
+      }
+    );
+
+    await expect(fixture.processor.process(job(1))).resolves.toMatchObject({
+      ready: true,
+    });
+    expect(fixture.store.inventorySyncState).toBe(InventorySyncState.READY);
+    expect(fixture.store.inventoryBootstrapParentIds).toEqual([]);
+  });
+
   it('persists product and variation progress across deterministic continuations', async () => {
     const fixture = processorFixture();
     const variable = inventoryPayload(101, {

@@ -150,18 +150,20 @@ export function mapWooCommerceInventoryItem(
       (!inheritsParentStock &&
         stockStatus === 'outofstock' &&
         (kind === InventoryItemKind.VARIATION || type !== 'variable'));
+    const sku = optionalDisplay(record['sku'], 191);
+    // WooCommerce identity is the validated item ID. A blank display name is
+    // valid presentation metadata and must not terminate inventory bootstrap.
     const projection: Omit<InventoryProjection, 'projectionFingerprint'> = {
       wcItemId,
       parentWcProductId,
       kind,
-      displayName: safeDisplay(
-        record['name'],
-        255,
-        'malformed-inventory-name',
-        wcItemId,
-        parentWcProductId ?? undefined
-      ),
-      sku: optionalDisplay(record['sku'], 191),
+      displayName:
+        optionalDisplay(record['name'], 255) ??
+        sku ??
+        (kind === InventoryItemKind.VARIATION
+          ? 'Unnamed variation'
+          : 'Unnamed product'),
+      sku,
       variationContext:
         kind === InventoryItemKind.VARIATION
           ? mapVariationContext(record['attributes'])
@@ -351,22 +353,6 @@ function requireString(
   }
 
   return value.trim();
-}
-
-function safeDisplay(
-  value: unknown,
-  maximumLength: number,
-  code: string,
-  wcItemId: string,
-  parentWcProductId?: string
-): string {
-  const normalized = optionalDisplay(value, maximumLength);
-
-  if (!normalized) {
-    throw new InventoryPayloadMappingError(code, wcItemId, parentWcProductId);
-  }
-
-  return normalized;
 }
 
 function optionalDisplay(value: unknown, maximumLength: number): string | null {

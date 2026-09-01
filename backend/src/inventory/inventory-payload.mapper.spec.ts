@@ -94,6 +94,36 @@ describe('M19 WooCommerce inventory mapping and classification', () => {
     ).toBe(InventoryAlertClassification.HEALTHY);
   });
 
+  it('uses SKU when WooCommerce returns the valid empty product name condition', () => {
+    expect(mapWooCommerceInventoryItem(product({ name: '' }))).toMatchObject({
+      wcItemId: '101',
+      displayName: 'SKU-101',
+      sku: 'SKU-101',
+    });
+  });
+
+  it('uses a stable generic product name when both Woo name and SKU are unusable', () => {
+    expect(
+      mapWooCommerceInventoryItem(product({ name: ' \t ', sku: '' }))
+    ).toMatchObject({
+      wcItemId: '101',
+      displayName: 'Unnamed product',
+      sku: null,
+    });
+  });
+
+  it.each([undefined, null, ' \t ', 101])(
+    'keeps an otherwise valid product projectable for unusable name value %p',
+    (name) => {
+      expect(
+        mapWooCommerceInventoryItem(product({ name, sku: '' }))
+      ).toMatchObject({
+        wcItemId: '101',
+        displayName: 'Unnamed product',
+      });
+    }
+  );
+
   it('represents independently managed variations with bounded context', () => {
     const mapped = mapWooCommerceInventoryItem(
       product({
@@ -121,6 +151,26 @@ describe('M19 WooCommerce inventory mapping and classification', () => {
         { name: 'Color', option: 'Blue' },
         { name: 'Size', option: 'XL' },
       ],
+    });
+  });
+
+  it('uses a stable generic variation name when Woo name and SKU are unusable', () => {
+    expect(
+      mapWooCommerceInventoryItem(
+        product({
+          id: 202,
+          parent_id: 101,
+          type: 'variation',
+          name: '',
+          sku: ' \n ',
+        })
+      )
+    ).toMatchObject({
+      wcItemId: '202',
+      parentWcProductId: '101',
+      kind: InventoryItemKind.VARIATION,
+      displayName: 'Unnamed variation',
+      sku: null,
     });
   });
 

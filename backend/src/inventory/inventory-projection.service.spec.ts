@@ -285,6 +285,23 @@ describe('M19 inventory projection and incidents', () => {
     ).resolves.toEqual([]);
   });
 
+  it('persists a non-empty fallback without weakening inventory identity', async () => {
+    const fixture = setup();
+
+    await fixture.service.projectBootstrapPayload(
+      fixture.store,
+      product({ name: '', sku: '' })
+    );
+
+    expect(fixture.items[0]).toMatchObject({
+      tenantId: 'ten_a',
+      storeId: 'sto_a',
+      wcItemId: '101',
+      displayName: 'Unnamed product',
+      sku: null,
+    });
+  });
+
   it('sends one low episode, one out escalation, then rearms after recovery', async () => {
     const fixture = setup();
     await fixture.service.projectWebhook(
