@@ -43,6 +43,7 @@ function fixture() {
         NotificationCategory.ORDER_CREATED,
       ] as NotificationCategory[],
       notificationRecipientMode: NotificationRecipientMode.ALL_ELIGIBLE,
+      inventoryNotificationPolicyVersion: 0,
     },
     memberships: [
       {
@@ -139,12 +140,26 @@ function fixture() {
               }
             : null
       ),
-      update: jest.fn(
-        async ({ data }: { data: Partial<typeof state.store> }) => {
-          Object.assign(state.store, data);
-          return { id: state.store.id };
+      update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        const policyVersion = data['inventoryNotificationPolicyVersion'];
+
+        if (
+          policyVersion &&
+          typeof policyVersion === 'object' &&
+          'increment' in policyVersion
+        ) {
+          state.store.inventoryNotificationPolicyVersion += Number(
+            policyVersion.increment
+          );
         }
-      ),
+
+        Object.assign(state.store, {
+          ...data,
+          inventoryNotificationPolicyVersion:
+            state.store.inventoryNotificationPolicyVersion,
+        });
+        return { id: state.store.id };
+      }),
     },
     tenant: {
       findFirst: jest.fn(async () =>
@@ -223,6 +238,7 @@ function fixture() {
         return { id: 'aud_test' };
       }),
     },
+    $executeRaw: jest.fn(async () => 0),
     $transaction: jest.fn(
       async (operation: (transaction: typeof prisma) => Promise<unknown>) =>
         operation(prisma)
@@ -392,6 +408,7 @@ describe('M18 Telegram settings service', () => {
       NotificationCategory.ORDER_CREATED,
     ]);
     expect(test.auditLogs).toHaveLength(2);
+    expect(test.state.store.inventoryNotificationPolicyVersion).toBe(0);
   });
 
   it('consumes an input reference once and rejects stale replay without overwriting state', async () => {
@@ -451,6 +468,7 @@ describe('M18 Telegram settings service', () => {
       NotificationRecipientMode.SELECTED
     );
     expect(test.state.selected.size).toBe(0);
+    expect(test.state.store.inventoryNotificationPolicyVersion).toBe(1);
 
     summary = await test.service.summary(test.input);
     const manager = summary.settings!.recipients.find(
@@ -459,6 +477,7 @@ describe('M18 Telegram settings service', () => {
     await test.service.applyAction({ ...test.input, ref: manager.actionRef! });
     await test.service.applyAction({ ...test.input, ref: manager.actionRef! });
     expect(test.state.selected).toEqual(new Set(['mem_manager']));
+    expect(test.state.store.inventoryNotificationPolicyVersion).toBe(2);
 
     summary = await test.service.summary(test.input);
     const remove = summary.settings!.recipients.find(
@@ -466,6 +485,26 @@ describe('M18 Telegram settings service', () => {
     )!;
     await test.service.applyAction({ ...test.input, ref: remove.actionRef! });
     expect(test.state.selected.size).toBe(0);
+    expect(test.state.store.inventoryNotificationPolicyVersion).toBe(3);
+  });
+
+  it('advances inventory notification policy only for real LOW_STOCK category changes', async () => {
+    const test = fixture();
+    let summary = await test.service.summary(test.input);
+    let category = summary.settings!.actions!.categories.find(
+      (item) => item.category === NotificationCategory.LOW_STOCK
+    )!;
+
+    await test.service.applyAction({ ...test.input, ref: category.enableRef });
+    await test.service.applyAction({ ...test.input, ref: category.enableRef });
+    expect(test.state.store.inventoryNotificationPolicyVersion).toBe(1);
+
+    summary = await test.service.summary(test.input);
+    category = summary.settings!.actions!.categories.find(
+      (item) => item.category === NotificationCategory.LOW_STOCK
+    )!;
+    await test.service.applyAction({ ...test.input, ref: category.disableRef });
+    expect(test.state.store.inventoryNotificationPolicyVersion).toBe(2);
   });
 
   it('preserves an unlinked selected Membership and renders it unavailable', async () => {

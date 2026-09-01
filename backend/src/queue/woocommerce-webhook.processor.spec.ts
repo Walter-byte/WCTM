@@ -1,9 +1,10 @@
 import { describe, expect, it, jest } from '@jest/globals';
-import { WebhookEventStatus } from '@prisma/client';
+import { InventoryAlertLevel, WebhookEventStatus } from '@prisma/client';
 import type { Job } from 'bullmq';
 
 import type { StructuredLoggerService } from '../common/logging/structured-logger.service';
 import type { ApplicationConfigService } from '../config/application-config.service';
+import type { InventoryProjectionService } from '../inventory/inventory-projection.service';
 import {
   OrderProjectionFailure,
   type OrderProjectionService,
@@ -16,6 +17,9 @@ import {
 import { QueueRuntimeService } from './queue-runtime.service';
 import type { OrderNotificationProcessor } from './order-notification.processor';
 import type { OrderNotificationScheduler } from './order-notification.scheduler';
+import type { InventoryBootstrapProcessor } from './inventory-bootstrap.processor';
+import type { InventoryNotificationProcessor } from './inventory-notification.processor';
+import type { InventoryNotificationScheduler } from './inventory-notification.scheduler';
 import { ReferenceProcessor } from './reference.processor';
 import {
   WEBHOOK_PROCESSING_LEASE_TTL_MS,
@@ -146,15 +150,31 @@ function setup(
   const findUnique = jest.fn(async () => event);
   const project = jest.fn(async () => undefined);
   const schedule = jest.fn(async () => undefined);
+  const projectInventory = jest.fn<
+    InventoryProjectionService['projectWebhook']
+  >(async () => []);
+  const scheduleInventory = jest.fn(async () => undefined);
   const processor = new WooCommerceWebhookProcessor(
     {
       webhookEvent: { updateMany, findUnique },
     } as unknown as PrismaService,
     { project } as unknown as OrderProjectionService,
-    { schedule } as unknown as OrderNotificationScheduler
+    {
+      projectWebhook: projectInventory,
+    } as unknown as InventoryProjectionService,
+    { schedule } as unknown as OrderNotificationScheduler,
+    { schedule: scheduleInventory } as unknown as InventoryNotificationScheduler
   );
 
-  return { event, processor, project, schedule, updateMany };
+  return {
+    event,
+    processor,
+    project,
+    projectInventory,
+    schedule,
+    scheduleInventory,
+    updateMany,
+  };
 }
 
 describe('WooCommerce order webhook worker lifecycle', () => {
@@ -229,6 +249,41 @@ describe('WooCommerce order webhook worker lifecycle', () => {
     expect(fixture.event.completedAt).toBeInstanceOf(Date);
   });
 
+  it.each([
+    'product.created',
+    'product.updated',
+    'product.deleted',
+    'product.restored',
+  ])('routes %s only to the M19 inventory projector', async (topic) => {
+    const fixture = setup();
+    fixture.event.topic = topic;
+    fixture.event.payload = { id: 101 };
+    fixture.projectInventory.mockResolvedValueOnce([
+      {
+        inventoryItemId: 'inv_a',
+        incidentGeneration: 1,
+        alertLevel: InventoryAlertLevel.LOW_STOCK,
+        sourceWebhookEventId: 'evt_a',
+      },
+    ]);
+
+    await fixture.processor.process(webhookJob());
+
+    expect(fixture.projectInventory).toHaveBeenCalledWith(
+      expect.objectContaining({
+        topic,
+        store: expect.objectContaining({ id: 'sto_a' }),
+      })
+    );
+    expect(fixture.scheduleInventory).toHaveBeenCalledWith(
+      'ten_a',
+      'sto_a',
+      expect.objectContaining({ inventoryItemId: 'inv_a' })
+    );
+    expect(fixture.project).not.toHaveBeenCalled();
+    expect(fixture.schedule).not.toHaveBeenCalled();
+  });
+
   it('reclaims an expired PROCESSING lease after a crash or restart', async () => {
     const fixture = setup(
       WebhookEventStatus.PROCESSING,
@@ -298,6 +353,12 @@ describe('WooCommerce order webhook worker lifecycle', () => {
       {
         markFailed: jest.fn().mockResolvedValue(undefined as never),
       } as unknown as OrderNotificationProcessor,
+      {
+        markFailed: jest.fn().mockResolvedValue(undefined as never),
+      } as unknown as InventoryBootstrapProcessor,
+      {
+        markFailed: jest.fn().mockResolvedValue(undefined as never),
+      } as unknown as InventoryNotificationProcessor,
       { error } as unknown as StructuredLoggerService
     );
     const safeFailure = new OrderProjectionFailure(

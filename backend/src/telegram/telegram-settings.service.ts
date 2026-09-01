@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import {
   MembershipRole,
   NotificationCategory,
@@ -18,6 +18,7 @@ import {
 
 import { ApplicationConfigService } from '../config/application-config.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { InventoryBootstrapScheduler } from '../queue/inventory-bootstrap.scheduler';
 import {
   type TelegramOrderIdentityDto,
   type TelegramSettingsInputDto,
@@ -134,7 +135,9 @@ export class TelegramSettingsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configuration: ApplicationConfigService,
-    private readonly telegramOrders: TelegramOrderService
+    private readonly telegramOrders: TelegramOrderService,
+    @Optional()
+    private readonly inventoryBootstrap?: InventoryBootstrapScheduler
   ) {}
 
   async summary(
@@ -146,6 +149,7 @@ export class TelegramSettingsService {
       return { state: resolved.state };
     }
 
+    await this.ensureInventoryIfRelevant(resolved.context);
     return this.ok(resolved.context);
   }
 
@@ -279,6 +283,7 @@ export class TelegramSettingsService {
           data: { lowStockThreshold: threshold },
           select: { id: true },
         });
+        await this.rebaselineInventory(transaction, context, threshold);
         await this.audit(transaction, context, 'Store', context.storeId, {
           settingType: 'low_stock_threshold',
           previousValue: store.lowStockThreshold,
@@ -288,9 +293,12 @@ export class TelegramSettingsService {
         return true;
       });
 
-      return changed === undefined
-        ? { state: 'EXPIRED_REF' }
-        : this.ok(context);
+      if (changed === undefined) {
+        return { state: 'EXPIRED_REF' };
+      }
+
+      await this.ensureInventoryIfRelevant(context);
+      return this.ok(context);
     }
 
     return { state: 'CONTEXT_CHANGED' };
@@ -323,7 +331,12 @@ export class TelegramSettingsService {
 
     const applied = await this.applyDesiredAction(context, reference);
 
-    return applied ? this.ok(context) : { state: 'CONTEXT_CHANGED' };
+    if (!applied) {
+      return { state: 'CONTEXT_CHANGED' };
+    }
+
+    await this.ensureInventoryIfRelevant(context);
+    return this.ok(context);
   }
 
   private async applyDesiredAction(
@@ -389,7 +402,13 @@ export class TelegramSettingsService {
         const next = [...categories].sort();
         await transaction.store.update({
           where: { id: context.storeId },
-          data: { enabledNotificationCategories: next },
+          data: {
+            enabledNotificationCategories: next,
+            ...(reference.notificationCategory ===
+            NotificationCategory.LOW_STOCK
+              ? { inventoryNotificationPolicyVersion: { increment: 1 } }
+              : {}),
+          },
           select: { id: true },
         });
         await this.audit(transaction, context, 'Store', context.storeId, {
@@ -412,7 +431,10 @@ export class TelegramSettingsService {
 
         await transaction.store.update({
           where: { id: context.storeId },
-          data: { notificationRecipientMode: reference.recipientMode },
+          data: {
+            notificationRecipientMode: reference.recipientMode,
+            inventoryNotificationPolicyVersion: { increment: 1 },
+          },
           select: { id: true },
         });
         await this.audit(transaction, context, 'Store', context.storeId, {
@@ -434,6 +456,7 @@ export class TelegramSettingsService {
           data: { lowStockThreshold: null },
           select: { id: true },
         });
+        await this.rebaselineInventory(transaction, context, null);
         await this.audit(transaction, context, 'Store', context.storeId, {
           settingType: 'low_stock_threshold',
           previousValue: store.lowStockThreshold,
@@ -498,6 +521,12 @@ export class TelegramSettingsService {
             select: { id: true },
           });
         }
+
+        await transaction.store.update({
+          where: { id: context.storeId },
+          data: { inventoryNotificationPolicyVersion: { increment: 1 } },
+          select: { id: true },
+        });
 
         const recipientCount =
           await transaction.storeNotificationRecipient.count({
@@ -1001,6 +1030,81 @@ export class TelegramSettingsService {
       },
       select: { id: true },
     });
+  }
+
+  private async ensureInventoryIfRelevant(
+    context: SettingsContext
+  ): Promise<void> {
+    if (!this.inventoryBootstrap) {
+      return;
+    }
+
+    const store = await this.prisma.store.findFirst({
+      where: {
+        id: context.storeId,
+        tenantId: context.tenantId,
+        status: StoreStatus.ACTIVE,
+        deletedAt: null,
+      },
+      select: { enabledNotificationCategories: true },
+    });
+
+    if (
+      store?.enabledNotificationCategories.includes(
+        NotificationCategory.LOW_STOCK
+      )
+    ) {
+      await this.inventoryBootstrap.ensureInitialized(
+        context.tenantId,
+        context.storeId
+      );
+    }
+  }
+
+  private async rebaselineInventory(
+    transaction: Transaction,
+    context: SettingsContext,
+    threshold: number | null
+  ): Promise<void> {
+    const thresholdSql =
+      threshold === null ? Prisma.sql`NULL` : Prisma.sql`${threshold}`;
+
+    await transaction.$executeRaw(Prisma.sql`
+      WITH classified AS (
+        SELECT
+          "id",
+          CASE
+            WHEN "stock_status" = 'outofstock'
+              THEN 'OUT_OF_STOCK'::"inventory_alert_classification"
+            WHEN "manages_stock"
+              AND ${thresholdSql} IS NOT NULL
+              AND "stock_quantity" <= ${thresholdSql}
+              THEN 'LOW_STOCK'::"inventory_alert_classification"
+            ELSE 'HEALTHY'::"inventory_alert_classification"
+          END AS next_classification
+        FROM "inventory_items"
+        WHERE "tenant_id" = ${context.tenantId}
+          AND "store_id" = ${context.storeId}
+          AND "remote_deleted_at" IS NULL
+      )
+      UPDATE "inventory_items" AS item
+      SET
+        "alert_classification" = classified.next_classification,
+        "incident_generation" = CASE
+          WHEN item."alert_classification" = 'HEALTHY'
+            AND classified.next_classification <> 'HEALTHY'
+            THEN item."incident_generation" + 1
+          ELSE item."incident_generation"
+        END,
+        "low_alert_source_webhook_event_id" = NULL,
+        "low_alert_recipients_captured_at" = NULL,
+        "out_alert_source_webhook_event_id" = NULL,
+        "out_alert_recipients_captured_at" = NULL,
+        "updated_at" = CURRENT_TIMESTAMP
+      FROM classified
+      WHERE item."id" = classified."id"
+        AND item."alert_classification" IS DISTINCT FROM classified.next_classification
+    `);
   }
 
   private async withMutation<T>(

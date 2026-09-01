@@ -757,4 +757,90 @@ Accepted.
 
 ---
 
-Next decision number: D-025.
+## D-025
+
+Date
+
+2026-09-01
+
+Decision
+
+WooCommerce remains the sole inventory authority for product and variation
+identity, stock ownership, quantity, status, display context, and remote
+lifecycle. M19 persists only a narrow Store-scoped `InventoryItem` projection
+for current `/stock` reads, modification-time/fingerprint stale protection,
+remote deactivation, and a per-item alert incident generation. WCTM exposes no
+stock mutation endpoint, action, or queue job.
+
+Current state is established by a one-time resumable bootstrap on the existing
+`operations` queue. Each deterministic continuation performs one bounded
+WooCommerce product or variation page read, persists page/parent/revision
+progress, and marks the Store ready only after every required page succeeds.
+Bootstrap projections are baselines and schedule no historical alerts. There is
+no order-history import, historical product version import, periodic catalog
+poll, permanent sweep, new queue, scheduler, worker process, or generic sync
+framework.
+
+Ongoing projection consumes only authenticated M8 `product.created`,
+`product.updated`, `product.deleted`, and `product.restored` events. The M8
+Store route remains server-derived, raw-byte HMAC authentication and
+Store/delivery deduplication remain unchanged, and product events do not enter
+the M9 Order projector. Equal conflicting or malformed events use at most the
+minimum safely identified WooCommerce item read; older events cannot regress a
+newer projection, including during bootstrap.
+
+Inventory boundaries follow physical stock ownership. A product or variable
+parent that manages stock is one item. A variation that independently manages
+stock is its own item with bounded parent/display context. A variation that
+explicitly inherits parent stock is not a second item or alert. An unmanaged
+product or variation that does not represent a parent-owned pool may remain
+visible when WooCommerce explicitly reports `outofstock`.
+
+`Store.lowStockThreshold` is the sole WCTM quantitative threshold.
+WooCommerce `outofstock` always classifies as `OUT_OF_STOCK`; otherwise a
+stock-managing numeric item at or below the non-null Store threshold is
+`LOW_STOCK`; all other states are `HEALTHY`. Threshold changes rebaseline the
+projection without alert sources, so settings changes alone never create a
+notification flood.
+
+Low-stock delivery uses a dedicated durable inventory delivery record keyed by
+inventory item, incident generation, alert level, and private-chat
+authorization. One incident may send LOW once, may escalate to OUT once, does
+not send on partial recovery, and rearms only after HEALTHY without a
+back-in-stock message. Scheduling and pre-dispatch checks consume D-024's exact
+`LOW_STOCK` category, `ALL_ELIGIBLE`/strict `SELECTED` Membership policy, and
+current M10 authorization. A narrow Store policy generation prevents a later
+disable/re-enable or recipient-policy round trip from reviving an already
+captured delivery, while the existing chat-authorization update timestamp
+prevents unlink/relink from reviving it. Confirmed and ambiguous outcomes retain
+D-023's no-resend rule through the existing prepared-message bot transport.
+
+The grammY bot remains database-free and presentation-only. `/stock` re-resolves
+the current account, authorized private chat, active Membership, Tenant, and
+exact-one active Store in the backend; OWNER, ADMIN, and MEMBER may read.
+Eight-row pagination and item detail use short-lived signed backend references
+that expose no Tenant, Store, or WooCommerce item ID in callback data.
+
+Reason
+
+This boundary provides durable current inventory visibility and transition
+notifications while preserving WooCommerce ownership, M1–M18 tenant and queue
+architecture, M10 authorization, M13 delivery safety, and M18 Store policy. A
+narrow projection and incident record are sufficient for restart recovery and
+duplicate suppression without creating a catalog or inventory mutation domain.
+
+Boundary
+
+M19 includes current inventory bootstrap, the four core product webhooks,
+read-only `/stock`, and LOW/OUT incident delivery only. It adds no stock write,
+generic product management, historical import, polling, back-in-stock message,
+search, report, localization rollout, entitlement, billing, dashboard, Store
+switching, new service/process, new queue topology, or M20+ work.
+
+Status
+
+Accepted.
+
+---
+
+Next decision number: D-026.

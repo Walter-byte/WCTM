@@ -6,8 +6,12 @@ Version: 1.0
 
 Current Phase
 
-Phase 5 — Core Store Management (MVP) is in progress. M18 MVP Store Settings
-Foundation is fully complete and operationally validated. Its migration,
+Phase 5 — Core Store Management (MVP) is in progress. M19 Inventory & Low-Stock
+MVP implementation is complete on its feature branch and passes automated,
+build, static, connector-contract, and isolated PostgreSQL 16 validation. M19
+has not yet been reviewed, merged, deployed, or validated against the real test
+Store. M18 MVP Store Settings Foundation remains fully complete and
+operationally validated. Its migration,
 backend plus telegram-bot deployment, health, readiness, settings persistence,
 timezone persistence, and enabled/disabled/re-enabled `ORDER_CREATED` delivery
 behavior passed in production. The pre-existing M8/M9 publication race found
@@ -18,8 +22,8 @@ M17 is fully closed. Phase 4 and M1–M16 remain complete and unchanged.
 
 Current Task
 
-M18 documentation closure is the active approved task. The next milestone is
-M19 — Inventory & Low-Stock MVP; no M19 implementation has started.
+M19 implementation, evidence, documentation, and commit closure are the active
+approved task. No M20 or later work is authorized.
 
 ---
 
@@ -31,7 +35,10 @@ Project Version
 
 Repository
 
-Current branch: `main`.
+Current branch: `feat/m19-inventory-low-stock`.
+
+M19 implementation commit: `feat(inventory): add low-stock MVP` on the current
+feature branch.
 
 M18 implementation commit: `ef677f0 feat(settings): add MVP store settings
 foundation`. The final adversarial-audit hardening is committed separately on
@@ -594,6 +601,92 @@ combined live validation closes the previously pending deployed M13 synthetic-
 notification validation as PASS. M18 is fully complete and operationally
 validated.
 
+M19 adds a narrow `InventoryItem` projection keyed by Store and WooCommerce
+stock-bearing item ID. It persists only minimized product/variation display
+context, SKU, stock ownership, quantity/status, WooCommerce modification time,
+fingerprint, synchronization/deletion state, current classification, and alert
+incident generation. WooCommerce remains authoritative and WCTM exposes no
+inventory mutation path.
+
+Store inventory begins `UNINITIALIZED`. The first `/stock` request or an
+enabled `LOW_STOCK` category automatically starts a current-state bootstrap on
+the existing `operations` queue. Each deterministic revision reads one bounded
+25-row product or variation page, persists progress, resumes after retry or
+restart, and marks `READY` only after all pages complete. Bootstrap establishes
+a no-alert baseline. `/stock` returns `SYNCING` or recoverable `SYNC_FAILED`
+rather than exposing a partial projection.
+
+The connector now reconciles the existing four order topics plus exactly
+`product.created`, `product.updated`, `product.deleted`, and
+`product.restored`, using the existing M8 endpoint key and HMAC secret. M8 raw
+authentication, Store/delivery deduplication, server-derived Store identity,
+queue topology, M9 Order routing, M10 linking eligibility, and M16 ACTIVE/health
+semantics remain unchanged. Product events route only to the M19 projector.
+
+Projection follows stock ownership: managed products or variable parents are
+one physical pool; independently managed variations are separate items with
+bounded parent/attribute context; parent-inheriting variations are not separate
+items. An unmanaged product or variation that does not inherit a parent pool may
+still represent WooCommerce's explicit `outofstock` state. Modification time
+plus fingerprint prevents stale
+or duplicate regression, equal conflicts use one authoritative item read, and
+an equal-time bootstrap response cannot overwrite a webhook projection.
+Deletion deactivates without notification; restore reprojects current identity.
+
+Classification is exact: WooCommerce `outofstock` is always `OUT_OF_STOCK`;
+otherwise a managed numeric quantity at or below non-null
+`Store.lowStockThreshold` is `LOW_STOCK`; everything else is `HEALTHY`. A null
+threshold never creates quantitative WCTM low stock but still shows explicit
+out-of-stock items. M18 threshold changes rebaseline projected classification
+and clear alert sources without scheduling notifications.
+
+Each item owns a durable incident generation and separate LOW/OUT source
+capture. HEALTHY→LOW or HEALTHY→OUT may schedule one level per current
+recipient; LOW→OUT may schedule one escalation; repeated LOW/OUT and OUT→LOW
+schedule nothing new; HEALTHY closes and rearms without a back-in-stock
+message. A dedicated delivery relation is unique by item, generation, alert
+level, and chat authorization. It reuses the existing queue and prepared bot
+transport with delivered/retryable/terminal/ambiguous outcomes and no blind
+resend.
+
+Scheduling requires M18 `LOW_STOCK`. `ALL_ELIGIBLE` uses the current M10
+manager set, while `SELECTED` is a strict intersection and zero selected means
+zero delivery. Recipients are captured once per incident level, so later
+category or recipient changes cannot resurrect old alerts. Pre-dispatch checks
+repeat the captured Store policy generation, policy, Membership, account,
+private-chat authorization generation, Tenant/Store context, incident
+generation, and current classification.
+
+The stateless bot adds read-only `/stock` for OWNER, ADMIN, and MEMBER. The
+backend re-resolves exact current context, returns OUT then LOW items in
+eight-row pages within a 200-row window, and provides minimized item detail.
+Pagination and detail callbacks use short-lived account/chat/Tenant/Store-bound
+signed references; callback data contains no raw Tenant, Store, Membership, or
+WooCommerce item ID. No stock adjustment or other mutation exists.
+
+Migration `20260901120000_m19_inventory_low_stock` passes the complete
+13-migration chain on isolated PostgreSQL 16, and Prisma reports the database up
+to date. A representative pre-M19 Store with `LOW_STOCK` enabled backfilled to
+`UNINITIALIZED`, product page 1, variation page 1, revision 0, with zero
+inventory rows and zero deliveries. Transactional constraints reject duplicate
+Store/WooCommerce identity, cross-Tenant Store ownership, invalid stock shape,
+and duplicate incident-level recipient delivery. M19 adds no dependency and no
+new schema drift; only previously recorded name-only drift remains.
+
+Focused automated coverage includes bootstrap continuation/failure,
+product-event authentication/deduplication/routing, stock ownership and
+variation cases, stale/equal/duplicate projection, threshold boundaries/null,
+incident escalation/recovery/rearm, policy and authorization suppression,
+durable replay/ambiguity, `/stock` authorization/pagination/detail/reference
+tampering, connector reconciliation, and M8/M9/M13/M18 regressions. Prisma
+format/validate/generate, full tests, build, typecheck, lint, formatting, diff,
+and isolated database gates pass. D-025 is Accepted.
+
+M19 production migration/deployment and the controlled real-Store
+healthy→low/repeat-low/recovery/new-decline validation remain manual post-merge
+acceptance. No live Telegram delivery, real WooCommerce product webhook, or
+real `/stock` bootstrap is claimed by repository evidence.
+
 ---
 
 Infrastructure
@@ -631,7 +724,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-main
+feat/m19-inventory-low-stock
 
 ---
 
@@ -663,23 +756,25 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-M18 has no remaining implementation, deployment, or operational-validation
-blocker. Existing known issues and technical debt remain unchanged.
+M19 has no known implementation blocker. B review, merge, production migration,
+backend/bot/connector deployment, product-hook reconciliation, real `/stock`
+bootstrap, and controlled stock-transition validation remain pending. Existing
+known issues and technical debt remain unchanged.
 
 ---
 
 Next Milestone
 
-M19 — Inventory & Low-Stock MVP. No M19 implementation has started.
+No later milestone is authorized. Do not start M20.
 
 ---
 
 Last Completed
 
-M18 MVP Store Settings Foundation is fully complete and operationally validated.
-The pre-existing M8/M9 publication race fix in `892fc925` is deployed and
-production-validated, and the prior M13 deployed synthetic-notification item is
-closed as PASS through the combined M18 live validation.
+M19 Inventory & Low-Stock MVP implementation is complete on its feature branch
+with automated, build/static, connector-contract, and isolated PostgreSQL 16
+evidence. Operational acceptance remains pending and is not claimed. M18
+remains the last merged, deployed, and operationally validated milestone.
 
 ---
 
@@ -691,4 +786,4 @@ Excellent
 
 Last Updated
 
-2026-08-31
+2026-09-01

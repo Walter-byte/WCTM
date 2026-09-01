@@ -18,6 +18,8 @@ import type {
   SettingsInputStartResult,
   SettingsResult,
   SettingsSummary,
+  StockDetailResult,
+  StockListResult,
   TelegramAuthorizationStatus,
   TelegramIdentity,
 } from './internal-backend.client';
@@ -46,6 +48,7 @@ const NAVIGATION_CALLBACKS = {
   status: 'nav:status',
   help: 'nav:help',
   settings: 'nav:settings',
+  stock: 'nav:stock',
 } as const;
 
 export const BOT_COMMANDS = [
@@ -54,6 +57,7 @@ export const BOT_COMMANDS = [
   { command: 'order', description: 'Open an exact order number' },
   { command: 'status', description: 'Check account and store access' },
   { command: 'settings', description: 'View or manage store settings' },
+  { command: 'stock', description: 'Show low and out-of-stock items' },
   { command: 'help', description: 'Show available commands' },
   { command: 'unlink', description: 'Unlink this Telegram account' },
 ] as const;
@@ -204,6 +208,24 @@ export function createBot(
     }
   });
 
+  bot.command('stock', async (context) => {
+    const identity = privateIdentity(context);
+
+    if (!identity) {
+      return;
+    }
+
+    try {
+      await replyView(
+        context,
+        renderStockList(await dependencies.backend.listStock(identity))
+      );
+    } catch (error: unknown) {
+      logTransportFailure(log, identity.updateId, error);
+      await replyView(context, renderTransportFailure(error, 'stock'));
+    }
+  });
+
   bot.command('order', async (context) => {
     const identity = privateIdentity(context);
 
@@ -292,6 +314,16 @@ export function createBot(
         renderSettings(await dependencies.backend.settings(identity)),
       log,
       'settings'
+    );
+  });
+
+  bot.callbackQuery(NAVIGATION_CALLBACKS.stock, async (context) => {
+    await handleViewCallback(
+      context,
+      async (identity) =>
+        renderStockList(await dependencies.backend.listStock(identity)),
+      log,
+      'stock'
     );
   });
 
@@ -422,6 +454,62 @@ export function createBot(
         logTransportFailure(log, identity.updateId, error);
         await safeAnswerCallback(context);
         const rendered = renderTransportFailure(error, 'orders');
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      }
+    }
+  );
+
+  bot.callbackQuery(
+    /^k\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/,
+    async (context) => {
+      const identity = privateIdentity(context);
+
+      if (!identity) {
+        await safeAnswerCallback(context);
+        return;
+      }
+
+      try {
+        const rendered = renderStockList(
+          await dependencies.backend.listStock(
+            identity,
+            context.callbackQuery.data
+          )
+        );
+        await safeAnswerCallback(context);
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      } catch (error: unknown) {
+        logTransportFailure(log, identity.updateId, error);
+        await safeAnswerCallback(context);
+        const rendered = renderTransportFailure(error, 'stock');
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      }
+    }
+  );
+
+  bot.callbackQuery(
+    /^v\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/,
+    async (context) => {
+      const identity = privateIdentity(context);
+
+      if (!identity) {
+        await safeAnswerCallback(context);
+        return;
+      }
+
+      try {
+        const rendered = renderStockDetail(
+          await dependencies.backend.stockDetail(
+            identity,
+            context.callbackQuery.data
+          )
+        );
+        await safeAnswerCallback(context);
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      } catch (error: unknown) {
+        logTransportFailure(log, identity.updateId, error);
+        await safeAnswerCallback(context);
+        const rendered = renderTransportFailure(error, 'stock');
         await editOrReply(context, rendered.text, rendered.keyboard);
       }
     }
@@ -761,6 +849,7 @@ function renderHelp(): RenderedView {
       '/start — Open Home or link with a token',
       '/orders — Browse recent orders',
       '/order <number> — Open one exact order number',
+      '/stock — Show low and out-of-stock items',
       '/status — Check account and store access',
       '/settings — View or manage store settings',
       '/help — Show this command list',
@@ -770,6 +859,7 @@ function renderHelp(): RenderedView {
     ].join('\n'),
     keyboard: new InlineKeyboard()
       .text('Recent Orders', NAVIGATION_CALLBACKS.orders)
+      .text('Stock', NAVIGATION_CALLBACKS.stock)
       .row()
       .text('Home', NAVIGATION_CALLBACKS.home),
   };
@@ -928,13 +1018,14 @@ function recipientModeLabel(mode: SettingsSummary['recipientMode']): string {
 
 function renderRecoveryView(
   text: string,
-  primary: 'orders' | 'status' | 'help' | 'settings'
+  primary: 'orders' | 'status' | 'help' | 'settings' | 'stock'
 ): RenderedView {
   const labels = {
     orders: 'Refresh Recent Orders',
     status: 'Check Status',
     help: 'Help',
     settings: 'Settings',
+    stock: 'Refresh Stock',
   } as const;
 
   return {
@@ -948,7 +1039,7 @@ function renderRecoveryView(
 
 function renderTransportFailure(
   error: unknown,
-  primary: 'orders' | 'status' | 'help' | 'settings' = 'help'
+  primary: 'orders' | 'status' | 'help' | 'settings' | 'stock' = 'help'
 ): RenderedView {
   return renderRecoveryView(transportFailureMessage(error), primary);
 }
@@ -956,6 +1047,7 @@ function renderTransportFailure(
 function homeKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
     .text('Recent Orders', NAVIGATION_CALLBACKS.orders)
+    .text('Stock', NAVIGATION_CALLBACKS.stock)
     .row()
     .text('Settings', NAVIGATION_CALLBACKS.settings)
     .row()
@@ -997,6 +1089,132 @@ export function renderStatus(status: {
   }
 
   return 'Your Telegram account is linked, but no active store context is available.';
+}
+
+export function renderStockList(result: StockListResult): RenderedView {
+  if (result.state === 'SYNCING') {
+    return renderRecoveryView(
+      'Inventory is synchronizing from the current WooCommerce catalog. Try again shortly.',
+      'stock'
+    );
+  }
+
+  if (result.state === 'SYNC_FAILED') {
+    return renderRecoveryView(
+      'The previous inventory synchronization did not complete. Recovery has been queued; try again shortly.',
+      'stock'
+    );
+  }
+
+  if (result.state === 'CONTEXT_CHANGED') {
+    return renderRecoveryView(
+      'This stock view expired or the active context changed.',
+      'stock'
+    );
+  }
+
+  if (result.state === 'UNAUTHORIZED') {
+    return renderRecoveryView(
+      'This chat is not authorized to view inventory.',
+      'status'
+    );
+  }
+
+  if (result.state === 'NO_ACTIVE_STORE') {
+    return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
+  }
+
+  const keyboard = new InlineKeyboard();
+
+  for (const item of result.items) {
+    const status = item.classification === 'OUT_OF_STOCK' ? 'OUT' : 'LOW';
+    const quantity = item.quantity === null ? '' : ` • ${item.quantity}`;
+    const label = `${status} • ${item.displayName}${quantity}`;
+    keyboard
+      .text(label.length <= 64 ? label : `${label.slice(0, 61)}...`, item.ref)
+      .row();
+  }
+
+  if (result.previousCursor) {
+    keyboard.text('Previous', result.previousCursor);
+  }
+
+  if (result.nextCursor) {
+    keyboard.text('Next', result.nextCursor);
+  }
+
+  keyboard.row().text('Home', NAVIGATION_CALLBACKS.home);
+
+  return {
+    text: [
+      'Inventory',
+      '',
+      result.threshold === null
+        ? 'WCTM quantitative low-stock threshold is not configured. Explicit WooCommerce out-of-stock items still appear.'
+        : `WCTM low-stock threshold: ${result.threshold}`,
+      '',
+      ...(result.items.length === 0
+        ? ['No low-stock or out-of-stock items are currently projected.']
+        : result.items.map((item) => {
+            const status =
+              item.classification === 'OUT_OF_STOCK'
+                ? 'OUT OF STOCK'
+                : 'LOW STOCK';
+            return `${status} • ${item.displayName}${item.quantity === null ? '' : ` • qty ${item.quantity}`}`;
+          })),
+    ].join('\n'),
+    keyboard,
+  };
+}
+
+export function renderStockDetail(result: StockDetailResult): RenderedView {
+  if (result.state === 'CONTEXT_CHANGED') {
+    return renderRecoveryView(
+      'This stock item reference expired or the active context changed.',
+      'stock'
+    );
+  }
+
+  if (result.state === 'UNAUTHORIZED') {
+    return renderRecoveryView(
+      'This chat is not authorized to view inventory.',
+      'status'
+    );
+  }
+
+  if (result.state === 'NO_ACTIVE_STORE') {
+    return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
+  }
+
+  if (result.state !== 'OK' || !result.item || !result.backCursor) {
+    return renderRecoveryView(
+      'This inventory item is no longer low or out of stock.',
+      'stock'
+    );
+  }
+
+  const item = result.item;
+  const variation = item.variationContext.map(
+    (attribute) => `${attribute.name}: ${attribute.option}`
+  );
+
+  return {
+    text: [
+      item.classification === 'OUT_OF_STOCK' ? 'Out of Stock' : 'Low Stock',
+      '',
+      item.displayName,
+      ...(variation.length > 0 ? [`Variation: ${variation.join(', ')}`] : []),
+      ...(item.sku ? [`SKU: ${item.sku}`] : []),
+      `Quantity: ${item.quantity ?? 'not managed'}`,
+      `WooCommerce status: ${item.stockStatus}`,
+      `WCTM threshold: ${item.threshold ?? 'not configured'}`,
+      `Last synchronized: ${item.lastSyncedAt}`,
+    ].join('\n'),
+    keyboard: new InlineKeyboard()
+      .text('Back to Stock', result.backCursor)
+      .row()
+      .text('Home', NAVIGATION_CALLBACKS.home),
+  };
 }
 
 export function renderOrderList(result: OrderListResult): {
@@ -1501,7 +1719,7 @@ async function handleViewCallback(
   context: Context,
   render: (identity: TelegramIdentity) => Promise<RenderedView>,
   log: (record: Readonly<Record<string, unknown>>) => void,
-  recovery: 'orders' | 'status' | 'help' | 'settings' = 'help'
+  recovery: 'orders' | 'status' | 'help' | 'settings' | 'stock' = 'help'
 ): Promise<void> {
   const identity = privateIdentity(context);
 

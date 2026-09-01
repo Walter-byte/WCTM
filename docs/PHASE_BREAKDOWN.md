@@ -490,8 +490,36 @@ worker atomically claim `RECEIVED`, `QUEUED`, or expired `PROCESSING`. The fix
 is deployed and production-validated. M18 is fully complete and operationally
 validated.
 
-Next milestone: M19 — Inventory & Low-Stock MVP. No M19 implementation has
-started.
+### M19 — Inventory & Low-Stock MVP ✅ Implementation Complete / Automated Validated / Live Validation Pending
+
+- WooCommerce-authoritative, read-only Store-scoped inventory projection with
+  no catalog domain and no inventory mutation path
+- Automatic current-state bootstrap from the first `/stock` request or enabled
+  `LOW_STOCK` category; bounded 25-row product/variation queue continuations,
+  persisted restart progress, and no historical alerts
+- Existing M8 webhook path extended only for `product.created`,
+  `product.updated`, `product.deleted`, and `product.restored`; connector fresh
+  setup and Retry reconcile all eight order/inventory topics with the existing
+  endpoint and secret
+- Stock-pool ownership prevents parent/inherited-variation duplication while
+  retaining independently managed variations and explicit unmanaged
+  out-of-stock items
+- Exact M18 Store-threshold classification, durable incident generations,
+  one LOW/OUT delivery per eligible current recipient, low-to-out escalation,
+  recovery rearm, and no back-in-stock delivery
+- Stateless read-only `/stock` for OWNER/ADMIN/MEMBER, eight rows per page,
+  200-row reachability window, minimized detail, and short-lived context-bound
+  signed references
+- Migration `20260901120000_m19_inventory_low_stock`; complete chain,
+  representative pre-M19 backfill, and tenant/identity/delivery constraints
+  pass on isolated PostgreSQL 16
+- Focused bootstrap, webhook, projection, incident, recipient-policy,
+  transport, `/stock`, connector, migration, and M8/M9/M13/M18 regression
+  coverage passes; no dependency, queue, worker, scheduler, or service added
+- D-025 records the durable M19 architecture; production migration/deployment
+  and controlled real-Store stock-transition validation remain post-merge
+
+No M20 or later implementation is authorized.
 
 ## Phase 6 — SaaS Platform ⬜ Planned
 

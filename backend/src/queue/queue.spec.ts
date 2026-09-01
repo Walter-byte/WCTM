@@ -4,6 +4,8 @@ import type { Job } from 'bullmq';
 import type { StructuredLoggerService } from '../common/logging/structured-logger.service';
 import type { ApplicationConfigService } from '../config/application-config.service';
 import type { TenantContextService } from '../tenant/tenant-context.service';
+import type { InventoryBootstrapProcessor } from './inventory-bootstrap.processor';
+import type { InventoryNotificationProcessor } from './inventory-notification.processor';
 import { REFERENCE_JOB_ATTEMPTS, REFERENCE_JOB_NAME } from './queue.constants';
 import { QueueRuntimeService } from './queue-runtime.service';
 import type { OrderNotificationProcessor } from './order-notification.processor';
@@ -40,6 +42,16 @@ const notificationProcessor = (): OrderNotificationProcessor =>
   ({
     markFailed: jest.fn().mockResolvedValue(undefined as never),
   }) as unknown as OrderNotificationProcessor;
+
+const inventoryBootstrapProcessor = (): InventoryBootstrapProcessor =>
+  ({
+    markFailed: jest.fn().mockResolvedValue(undefined as never),
+  }) as unknown as InventoryBootstrapProcessor;
+
+const inventoryNotificationProcessor = (): InventoryNotificationProcessor =>
+  ({
+    markFailed: jest.fn().mockResolvedValue(undefined as never),
+  }) as unknown as InventoryNotificationProcessor;
 
 describe('M5 operations queue', () => {
   it('enqueues a reference job with tenant identity from server context', async () => {
@@ -101,6 +113,8 @@ describe('M5 operations queue', () => {
       new ReferenceProcessor(),
       webhookProcessor(),
       notificationProcessor(),
+      inventoryBootstrapProcessor(),
+      inventoryNotificationProcessor(),
       logger
     );
 
@@ -144,6 +158,8 @@ describe('M5 operations queue', () => {
       new ReferenceProcessor(),
       webhookProcessor(),
       notificationProcessor(),
+      inventoryBootstrapProcessor(),
+      inventoryNotificationProcessor(),
       { error: jest.fn() } as unknown as StructuredLoggerService
     );
 
@@ -173,6 +189,8 @@ describe('M5 operations queue', () => {
       new ReferenceProcessor(),
       webhookProcessor(),
       notificationProcessor(),
+      inventoryBootstrapProcessor(),
+      inventoryNotificationProcessor(),
       { error: jest.fn() } as unknown as StructuredLoggerService
     );
 

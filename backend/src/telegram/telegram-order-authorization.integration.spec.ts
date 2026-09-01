@@ -38,6 +38,7 @@ describe('M11 internal Telegram order authorization integration', () => {
     const controller = new TelegramInternalController(
       {} as TelegramLinkingService,
       { list } as unknown as TelegramOrderService,
+      {} as never,
       {} as never
     );
 

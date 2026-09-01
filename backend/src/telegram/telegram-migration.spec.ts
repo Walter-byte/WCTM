@@ -17,8 +17,8 @@ describe('M10 Telegram linking migration', () => {
 
   it('defines one-to-one Telegram and SaaS account identities', () => {
     expect(schema).toContain('model TelegramAccount {');
-    expect(schema).toContain('telegramUserId     BigInt');
-    expect(schema).toContain('userId             String');
+    expect(schema).toMatch(/telegramUserId\s+BigInt/);
+    expect(schema).toMatch(/userId\s+String/);
     expect(migration).toContain(
       'CREATE UNIQUE INDEX "telegram_accounts_telegram_user_id_key"'
     );

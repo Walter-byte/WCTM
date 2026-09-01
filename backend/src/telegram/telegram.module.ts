@@ -1,7 +1,9 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 
 import { EncryptionModule } from '../common/encryption/encryption.module';
+import { TelegramInventoryService } from '../inventory/telegram-inventory.service';
 import { OrdersModule } from '../orders/orders.module';
+import { QueueModule } from '../queue/queue.module';
 import { BotApiKeyGuard } from './guards/bot-api-key.guard';
 import { TelegramInternalController } from './telegram-internal.controller';
 import { TelegramDeliveryClient } from './telegram-delivery.client';
@@ -10,7 +12,7 @@ import { TelegramOrderService } from './telegram-order.service';
 import { TelegramSettingsService } from './telegram-settings.service';
 
 @Module({
-  imports: [EncryptionModule, OrdersModule],
+  imports: [EncryptionModule, OrdersModule, forwardRef(() => QueueModule)],
   controllers: [TelegramInternalController],
   providers: [
     BotApiKeyGuard,
@@ -18,12 +20,14 @@ import { TelegramSettingsService } from './telegram-settings.service';
     TelegramLinkingService,
     TelegramOrderService,
     TelegramSettingsService,
+    TelegramInventoryService,
   ],
   exports: [
     TelegramDeliveryClient,
     TelegramLinkingService,
     TelegramOrderService,
     TelegramSettingsService,
+    TelegramInventoryService,
   ],
 })
 export class TelegramModule {}

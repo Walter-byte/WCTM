@@ -65,6 +65,10 @@ describe('TelegramInternalController authentication boundaries', () => {
     expect(
       Reflect.getMetadata(IS_PUBLIC_KEY, prototype.applySettingsInput)
     ).toBe(true);
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, prototype.listStock)).toBe(true);
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, prototype.stockDetail)).toBe(
+      true
+    );
   });
 
   it('rejects a body/header update identity mismatch before service access', () => {
@@ -74,6 +78,7 @@ describe('TelegramInternalController authentication boundaries', () => {
         status,
       } as unknown as TelegramLinkingService,
       {} as TelegramOrderService,
+      {} as TelegramSettingsService,
       {} as never
     );
 
@@ -127,6 +132,7 @@ describe('TelegramInternalController authentication boundaries', () => {
     const controller = new TelegramInternalController(
       {} as TelegramLinkingService,
       { list } as unknown as TelegramOrderService,
+      {} as TelegramSettingsService,
       {} as never
     );
 
@@ -146,7 +152,8 @@ describe('TelegramInternalController authentication boundaries', () => {
     const controller = new TelegramInternalController(
       {} as TelegramLinkingService,
       {} as TelegramOrderService,
-      { summary } as unknown as TelegramSettingsService
+      { summary } as unknown as TelegramSettingsService,
+      {} as never
     );
 
     expect(() =>

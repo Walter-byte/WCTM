@@ -295,6 +295,9 @@ describe('PilotService setup and readiness', () => {
     const ensure = jest
       .spyOn(WooCommerceClient.prototype, 'ensureRequiredOrderWebhooks')
       .mockResolvedValue();
+    const ensureInventory = jest
+      .spyOn(WooCommerceClient.prototype, 'ensureRequiredInventoryWebhooks')
+      .mockResolvedValue();
     const service = serviceFor(prisma, {
       encryption,
       auth: { signAccessToken, verifyAccessToken },
@@ -318,6 +321,10 @@ describe('PilotService setup and readiness', () => {
       false
     );
     expect(ensure).toHaveBeenCalledWith(
+      'https://pilot.example.com/api/webhooks/woocommerce/whk_private_endpoint',
+      'webhook_private'
+    );
+    expect(ensureInventory).toHaveBeenCalledWith(
       'https://pilot.example.com/api/webhooks/woocommerce/whk_private_endpoint',
       'webhook_private'
     );

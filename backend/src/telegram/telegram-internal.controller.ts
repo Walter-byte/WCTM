@@ -15,6 +15,11 @@ import { Public } from '../auth/decorators/public.decorator';
 import { JoiValidationPipe } from '../common/validation/joi-validation.pipe';
 import { TenantOptional } from '../tenant/decorators/tenant-optional.decorator';
 import {
+  type TelegramStockDetailResult,
+  type TelegramStockListResult,
+  TelegramInventoryService,
+} from '../inventory/telegram-inventory.service';
+import {
   type TelegramRedeemDto,
   type TelegramOrderDetailDto,
   type TelegramOrderListDto,
@@ -28,6 +33,8 @@ import {
   type TelegramSettingsReferenceDto,
   type TelegramSettingsSummaryDto,
   type TelegramUnlinkDto,
+  type TelegramStockDetailDto,
+  type TelegramStockListDto,
   telegramOrderDetailSchema,
   telegramOrderListSchema,
   telegramOrderLookupSchema,
@@ -41,6 +48,8 @@ import {
   telegramSettingsReferenceSchema,
   telegramSettingsSummarySchema,
   telegramUnlinkSchema,
+  telegramStockDetailSchema,
+  telegramStockListSchema,
   telegramUpdateIdSchema,
 } from './dto/telegram-internal.dto';
 import { BotApiKeyGuard } from './guards/bot-api-key.guard';
@@ -75,7 +84,8 @@ export class TelegramInternalController {
   constructor(
     private readonly linking: TelegramLinkingService,
     private readonly orders: TelegramOrderService,
-    private readonly settings: TelegramSettingsService
+    private readonly settings: TelegramSettingsService,
+    private readonly inventory: TelegramInventoryService
   ) {}
 
   @Post('link-tokens')
@@ -276,6 +286,32 @@ export class TelegramInternalController {
   ): Promise<TelegramSettingsResult> {
     this.assertUpdateIdHeader(headerUpdateId);
     return this.settings.summary(input);
+  }
+
+  @Post('stock/list')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  listStock(
+    @Body(new JoiValidationPipe(telegramStockListSchema))
+    input: TelegramStockListDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramStockListResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.inventory.list(input);
+  }
+
+  @Post('stock/detail')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  stockDetail(
+    @Body(new JoiValidationPipe(telegramStockDetailSchema))
+    input: TelegramStockDetailDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramStockDetailResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.inventory.detail(input);
   }
 
   @Post('settings/action')
