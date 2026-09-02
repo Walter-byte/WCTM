@@ -2,7 +2,7 @@
 
 **Generated:** 2026-07-19
 
-**Updated:** 2026-09-02
+**Updated:** 2026-09-03
 
 **Reason:** Transitioning implementation agent from GapCode to Codex GPT
 
@@ -43,7 +43,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-025)
+## 3. Architectural Decisions (D-001–D-026)
 
 | ID    | Decision                                                                                                                                                                                             | Status   |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -72,8 +72,9 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-023 | Backend-owned durable new-order notification delivery with existing M10/M11 authorization, M11/M12 actions, deterministic M5 jobs, conservative ambiguous outcomes, and stateless bot-only transport | Accepted |
 | D-024 | Tenant-owned timezone/language, Store-owned threshold/category/recipient policy, Membership-selected recipients under M10 authority, M13-only filtering, and stateless bot settings references       | Accepted |
 | D-025 | WooCommerce-authoritative narrow inventory projection, core product-webhook updates, Store threshold policy, stock-owning item semantics, incident delivery, M18/M10 recipients, and no stock writes | Accepted |
+| D-026 | Store-scoped projection-only exact/prefix Order/inventory search and on-demand Tenant-local projected operational daily report, with no live Woo reads, analytics platform, or scheduler             | Accepted |
 
-Next decision number: **D-026**, if a future task produces a genuine
+Next decision number: **D-027**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -974,8 +975,23 @@ for PostgreSQL numeric threshold bind typing and transactional rebaseline, and
 publication race remains recorded in `892fc925`. M19 is fully complete and
 operationally validated; D-025 remains Accepted.
 
-M20 — Search & Daily Report is next. It has not been started, and no M20 or
-later implementation is authorized.
+M20 — Search & Daily Report is implementation-complete on
+`feat/m20-search-daily-report`. D-026 is Accepted. Search is projection-only,
+deterministically ranked, eight rows per page within 200 results, and uses
+encrypted context-bound short-lived references. `/report` is on-demand only,
+uses Tenant-local half-open `wc_created_at` day boundaries, separates
+processing/completed gross and AOV by currency, and reports LOW/OUT only when
+M19 inventory is READY. No live Woo read, scheduler, delivery, Customer,
+Product, report, analytics, localization, or entitlement platform was added.
+Merge/deploy and minimum real-Store validation remain.
+
+Repository validation passes: Prisma format/validate/generate; complete backend
+suite (59 suites, 418 tests); complete telegram-bot suite (53 tests); root
+format check, lint, typecheck, build, and `git diff --check`. PostgreSQL 16
+passes both the clean full migration chain and a representative pre-M20 upgrade
+with existing Order/InventoryItem rows preserved, all five M20 projection
+indexes present, and no reference backfill. No packaging file changed, so no
+M20-specific Docker image gate was required.
 
 ---
 
@@ -986,22 +1002,22 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `main`.
+Current branch: `feat/m20-search-daily-report`.
 
 ---
 
 ## 6. Current Blockers
 
-M19 has no remaining blocker or validation item. Existing known issues and
-technical debt remain unchanged.
+M20 has no known repository blocker. Merge/deploy and minimum production
+validation remain. Existing known issues and technical debt remain unchanged.
 
 ---
 
 ## 7. Current Task
 
-No implementation task is active. M20 — Search & Daily Report is next but has
-not been started. Await an approved M20 task before any implementation or
-planning work.
+M20 implementation and repository validation are complete. Await B review,
+merge, migration/deployment, and the locked minimum production validation. Do
+not start or plan M21 without a separate approved task.
 
 ---
 

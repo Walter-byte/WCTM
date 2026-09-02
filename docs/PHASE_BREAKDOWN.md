@@ -542,8 +542,26 @@ rebaseline bind typing, and `ef0957b` for signed `v.` View Stock delivery
 callbacks. The pre-existing M8/M9 publication race remains recorded separately
 in `892fc925`. M19 is fully complete and operationally validated.
 
-M20 — Search & Daily Report is next. It has not been started, and no M20 or
-later implementation is authorized.
+M20 — Search & Daily Report is implementation-complete and repository-validated
+on `feat/m20-search-daily-report`; merge, deployment, and minimum production
+validation remain.
+
+- D-026 locks projection-only Store-scoped search across current Order and
+  InventoryItem projections, with exact/prefix Order number, projected customer
+  display name, SKU, and inventory display name only.
+- Deterministic eight-row pagination is capped at 200 results. Unique exact
+  Order matches reuse M17 detail; all list/result state is short-lived, signed,
+  context-bound, and query state is encrypted. Inventory is explicitly partial
+  until M19 is READY.
+- On-demand `/report` uses Tenant-local DST-safe day boundaries over
+  `wc_created_at`, current status distribution, processing/completed gross and
+  AOV separated by currency, and READY-only current LOW/OUT counts.
+- Migration `20260903120000_m20_search_daily_report` adds narrow indexes and
+  search-reference persistence only. No live Woo report/search read, Customer,
+  Product, report snapshot, analytics, scheduler, delivery, historical import,
+  M21 localization, or M22 entitlement work was added.
+
+M21 — Notification / Localization Completion is next and has not been started.
 
 ## Phase 6 — SaaS Platform ⬜ Planned
 

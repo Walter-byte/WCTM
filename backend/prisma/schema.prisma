@@ -180,6 +180,20 @@ enum TelegramInventoryNotificationState {
   @@map("telegram_inventory_notification_state")
 }
 
+enum TelegramSearchReferencePurpose {
+  PAGE
+  RESULT
+
+  @@map("telegram_search_reference_purpose")
+}
+
+enum TelegramSearchResultKind {
+  ORDER
+  INVENTORY
+
+  @@map("telegram_search_result_kind")
+}
+
 model Tenant {
   id                          String                                  @id @map("id") @db.VarChar(64)
   name                        String                                  @map("name") @db.VarChar(255)
@@ -203,6 +217,7 @@ model Tenant {
   inventoryItems              InventoryItem[]
   inventoryNotifications      TelegramInventoryNotificationDelivery[]
   telegramInventoryReferences TelegramInventoryReference[]
+  telegramSearchReferences    TelegramSearchReference[]
 
   @@map("tenants")
 }
@@ -234,6 +249,7 @@ model Membership {
   user                           User                         @relation(fields: [userId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   selectedNotificationRecipients StoreNotificationRecipient[]
   telegramSettingsReferences     TelegramSettingsReference[]
+  telegramSearchReferences       TelegramSearchReference[]
 
   @@unique([tenantId, userId])
   @@unique([id, tenantId])
@@ -290,6 +306,7 @@ model Store {
   inventoryItems                          InventoryItem[]
   telegramInventoryReferences             TelegramInventoryReference[]
   telegramInventoryNotificationDeliveries TelegramInventoryNotificationDelivery[]
+  telegramSearchReferences                TelegramSearchReference[]
 
   @@unique([tenantId, baseUrl])
   @@unique([id, tenantId])
@@ -396,6 +413,7 @@ model TelegramAccount {
   inventoryNotifications TelegramInventoryNotificationDelivery[]
   inventoryReferences    TelegramInventoryReference[]
   settingsReferences     TelegramSettingsReference[]
+  searchReferences       TelegramSearchReference[]
 
   @@index([userId])
   @@map("telegram_accounts")
@@ -665,6 +683,36 @@ model TelegramInventoryReference {
   @@index([tenantId, storeId])
   @@index([expiresAt])
   @@map("telegram_inventory_references")
+}
+
+model TelegramSearchReference {
+  id                    String                         @id @map("id") @db.VarChar(64)
+  telegramAccountId     String                         @map("telegram_account_id") @db.VarChar(64)
+  telegramChatId        BigInt                         @map("telegram_chat_id")
+  tenantId              String                         @map("tenant_id") @db.VarChar(64)
+  membershipId          String                         @map("membership_id") @db.VarChar(64)
+  storeId               String                         @map("store_id") @db.VarChar(64)
+  purpose               TelegramSearchReferencePurpose @map("purpose")
+  queryEncrypted        String?                        @map("query_encrypted") @db.Text
+  pageOffset            Int?                           @map("page_offset")
+  resultKind            TelegramSearchResultKind?      @map("result_kind")
+  targetWcOrderId       String?                        @map("target_wc_order_id") @db.VarChar(32)
+  targetInventoryItemId String?                        @map("target_inventory_item_id") @db.VarChar(64)
+  backReferenceId       String?                        @map("back_reference_id") @db.VarChar(64)
+  expiresAt             DateTime                       @map("expires_at") @db.Timestamptz(3)
+  createdAt             DateTime                       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt             DateTime                       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  telegramAccount       TelegramAccount                @relation(fields: [telegramAccountId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  tenant                Tenant                         @relation(fields: [tenantId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  membership            Membership                     @relation(fields: [membershipId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Cascade)
+  store                 Store                          @relation(fields: [storeId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([telegramAccountId])
+  @@index([telegramChatId])
+  @@index([tenantId, storeId])
+  @@index([membershipId])
+  @@index([expiresAt])
+  @@map("telegram_search_references")
 }
 
 model TelegramInventoryNotificationDelivery {

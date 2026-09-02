@@ -35,6 +35,9 @@ import {
   type TelegramUnlinkDto,
   type TelegramStockDetailDto,
   type TelegramStockListDto,
+  type TelegramSearchDto,
+  type TelegramSearchSelectDto,
+  type TelegramDailyReportDto,
   telegramOrderDetailSchema,
   telegramOrderListSchema,
   telegramOrderLookupSchema,
@@ -50,6 +53,9 @@ import {
   telegramUnlinkSchema,
   telegramStockDetailSchema,
   telegramStockListSchema,
+  telegramSearchSchema,
+  telegramSearchSelectSchema,
+  telegramDailyReportSchema,
   telegramUpdateIdSchema,
 } from './dto/telegram-internal.dto';
 import { BotApiKeyGuard } from './guards/bot-api-key.guard';
@@ -78,6 +84,12 @@ import {
   type TelegramSettingsResult,
   TelegramSettingsService,
 } from './telegram-settings.service';
+import {
+  type TelegramDailyReportResult,
+  type TelegramSearchResult,
+  type TelegramSearchSelectionResult,
+  TelegramSearchReportService,
+} from './telegram-search-report.service';
 
 @Controller('internal/telegram')
 export class TelegramInternalController {
@@ -85,7 +97,8 @@ export class TelegramInternalController {
     private readonly linking: TelegramLinkingService,
     private readonly orders: TelegramOrderService,
     private readonly settings: TelegramSettingsService,
-    private readonly inventory: TelegramInventoryService
+    private readonly inventory: TelegramInventoryService,
+    private readonly searchReport: TelegramSearchReportService
   ) {}
 
   @Post('link-tokens')
@@ -312,6 +325,44 @@ export class TelegramInternalController {
   ): Promise<TelegramStockDetailResult> {
     this.assertUpdateIdHeader(headerUpdateId);
     return this.inventory.detail(input);
+  }
+
+  @Post('search')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  search(
+    @Body(new JoiValidationPipe(telegramSearchSchema)) input: TelegramSearchDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramSearchResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.searchReport.search(input);
+  }
+
+  @Post('search/select')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  selectSearchResult(
+    @Body(new JoiValidationPipe(telegramSearchSelectSchema))
+    input: TelegramSearchSelectDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramSearchSelectionResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.searchReport.select(input);
+  }
+
+  @Post('report')
+  @Public()
+  @UseGuards(BotApiKeyGuard)
+  @HttpCode(HttpStatus.OK)
+  dailyReport(
+    @Body(new JoiValidationPipe(telegramDailyReportSchema))
+    input: TelegramDailyReportDto,
+    @Headers('x-telegram-update-id') headerUpdateId?: string
+  ): Promise<TelegramDailyReportResult> {
+    this.assertUpdateIdHeader(headerUpdateId);
+    return this.searchReport.report(input);
   }
 
   @Post('settings/action')

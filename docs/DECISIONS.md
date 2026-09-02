@@ -843,4 +843,60 @@ Accepted.
 
 ---
 
-Next decision number: D-026.
+## D-026
+
+Date
+
+2026-09-03
+
+Decision
+
+M20 Search & Daily Report is Store-scoped and projection-only. Search reads
+current non-deleted Order projections and current active InventoryItem
+projections. It supports deterministic exact/prefix matching over Order number,
+projected customer display name, Inventory SKU, and Inventory display name.
+There is no email/phone search, standalone Customer entity, generic Product
+catalog, fuzzy/semantic search, or live WooCommerce search.
+
+Ranking is fixed: unique exact Order number opens the existing M11/M17 native
+detail; otherwise exact Order number, exact SKU, exact customer/inventory name,
+identifier prefix, then name prefix are ordered deterministically, with Order
+before Inventory at an equal rank and stable per-entity tie-breakers. Results
+use eight-row pages within a 200-result window. Short-lived signed references
+bind the Telegram account, private chat, active Membership, Tenant, Store,
+purpose, and page/result state. Normalized query state is encrypted at rest;
+callback data contains no query or protected identity.
+
+`/report` is an on-demand Telegram projected operational daily summary only.
+Tenant timezone defines the local civil day; its start and next-day start are
+converted to UTC and applied to `Order.wc_created_at` as a half-open interval.
+Orders-created-today and current status distribution exclude remotely deleted
+Orders. Gross operational sales and per-currency average order value include
+only current `processing` and `completed` Orders, never combine currencies, and
+are not accounting/net revenue. LOW/OUT counts use the current M19 projection
+only when inventory is `READY`; otherwise the report states that inventory is
+unavailable. Delayed Order projection state is surfaced conservatively.
+
+Reason
+
+Existing Order, InventoryItem, timezone, authorization, signed-reference, and
+navigation foundations are sufficient for bounded read-only operational search
+and reporting. Reusing them preserves M1-M19 authority and security boundaries
+without a search platform, analytics model, scheduler, historical import, or
+new WooCommerce read path.
+
+Boundary
+
+M20 adds no live WooCommerce search/report read, Customer/Product/report model,
+report persistence, scheduled delivery, notification category, historical
+import, analytics platform, M21 localization, M22 entitlements, or mutation.
+Existing M1-M19 authority, security, projection, queue, delivery, and Store
+state boundaries remain unchanged.
+
+Status
+
+Accepted.
+
+---
+
+Next decision number: D-027.

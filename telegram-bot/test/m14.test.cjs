@@ -52,6 +52,8 @@ test('Home, Recent Orders, order detail, and Back reuse existing stateless endpo
   assert.deepEqual(callbacks(home), [
     'nav:orders',
     'nav:stock',
+    'nav:search',
+    'nav:report',
     'nav:settings',
     'nav:status',
     'nav:help',
@@ -230,20 +232,24 @@ test('/help and command discovery list existing functionality only', async () =>
       'orders',
       'order',
       'status',
-      'settings',
-      'stock',
-      'help',
-      'unlink',
+    'settings',
+    'stock',
+    'search',
+    'report',
+    'help',
+    'unlink',
     ]
   );
   const message = apiCalls.find((call) => call.method === 'sendMessage');
   for (const command of BOT_COMMANDS) {
     assert.match(message.payload.text, new RegExp(`/${command.command}`));
   }
-  assert.doesNotMatch(message.payload.text, /search|analytics|billing/i);
+  assert.doesNotMatch(message.payload.text, /analytics|billing/i);
   assert.deepEqual(callbacks(message), [
     'nav:orders',
     'nav:stock',
+    'nav:search',
+    'nav:report',
     'nav:home',
   ]);
 });
@@ -266,6 +272,8 @@ test('M14 navigation edit failures fall back to one reply with the same actions'
   assert.deepEqual(callbacks(reply), [
     'nav:orders',
     'nav:stock',
+    'nav:search',
+    'nav:report',
     'nav:settings',
     'nav:status',
     'nav:help',

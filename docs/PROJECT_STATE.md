@@ -6,8 +6,11 @@ Version: 1.0
 
 Current Phase
 
-Phase 5 — Core Store Management (MVP) is in progress. M19 Inventory & Low-Stock
-MVP is implemented, merged, deployed, and fully operationally validated. Its
+Phase 5 — Core Store Management (MVP) is in progress. M20 Search & Daily Report
+is implemented and repository-validated on `feat/m20-search-daily-report`;
+merge, deployment, and minimum production validation remain. M19 Inventory &
+Low-Stock MVP is implemented, merged, deployed, and fully operationally
+validated. Its
 production migrations, backend, telegram-bot, updated connector, eight
 canonical WooCommerce webhooks, health/readiness, bootstrap, projection,
 `/stock`, threshold behavior, LOW/OUT incident lifecycle, M18/M10 recipient
@@ -18,8 +21,9 @@ Phase 4 and M1–M16 remain complete and unchanged.
 
 Current Task
 
-No implementation task is active. M20 Search & Daily Report is next but has not
-been started; no M20 or later implementation is authorized.
+M20 Search & Daily Report implementation is complete. It awaits B review,
+merge, migration/deployment, and the locked minimum production validation. M21
+has not been started and is not authorized by this task.
 
 ---
 
@@ -31,7 +35,7 @@ Project Version
 
 Repository
 
-Current branch: `main`.
+Current branch: `feat/m20-search-daily-report`.
 
 M19 implementation commits `2143de4 feat(inventory): add low-stock MVP` and
 `047b306 fix(inventory): harden delivery recipient identity` were merged to
@@ -788,22 +792,24 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-M19 has no remaining blocker or validation item. Existing known issues and
-technical debt remain unchanged.
+M20 has no known repository blocker. Merge/deploy and the minimum real-Store
+search/report validation remain operational acceptance work. Existing known
+issues and technical debt remain unchanged.
 
 ---
 
 Next Milestone
 
-M20 — Search & Daily Report. It has not been started and is not yet authorized
-for implementation.
+M21 — Notification / Localization Completion. It has not been started; this M20
+task neither plans nor authorizes M21 implementation.
 
 ---
 
 Last Completed
 
-M19 Inventory & Low-Stock MVP is fully complete, merged, deployed, and
-operationally validated. All repository and production acceptance items passed.
+M20 Search & Daily Report is implementation-complete and repository-validated.
+Operational closure remains pending its post-merge minimum production
+validation. M19 remains the latest fully operationally validated milestone.
 
 ---
 
@@ -815,4 +821,39 @@ Excellent
 
 Last Updated
 
-2026-09-02
+2026-09-03
+
+---
+
+M20 Implementation State
+
+- D-026 is Accepted. `/search <query>` reads only current Store Order and READY
+  InventoryItem projections for exact/prefix Order number, projected customer
+  display name, SKU, and inventory display name. Email, phone, standalone
+  Customer search, live Woo reads, fuzzy/semantic search, and generic catalog
+  behavior are absent.
+- Search uses deterministic ranking and stable tie-breakers, eight rows per
+  page, a 200-result reachability cap, encrypted short-lived query state, and
+  signed result/page references bound to current account, private chat,
+  Membership, Tenant, and Store. Exact unique Order numbers reuse native M17
+  detail/actions; inventory results reuse minimized M19 detail and may include
+  HEALTHY items. Non-READY inventory produces an explicit partial-search state.
+- On-demand `/report` computes the Tenant-local civil day with DST-safe IANA
+  timezone conversion and queries `wc_created_at` by UTC half-open boundaries.
+  It reports Orders created today, current status distribution, processing plus
+  completed gross operational sales and AOV separated by exact currency, and
+  current LOW/OUT counts only when inventory is READY. It surfaces delayed
+  projection state and makes no accounting-completeness claim.
+- Migration `20260903120000_m20_search_daily_report` adds only bounded
+  projection-search/report indexes and privacy-protected short-lived search
+  references. It adds no Customer, Product, report, analytics, scheduler,
+  delivery, or snapshot model and performs no behavioral backfill.
+- Focused backend/Telegram tests cover exact and ambiguous Order behavior,
+  short-query handling, encrypted reference state, currency/status revenue
+  semantics, inventory readiness, UTC/non-UTC/DST day boundaries, privacy, and
+  Telegram rendering. Full repository gates are recorded at handoff.
+- Production acceptance remains: apply the M20 migration, deploy backend and
+  telegram-bot, pass health/readiness, validate known/absent search cases and
+  signed details, compare `/report` with projected real-Store data for the same
+  local day, confirm separate currencies and no automatic delivery, and observe
+  no regression in existing `/order`, `/stock`, and notification paths.

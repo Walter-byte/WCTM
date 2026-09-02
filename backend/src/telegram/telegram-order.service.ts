@@ -733,6 +733,67 @@ export class TelegramOrderService {
     });
   }
 
+  async openProjectedDetail(input: {
+    telegram: TelegramOrderIdentityDto;
+    wcOrderId: string;
+  }): Promise<TelegramOrderDetailResult> {
+    const resolution = await this.resolveContext(input.telegram);
+
+    if (resolution.state !== 'OK') {
+      return this.emptyDetail(resolution.state);
+    }
+
+    const context = resolution.context;
+    const order = await this.prisma.order.findFirst({
+      where: {
+        tenantId: context.tenantId,
+        storeId: context.storeId,
+        wcOrderId: input.wcOrderId,
+        remoteDeletedAt: null,
+        tenant: { deletedAt: null },
+        store: { deletedAt: null, status: StoreStatus.ACTIVE },
+      },
+      select: { wcOrderId: true },
+    });
+
+    if (!order) {
+      return this.emptyDetail('NOT_FOUND');
+    }
+
+    const expiresAt = new Date(
+      Date.now() + this.configuration.telegram.callbackRefTtlSeconds * 1000
+    );
+    const listReference = this.newReference(
+      'p',
+      context,
+      {
+        purpose: TelegramCallbackPurpose.LIST_PAGE,
+        direction: TelegramCallbackDirection.CURRENT,
+        reachableOffset: 0,
+      },
+      expiresAt
+    );
+    const detailReference = this.newReference(
+      'd',
+      context,
+      {
+        purpose: TelegramCallbackPurpose.ORDER_DETAIL,
+        targetWcOrderId: order.wcOrderId,
+        backReferenceId: listReference.data.id,
+      },
+      expiresAt
+    );
+
+    await this.prisma.telegramCallbackReference.createMany({
+      data: [listReference.data, detailReference.data],
+    });
+
+    return this.detail({
+      telegram: input.telegram,
+      ref: detailReference.token,
+    });
+  }
+
   async refresh(
     input: TelegramOrderDetailDto
   ): Promise<TelegramOrderRefreshResult> {

@@ -236,7 +236,7 @@ export interface StockSummary {
   sku: string | null;
   quantity: string | null;
   stockStatus: string;
-  classification: 'LOW_STOCK' | 'OUT_OF_STOCK';
+  classification: 'HEALTHY' | 'LOW_STOCK' | 'OUT_OF_STOCK';
   kind: 'PRODUCT' | 'VARIATION';
 }
 
@@ -266,6 +266,75 @@ export interface StockDetailResult {
   item?: StockDetailPayload;
   backCursor?: string;
 }
+
+export interface SearchRow {
+  ref: string;
+  kind: 'ORDER' | 'INVENTORY';
+  status: string;
+  orderNumber?: string;
+  customerDisplayName?: string;
+  currency?: string;
+  total?: string;
+  displayName?: string;
+  sku?: string | null;
+  quantity?: string | null;
+  classification?: 'HEALTHY' | 'LOW_STOCK' | 'OUT_OF_STOCK';
+}
+
+export type SearchResult =
+  | {
+      state:
+        | 'INVALID_QUERY'
+        | 'QUERY_TOO_SHORT'
+        | 'UNAUTHORIZED'
+        | 'NO_ACTIVE_STORE'
+        | 'CONTEXT_CHANGED';
+    }
+  | { state: 'ORDER_DETAIL'; detail: OrderDetailResult }
+  | {
+      state: 'OK';
+      results: SearchRow[];
+      nextCursor: string | null;
+      previousCursor: string | null;
+      inventoryState: string;
+    };
+
+export type SearchSelectionResult =
+  | {
+      state:
+        | 'UNAUTHORIZED'
+        | 'NO_ACTIVE_STORE'
+        | 'CONTEXT_CHANGED'
+        | 'NOT_FOUND'
+        | 'SYNCING';
+    }
+  | { state: 'ORDER'; detail: OrderDetailResult; backCursor: string }
+  | {
+      state: 'INVENTORY';
+      detail: { state: 'OK'; item: StockDetailPayload };
+      backCursor: string;
+    };
+
+export type DailyReportResult =
+  | { state: 'UNAUTHORIZED' | 'NO_ACTIVE_STORE' }
+  | {
+      state: 'OK';
+      localDate: string;
+      timezone: string;
+      ordersToday: number;
+      statuses: Array<{ status: string; count: number }>;
+      sales: Array<{
+        currency: string;
+        gross: string;
+        averageOrderValue: string;
+        orderCount: number;
+      }>;
+      omittedRevenueOrders: number;
+      inventory:
+        | { state: 'READY'; lowStock: number; outOfStock: number }
+        | { state: 'UNAVAILABLE'; syncState: string };
+      projection: { asOf: string | null; delayed: boolean };
+    };
 
 export class BackendUnavailableError extends Error {
   constructor() {
@@ -545,6 +614,44 @@ export class InternalBackendClient {
     return parseStockDetailResult(value);
   }
 
+  async search(
+    identity: TelegramIdentity,
+    queryOrCursor: { query: string } | { cursor: string }
+  ): Promise<SearchResult> {
+    const value = await this.post<unknown>('search', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+      ...queryOrCursor,
+    });
+    return parseSearchResult(value);
+  }
+
+  async selectSearchResult(
+    identity: TelegramIdentity,
+    ref: string
+  ): Promise<SearchSelectionResult> {
+    const value = await this.post<unknown>('search/select', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+      ref,
+    });
+    return parseSearchSelectionResult(value);
+  }
+
+  async report(identity: TelegramIdentity): Promise<DailyReportResult> {
+    const value = await this.post<unknown>('report', identity, {
+      telegram: {
+        userId: identity.telegramUserId,
+        chatId: identity.telegramChatId,
+      },
+    });
+    return parseDailyReportResult(value);
+  }
+
   async applySettingsAction(
     identity: TelegramIdentity,
     ref: string
@@ -802,7 +909,8 @@ function parseStockSummary(value: unknown): StockSummary {
     !(record['sku'] === null || isString(record['sku'])) ||
     !(record['quantity'] === null || isString(record['quantity'])) ||
     !isString(record['stockStatus']) ||
-    (record['classification'] !== 'LOW_STOCK' &&
+    (record['classification'] !== 'HEALTHY' &&
+      record['classification'] !== 'LOW_STOCK' &&
       record['classification'] !== 'OUT_OF_STOCK') ||
     (record['kind'] !== 'PRODUCT' && record['kind'] !== 'VARIATION')
   ) {
@@ -812,7 +920,7 @@ function parseStockSummary(value: unknown): StockSummary {
   return record as unknown as StockSummary;
 }
 
-function isNullableReference(value: unknown, prefix: 'k' | 'v'): boolean {
+function isNullableReference(value: unknown, prefix: 'k' | 'v' | 'q'): boolean {
   return value === null || isCallbackReference(value, prefix);
 }
 
@@ -825,6 +933,167 @@ function isNullableThreshold(value: unknown): boolean {
 
 function referenceFixture(prefix: 'k' | 'v'): string {
   return `${prefix}.AAAAAAAAAAAAAAAA.AAAAAAAAAAAAAAAA`;
+}
+
+function parseSearchResult(value: unknown): SearchResult {
+  const record = requireRecord(value);
+  const state = String(record['state']) as SearchResult['state'];
+  const simpleStates = new Set([
+    'INVALID_QUERY',
+    'QUERY_TOO_SHORT',
+    'UNAUTHORIZED',
+    'NO_ACTIVE_STORE',
+    'CONTEXT_CHANGED',
+  ]);
+
+  if (simpleStates.has(state)) {
+    return { state } as SearchResult;
+  }
+
+  if (state === 'ORDER_DETAIL') {
+    return { state, detail: parseOrderDetailResult(record['detail']) };
+  }
+
+  if (
+    state !== 'OK' ||
+    !Array.isArray(record['results']) ||
+    !isNullableReference(record['nextCursor'], 'q') ||
+    !isNullableReference(record['previousCursor'], 'q') ||
+    !isString(record['inventoryState'])
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return {
+    state,
+    results: record['results'].map(parseSearchRow),
+    nextCursor: record['nextCursor'] as string | null,
+    previousCursor: record['previousCursor'] as string | null,
+    inventoryState: record['inventoryState'],
+  };
+}
+
+function parseSearchRow(value: unknown): SearchRow {
+  const record = requireRecord(value);
+
+  if (
+    !isCallbackReference(record['ref'], 'u') ||
+    (record['kind'] !== 'ORDER' && record['kind'] !== 'INVENTORY') ||
+    !isString(record['status'])
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  if (
+    record['kind'] === 'ORDER' &&
+    (!isString(record['orderNumber']) ||
+      !isString(record['customerDisplayName']) ||
+      !isString(record['currency']) ||
+      !isString(record['total']))
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  if (
+    record['kind'] === 'INVENTORY' &&
+    (!isString(record['displayName']) ||
+      !(record['sku'] === null || isString(record['sku'])) ||
+      !(record['quantity'] === null || isString(record['quantity'])) ||
+      !['HEALTHY', 'LOW_STOCK', 'OUT_OF_STOCK'].includes(
+        String(record['classification'])
+      ))
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return record as unknown as SearchRow;
+}
+
+function parseSearchSelectionResult(value: unknown): SearchSelectionResult {
+  const record = requireRecord(value);
+  const state = String(record['state']) as SearchSelectionResult['state'];
+
+  if (
+    [
+      'UNAUTHORIZED',
+      'NO_ACTIVE_STORE',
+      'CONTEXT_CHANGED',
+      'NOT_FOUND',
+      'SYNCING',
+    ].includes(state)
+  ) {
+    return { state } as SearchSelectionResult;
+  }
+
+  if (!isCallbackReference(record['backCursor'], 'q')) {
+    throw new MalformedBackendResponseError();
+  }
+
+  if (state === 'ORDER') {
+    return {
+      state,
+      detail: parseOrderDetailResult(record['detail']),
+      backCursor: record['backCursor'],
+    };
+  }
+
+  if (state === 'INVENTORY') {
+    const detail = requireRecord(record['detail']);
+    const item = requireRecord(detail['item']);
+    const parsed = parseStockSummary({ ...item, ref: referenceFixture('v') });
+    const variationContext = item['variationContext'];
+
+    if (
+      detail['state'] !== 'OK' ||
+      !Array.isArray(variationContext) ||
+      !isNullableThreshold(item['threshold']) ||
+      !isIsoDate(item['lastSyncedAt'])
+    ) {
+      throw new MalformedBackendResponseError();
+    }
+
+    return {
+      state,
+      backCursor: record['backCursor'],
+      detail: {
+        state: 'OK',
+        item: {
+          ...parsed,
+          variationContext: variationContext as Array<{
+            name: string;
+            option: string;
+          }>,
+          threshold: item['threshold'] as number | null,
+          lastSyncedAt: item['lastSyncedAt'] as string,
+        },
+      },
+    };
+  }
+
+  throw new MalformedBackendResponseError();
+}
+
+function parseDailyReportResult(value: unknown): DailyReportResult {
+  const record = requireRecord(value);
+  const state = String(record['state']);
+
+  if (state === 'UNAUTHORIZED' || state === 'NO_ACTIVE_STORE') {
+    return { state };
+  }
+
+  if (
+    state !== 'OK' ||
+    !isString(record['localDate']) ||
+    !isString(record['timezone']) ||
+    !isSafeCount(record['ordersToday']) ||
+    !Array.isArray(record['statuses']) ||
+    !Array.isArray(record['sales']) ||
+    !isSafeCount(record['omittedRevenueOrders'])
+  ) {
+    throw new MalformedBackendResponseError();
+  }
+
+  return record as unknown as DailyReportResult;
 }
 
 function parseSettingsInputStartResult(
@@ -1377,7 +1646,7 @@ function isNullableCallbackReference(value: unknown): boolean {
 
 function isCallbackReference(
   value: unknown,
-  prefix: 'p' | 'd' | 's' | 'i' | 'c' | 'g' | 'k' | 'v' = 'p'
+  prefix: 'p' | 'd' | 's' | 'i' | 'c' | 'g' | 'k' | 'v' | 'q' | 'u' = 'p'
 ): value is string {
   return (
     typeof value === 'string' &&
