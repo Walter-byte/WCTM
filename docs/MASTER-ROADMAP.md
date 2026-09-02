@@ -234,12 +234,6 @@ M16 completion evidence:
 M10 through M16 are complete and merged to `main`; D-023 remains Accepted. No
 new architectural or product decision was required for Phase 4 closure.
 
-Next operator action:
-
-- The separate M13 deployed synthetic-notification validation item passed
-  through the combined M18 live validation
-- Await the approved M19 implementation task; no M19 implementation has started
-
 Exit Criteria
 
 ✅ Met on 2026-08-30: the manager can control the Store from Telegram through
@@ -256,10 +250,11 @@ Completed milestones:
 
 - M17 — Order Workflow Completion
 - M18 — MVP Store Settings Foundation, fully operationally validated
+- M19 — Inventory & Low-Stock MVP, fully operationally validated
 
 Next milestone:
 
-- M19 — Inventory & Low-Stock MVP; not started
+- M20 — Search & Daily Report; not started
 
 Modules
 

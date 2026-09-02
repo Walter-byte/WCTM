@@ -7,23 +7,19 @@ Version: 1.0
 Current Phase
 
 Phase 5 — Core Store Management (MVP) is in progress. M19 Inventory & Low-Stock
-MVP implementation is complete on its feature branch and passes automated,
-build, static, connector-contract, and isolated PostgreSQL 16 validation. M19
-has not yet been reviewed, merged, deployed, or validated against the real test
-Store. M18 MVP Store Settings Foundation remains fully complete and
-operationally validated. Its migration,
-backend plus telegram-bot deployment, health, readiness, settings persistence,
-timezone persistence, and enabled/disabled/re-enabled `ORDER_CREATED` delivery
-behavior passed in production. The pre-existing M8/M9 publication race found
-during validation was fixed, deployed, and production-validated in `892fc925`.
-M17 is fully closed. Phase 4 and M1–M16 remain complete and unchanged.
+MVP is implemented, merged, deployed, and fully operationally validated. Its
+production migrations, backend, telegram-bot, updated connector, eight
+canonical WooCommerce webhooks, health/readiness, bootstrap, projection,
+`/stock`, threshold behavior, LOW/OUT incident lifecycle, M18/M10 recipient
+integration, and durable delivery all passed. M18 and M17 remain fully closed.
+Phase 4 and M1–M16 remain complete and unchanged.
 
 ---
 
 Current Task
 
-M19 implementation, evidence, documentation, and commit closure are the active
-approved task. No M20 or later work is authorized.
+No implementation task is active. M20 Search & Daily Report is next but has not
+been started; no M20 or later implementation is authorized.
 
 ---
 
@@ -35,10 +31,16 @@ Project Version
 
 Repository
 
-Current branch: `feat/m19-inventory-low-stock`.
+Current branch: `main`.
 
-M19 implementation commit: `feat(inventory): add low-stock MVP` on the current
-feature branch.
+M19 implementation commits `2143de4 feat(inventory): add low-stock MVP` and
+`047b306 fix(inventory): harden delivery recipient identity` were merged to
+`main` in `74ac6bd merge: complete M19 inventory low-stock MVP`.
+
+M19 production correction commits: `8f13fd3 fix(inventory): accept unset
+managed stock quantity`, `00f4f4c fix(inventory): tolerate missing display
+names`, `242d72a fix(settings): repair inventory threshold rebaseline`, and
+`ef0957b fix(inventory): allow stock notification callbacks`.
 
 M18 implementation commit: `ef677f0 feat(settings): add MVP store settings
 foundation`. The final adversarial-audit hardening is committed separately on
@@ -683,9 +685,39 @@ format/validate/generate, full tests, build, typecheck, lint, formatting, diff,
 and isolated database gates pass. D-025 is Accepted.
 
 M19 production migration/deployment and the controlled real-Store
-healthy→low/repeat-low/recovery/new-decline validation remain manual post-merge
-acceptance. No live Telegram delivery, real WooCommerce product webhook, or
-real `/stock` bootstrap is claimed by repository evidence.
+validation passed. Migration `20260901120000_m19_inventory_low_stock` and
+corrective migration `20260901190000_m19_nullable_managed_stock_quantity` were
+applied successfully. Backend, telegram-bot, and updated connector deployments
+passed, as did native PHP lint, connector Retry/reconciliation, `/api/health`,
+`/api/health/readiness`, onboarding connection health, and exactly eight active
+canonical webhooks: the four order topics plus `product.created`,
+`product.updated`, `product.deleted`, and `product.restored`.
+
+The first `/stock` triggered the bounded current-state bootstrap and the Store
+reached `READY` without historical LOW/OUT notifications. `/stock`, signed item
+buttons/detail, current LOW/OUT projection, explicit out-of-stock with a null
+WCTM threshold, valid managed-stock/null-quantity input, and display fallback to
+`Unnamed variation` all passed against the production Store.
+
+With threshold 5, `LOW_STOCK` and `ORDER_CREATED` enabled,
+`ALL_ELIGIBLE`, and the authorized manager eligible, the controlled lifecycle
+passed: 10→5 projected LOW and delivered exactly one LOW notification; 5→4 did
+not duplicate; 4→0 projected OUT and delivered exactly one OUT escalation; 0→9
+rearmed without a back-in-stock notification; and 9→0 created a new incident
+with exactly one new OUT notification. OUT deliveries for incident generations
+4 and 5 are `DELIVERED`, with immediate completed attempts. Older pre-hotfix
+`bot-request-rejected` rows remain terminal and were not blindly replayed.
+
+Material M19 production corrections are `8f13fd3` plus corrective migration
+`20260901190000_m19_nullable_managed_stock_quantity` for managed-null stock,
+`00f4f4c` for safe Woo name→SKU→unnamed display fallback without weakening Woo
+identity, `242d72a` for PostgreSQL numeric threshold bind typing with
+transactional rollback; the null→5 threshold then persisted with the Store
+remaining `READY` and no retroactive notification. `ef0957b` permits signed
+`v.` View Stock callbacks on the private delivery endpoint. The
+pre-existing M8/M9 publication race fixed in `892fc925` remains recorded
+separately. M19 is fully complete and operationally validated; D-025 remains
+Accepted.
 
 ---
 
@@ -724,7 +756,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-feat/m19-inventory-low-stock
+main
 
 ---
 
@@ -756,25 +788,22 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-M19 has no known implementation blocker. B review, merge, production migration,
-backend/bot/connector deployment, product-hook reconciliation, real `/stock`
-bootstrap, and controlled stock-transition validation remain pending. Existing
-known issues and technical debt remain unchanged.
+M19 has no remaining blocker or validation item. Existing known issues and
+technical debt remain unchanged.
 
 ---
 
 Next Milestone
 
-No later milestone is authorized. Do not start M20.
+M20 — Search & Daily Report. It has not been started and is not yet authorized
+for implementation.
 
 ---
 
 Last Completed
 
-M19 Inventory & Low-Stock MVP implementation is complete on its feature branch
-with automated, build/static, connector-contract, and isolated PostgreSQL 16
-evidence. Operational acceptance remains pending and is not claimed. M18
-remains the last merged, deployed, and operationally validated milestone.
+M19 Inventory & Low-Stock MVP is fully complete, merged, deployed, and
+operationally validated. All repository and production acceptance items passed.
 
 ---
 
@@ -786,4 +815,4 @@ Excellent
 
 Last Updated
 
-2026-09-01
+2026-09-02

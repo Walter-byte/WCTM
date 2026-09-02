@@ -490,7 +490,7 @@ worker atomically claim `RECEIVED`, `QUEUED`, or expired `PROCESSING`. The fix
 is deployed and production-validated. M18 is fully complete and operationally
 validated.
 
-### M19 — Inventory & Low-Stock MVP ✅ Implementation Complete / Automated Validated / Live Validation Pending
+### M19 — Inventory & Low-Stock MVP ✅ Complete / Merged / Operationally Validated
 
 - WooCommerce-authoritative, read-only Store-scoped inventory projection with
   no catalog domain and no inventory mutation path
@@ -513,13 +513,37 @@ validated.
 - Migration `20260901120000_m19_inventory_low_stock`; complete chain,
   representative pre-M19 backfill, and tenant/identity/delivery constraints
   pass on isolated PostgreSQL 16
+- Corrective migration
+  `20260901190000_m19_nullable_managed_stock_quantity` accepts WooCommerce's
+  valid managed-stock/null-quantity state without allowing unmanaged numeric
+  quantity
 - Focused bootstrap, webhook, projection, incident, recipient-policy,
   transport, `/stock`, connector, migration, and M8/M9/M13/M18 regression
   coverage passes; no dependency, queue, worker, scheduler, or service added
-- D-025 records the durable M19 architecture; production migration/deployment
-  and controlled real-Store stock-transition validation remain post-merge
+- D-025 records the durable M19 architecture and remains Accepted
 
-No M20 or later implementation is authorized.
+Production migrations, backend, telegram-bot, and updated connector deployment
+passed. Native PHP lint, connector Retry/reconciliation, `/api/health`,
+`/api/health/readiness`, onboarding connection health, and exactly eight active
+canonical order/product webhooks passed. First `/stock` completed the bounded
+bootstrap to `READY` without historical notifications; current low/out items,
+signed item detail, managed-null quantity, and the `Unnamed variation` display
+fallback passed on the real Store.
+
+Controlled validation passed healthy 10→LOW 5 with exactly one LOW delivery,
+repeat LOW 5→4 without duplication, LOW 4→OUT 0 with exactly one OUT escalation,
+recovery 0→9 without a back-in-stock delivery, and a new 9→0 incident with
+exactly one new OUT delivery. Incident generations 4 and 5 are `DELIVERED`;
+older pre-hotfix `bot-request-rejected` rows remain terminal without replay.
+
+Material production corrections are `8f13fd3` for managed-null stock quantity,
+`00f4f4c` for safe display-name fallback, `242d72a` for PostgreSQL threshold
+rebaseline bind typing, and `ef0957b` for signed `v.` View Stock delivery
+callbacks. The pre-existing M8/M9 publication race remains recorded separately
+in `892fc925`. M19 is fully complete and operationally validated.
+
+M20 — Search & Daily Report is next. It has not been started, and no M20 or
+later implementation is authorized.
 
 ## Phase 6 — SaaS Platform ⬜ Planned
 

@@ -2,7 +2,7 @@
 
 **Generated:** 2026-07-19
 
-**Updated:** 2026-08-31
+**Updated:** 2026-09-02
 
 **Reason:** Transitioning implementation agent from GapCode to Codex GPT
 
@@ -910,7 +910,7 @@ completed production defect fix changes no payload mapping, retry count, M13
 delivery contract, M18 settings policy, dependency, schema, or topology and was
 not caused by M18.
 
-### M19 — Inventory & Low-Stock MVP (Implementation Complete / Automated Validated)
+### M19 — Inventory & Low-Stock MVP (complete, merged, and operationally validated)
 
 - `InventoryItem` is a minimized Store-scoped projection, unique by Store plus
   WooCommerce stock-bearing item ID. It stores only identity/display, stock
@@ -952,10 +952,30 @@ not caused by M18.
   uniqueness/isolation probes pass on isolated PostgreSQL 16. Focused and full
   automated gates pass. D-025 is Accepted.
 
-Production migration/deployment, connector product-hook reconciliation,
-real-Store `/stock` bootstrap, and controlled healthy→low/repeat-low/recovery/
-new-decline validation remain manual post-merge acceptance. No live result is
-claimed. No M20 or later work is authorized.
+Production migrations, backend, telegram-bot, and updated connector deployment
+passed. Native PHP lint, connector Retry/reconciliation, `/api/health`,
+`/api/health/readiness`, onboarding connection health, and exactly eight active
+canonical order/product webhooks passed. The first `/stock` completed the
+bounded bootstrap to `READY` without historical notifications; current LOW/OUT
+inventory, signed item buttons/detail, explicit out-of-stock with a null WCTM
+threshold, and `Unnamed variation` fallback passed.
+
+The controlled threshold-5 lifecycle passed 10→5 with exactly one LOW delivery,
+5→4 without duplication, 4→0 with exactly one OUT escalation, 0→9 recovery and
+rearm without a back-in-stock delivery, and 9→0 with exactly one new OUT
+delivery. Incident generations 4 and 5 are `DELIVERED`; older pre-hotfix
+`bot-request-rejected` rows remain terminal and were not replayed.
+
+Material M19 production corrections are `8f13fd3` plus migration
+`20260901190000_m19_nullable_managed_stock_quantity` for managed-null stock,
+`00f4f4c` for display-name fallback without weakening Woo identity, `242d72a`
+for PostgreSQL numeric threshold bind typing and transactional rebaseline, and
+`ef0957b` for signed `v.` View Stock delivery callbacks. The pre-existing M8/M9
+publication race remains recorded in `892fc925`. M19 is fully complete and
+operationally validated; D-025 remains Accepted.
+
+M20 — Search & Daily Report is next. It has not been started, and no M20 or
+later implementation is authorized.
 
 ---
 
@@ -966,23 +986,22 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `feat/m19-inventory-low-stock`.
+Current branch: `main`.
 
 ---
 
 ## 6. Current Blockers
 
-M19 has no known implementation blocker. B review, merge, production migration,
-backend/bot/connector deployment, product-hook reconciliation, real `/stock`
-bootstrap, and controlled stock-transition validation remain pending. Existing
-known issues and technical debt remain unchanged.
+M19 has no remaining blocker or validation item. Existing known issues and
+technical debt remain unchanged.
 
 ---
 
 ## 7. Current Task
 
-The active task is M19 implementation, evidence, documentation, and commit
-closure. Stop after M19. No M20 or later implementation is authorized.
+No implementation task is active. M20 — Search & Daily Report is next but has
+not been started. Await an approved M20 task before any implementation or
+planning work.
 
 ---
 
