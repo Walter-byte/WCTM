@@ -54,6 +54,7 @@ type ContextResolution =
 interface SearchRow {
   entity_kind: 'ORDER' | 'INVENTORY';
   target_id: string;
+  stable_identity: string;
   rank: number;
   order_number: string | null;
   status: string;
@@ -496,6 +497,7 @@ export class TelegramSearchReportService {
         SELECT
           'ORDER'::text AS entity_kind,
           o.wc_order_id AS target_id,
+          o.wc_order_id AS stable_identity,
           CASE
             WHEN lower(o.order_number) = ${normalized} THEN 0
             WHEN lower(COALESCE(NULLIF(btrim(COALESCE(NULLIF(btrim(o.customer_snapshot->'billing'->>'first_name'), ''), '') || ' ' || COALESCE(NULLIF(btrim(o.customer_snapshot->'billing'->>'last_name'), ''), '')), ''), NULLIF(btrim(o.customer_snapshot->'billing'->>'company'), ''), 'Guest')) = ${normalized} THEN 2
@@ -529,6 +531,7 @@ export class TelegramSearchReportService {
         SELECT
           'INVENTORY'::text AS entity_kind,
           i.id AS target_id,
+          i.wc_item_id AS stable_identity,
           CASE
             WHEN lower(i.sku) = ${normalized} THEN 1
             WHEN lower(i.display_name) = ${normalized} THEN 2
@@ -564,9 +567,9 @@ export class TelegramSearchReportService {
         rank ASC,
         CASE entity_kind WHEN 'ORDER' THEN 0 ELSE 1 END ASC,
         CASE WHEN entity_kind = 'ORDER' THEN wc_created_at END DESC NULLS LAST,
-        CASE WHEN entity_kind = 'ORDER' THEN target_id END ASC NULLS LAST,
+        CASE WHEN entity_kind = 'ORDER' THEN stable_identity END ASC NULLS LAST,
         CASE WHEN entity_kind = 'INVENTORY' THEN lower(display_name) END ASC NULLS LAST,
-        CASE WHEN entity_kind = 'INVENTORY' THEN target_id END ASC NULLS LAST
+        CASE WHEN entity_kind = 'INVENTORY' THEN stable_identity END ASC NULLS LAST
       OFFSET ${offset}
       LIMIT ${PAGE_SIZE + 1}
     `);

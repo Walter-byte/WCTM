@@ -113,6 +113,7 @@ describe('TelegramSearchReportService', () => {
     const row = {
       entity_kind: 'ORDER',
       target_id: '77',
+      stable_identity: '77',
       rank: 0,
       order_number: '1001',
       status: 'processing',
