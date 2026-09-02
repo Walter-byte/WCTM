@@ -1,8 +1,11 @@
 import { describe, expect, it, jest } from '@jest/globals';
 import {
+  InventoryAlertClassification,
+  InventorySyncState,
   MembershipRole,
   NotificationCategory,
   NotificationRecipientMode,
+  Prisma,
   TenantLanguage,
 } from '@prisma/client';
 
@@ -44,7 +47,21 @@ function fixture() {
       ] as NotificationCategory[],
       notificationRecipientMode: NotificationRecipientMode.ALL_ELIGIBLE,
       inventoryNotificationPolicyVersion: 0,
+      inventorySyncState: InventorySyncState.READY,
     },
+    inventoryItems: [] as Array<{
+      displayName: string;
+      managesStock: boolean;
+      stockQuantity: number | null;
+      stockStatus: 'instock' | 'outofstock';
+      remoteDeletedAt: Date | null;
+      alertClassification: InventoryAlertClassification;
+      incidentGeneration: number;
+      lowAlertSourceWebhookEventId: string | null;
+      lowAlertRecipientsCapturedAt: Date | null;
+      outAlertSourceWebhookEventId: string | null;
+      outAlertRecipientsCapturedAt: Date | null;
+    }>,
     memberships: [
       {
         id: 'mem_actor',
@@ -68,6 +85,7 @@ function fixture() {
   };
   const references = new Map<string, Record<string, unknown>>();
   const auditLogs: Array<Record<string, unknown>> = [];
+  const rawQueries: Prisma.Sql[] = [];
   const prisma = {
     telegramAccount: {
       findUnique: jest.fn(async () => ({
@@ -238,7 +256,48 @@ function fixture() {
         return { id: 'aud_test' };
       }),
     },
-    $executeRaw: jest.fn(async () => 0),
+    $executeRaw: jest.fn(async (query: Prisma.Sql) => {
+      rawQueries.push(query);
+      const threshold =
+        (query.values.find((value) => typeof value === 'number') as
+          number | undefined) ?? null;
+      let changed = 0;
+
+      for (const item of state.inventoryItems) {
+        if (item.remoteDeletedAt !== null) {
+          continue;
+        }
+
+        const next =
+          item.stockStatus === 'outofstock'
+            ? InventoryAlertClassification.OUT_OF_STOCK
+            : item.managesStock &&
+                item.stockQuantity !== null &&
+                threshold !== null &&
+                item.stockQuantity <= threshold
+              ? InventoryAlertClassification.LOW_STOCK
+              : InventoryAlertClassification.HEALTHY;
+
+        if (item.alertClassification === next) {
+          continue;
+        }
+
+        if (
+          item.alertClassification === InventoryAlertClassification.HEALTHY &&
+          next !== InventoryAlertClassification.HEALTHY
+        ) {
+          item.incidentGeneration += 1;
+        }
+        item.alertClassification = next;
+        item.lowAlertSourceWebhookEventId = null;
+        item.lowAlertRecipientsCapturedAt = null;
+        item.outAlertSourceWebhookEventId = null;
+        item.outAlertRecipientsCapturedAt = null;
+        changed += 1;
+      }
+
+      return changed;
+    }),
     $transaction: jest.fn(
       async (operation: (transaction: typeof prisma) => Promise<unknown>) =>
         operation(prisma)
@@ -263,7 +322,7 @@ function fixture() {
     telegram: { userId: '1001', chatId: '2001' },
   };
 
-  return { state, references, auditLogs, service, input };
+  return { state, references, auditLogs, rawQueries, service, input };
 }
 
 describe('M18 Telegram settings service', () => {
@@ -380,6 +439,86 @@ describe('M18 Telegram settings service', () => {
       ref: summary.settings!.actions!.thresholdClearRef,
     });
     expect(test.state.store.lowStockThreshold).toBeNull();
+  });
+
+  it('sets a numeric threshold from null on a READY projection and rebaselines nullable managed and explicit out-of-stock items without alerts', async () => {
+    const test = fixture();
+    test.state.inventoryItems.push(
+      {
+        displayName: 'Threshold item',
+        managesStock: true,
+        stockQuantity: 3,
+        stockStatus: 'instock',
+        remoteDeletedAt: null,
+        alertClassification: InventoryAlertClassification.HEALTHY,
+        incidentGeneration: 0,
+        lowAlertSourceWebhookEventId: null,
+        lowAlertRecipientsCapturedAt: null,
+        outAlertSourceWebhookEventId: null,
+        outAlertRecipientsCapturedAt: null,
+      },
+      {
+        displayName: 'Unnamed product',
+        managesStock: true,
+        stockQuantity: null,
+        stockStatus: 'instock',
+        remoteDeletedAt: null,
+        alertClassification: InventoryAlertClassification.HEALTHY,
+        incidentGeneration: 0,
+        lowAlertSourceWebhookEventId: null,
+        lowAlertRecipientsCapturedAt: null,
+        outAlertSourceWebhookEventId: null,
+        outAlertRecipientsCapturedAt: null,
+      },
+      {
+        displayName: 'Explicit out-of-stock item',
+        managesStock: false,
+        stockQuantity: null,
+        stockStatus: 'outofstock',
+        remoteDeletedAt: null,
+        alertClassification: InventoryAlertClassification.OUT_OF_STOCK,
+        incidentGeneration: 1,
+        lowAlertSourceWebhookEventId: null,
+        lowAlertRecipientsCapturedAt: null,
+        outAlertSourceWebhookEventId: null,
+        outAlertRecipientsCapturedAt: null,
+      }
+    );
+    const summary = await test.service.summary(test.input);
+
+    await expect(
+      test.service.applyInput({
+        ...test.input,
+        ref: summary.settings!.actions!.thresholdInputRef,
+        value: '5',
+      })
+    ).resolves.toMatchObject({ state: 'OK' });
+
+    expect(test.state.store.inventorySyncState).toBe(InventorySyncState.READY);
+    expect(test.state.store.lowStockThreshold).toBe(5);
+    expect(test.state.inventoryItems).toEqual([
+      expect.objectContaining({
+        alertClassification: InventoryAlertClassification.LOW_STOCK,
+        incidentGeneration: 1,
+        lowAlertSourceWebhookEventId: null,
+        lowAlertRecipientsCapturedAt: null,
+      }),
+      expect.objectContaining({
+        displayName: 'Unnamed product',
+        alertClassification: InventoryAlertClassification.HEALTHY,
+        incidentGeneration: 0,
+      }),
+      expect.objectContaining({
+        alertClassification: InventoryAlertClassification.OUT_OF_STOCK,
+        incidentGeneration: 1,
+        outAlertSourceWebhookEventId: null,
+        outAlertRecipientsCapturedAt: null,
+      }),
+    ]);
+    expect(test.rawQueries).toHaveLength(1);
+    expect(test.rawQueries[0]!.text).not.toContain('IS NOT NULL');
+    expect(test.rawQueries[0]!.values).toEqual([5, 'ten_a', 'sto_a']);
+    expect(test.auditLogs).toHaveLength(1);
   });
 
   it('uses absolute category actions and suppresses duplicate no-op audit', async () => {

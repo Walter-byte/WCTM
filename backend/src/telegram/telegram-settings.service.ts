@@ -1066,8 +1066,10 @@ export class TelegramSettingsService {
     context: SettingsContext,
     threshold: number | null
   ): Promise<void> {
-    const thresholdSql =
-      threshold === null ? Prisma.sql`NULL` : Prisma.sql`${threshold}`;
+    const quantitativeClassification =
+      threshold === null
+        ? Prisma.sql`FALSE`
+        : Prisma.sql`"manages_stock" AND "stock_quantity" <= ${threshold}`;
 
     await transaction.$executeRaw(Prisma.sql`
       WITH classified AS (
@@ -1076,9 +1078,7 @@ export class TelegramSettingsService {
           CASE
             WHEN "stock_status" = 'outofstock'
               THEN 'OUT_OF_STOCK'::"inventory_alert_classification"
-            WHEN "manages_stock"
-              AND ${thresholdSql} IS NOT NULL
-              AND "stock_quantity" <= ${thresholdSql}
+            WHEN ${quantitativeClassification}
               THEN 'LOW_STOCK'::"inventory_alert_classification"
             ELSE 'HEALTHY'::"inventory_alert_classification"
           END AS next_classification
