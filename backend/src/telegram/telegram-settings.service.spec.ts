@@ -445,6 +445,19 @@ describe('M18 Telegram settings service', () => {
     const test = fixture();
     test.state.inventoryItems.push(
       {
+        displayName: 'Healthy product',
+        managesStock: true,
+        stockQuantity: 10,
+        stockStatus: 'instock',
+        remoteDeletedAt: null,
+        alertClassification: InventoryAlertClassification.HEALTHY,
+        incidentGeneration: 0,
+        lowAlertSourceWebhookEventId: null,
+        lowAlertRecipientsCapturedAt: null,
+        outAlertSourceWebhookEventId: null,
+        outAlertRecipientsCapturedAt: null,
+      },
+      {
         displayName: 'Threshold item',
         managesStock: true,
         stockQuantity: 3,
@@ -497,6 +510,13 @@ describe('M18 Telegram settings service', () => {
     expect(test.state.store.inventorySyncState).toBe(InventorySyncState.READY);
     expect(test.state.store.lowStockThreshold).toBe(5);
     expect(test.state.inventoryItems).toEqual([
+      expect.objectContaining({
+        displayName: 'Healthy product',
+        alertClassification: InventoryAlertClassification.HEALTHY,
+        incidentGeneration: 0,
+        lowAlertSourceWebhookEventId: null,
+        outAlertSourceWebhookEventId: null,
+      }),
       expect.objectContaining({
         alertClassification: InventoryAlertClassification.LOW_STOCK,
         incidentGeneration: 1,

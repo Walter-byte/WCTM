@@ -58,6 +58,7 @@ function product(overrides: Record<string, unknown> = {}) {
 
 function setup(lowStockThreshold: number | null = 5) {
   const items: TestInventoryItem[] = [];
+  const settings = { lowStockThreshold };
   const encryption = new EncryptionService({
     encryption: { key: Buffer.alloc(32, 7).toString('base64') },
   } as ApplicationConfigService);
@@ -174,7 +175,7 @@ function setup(lowStockThreshold: number | null = 5) {
   };
   const transaction = {
     store: {
-      findFirst: jest.fn(async () => ({ lowStockThreshold })),
+      findFirst: jest.fn(async () => ({ ...settings })),
     },
     inventoryItem: itemDelegate,
   };
@@ -217,7 +218,7 @@ function setup(lowStockThreshold: number | null = 5) {
     store,
   });
 
-  return { event, items, service, store };
+  return { event, items, service, settings, store };
 }
 
 function datesEqual(left: Date | null, right: Date | null): boolean {
@@ -283,6 +284,75 @@ describe('M19 inventory projection and incidents', () => {
         )
       )
     ).resolves.toEqual([]);
+  });
+
+  it('notifies after a null-threshold READY baseline becomes HEALTHY at threshold 5, then escalates LOW to OUT', async () => {
+    const fixture = setup(null);
+
+    await fixture.service.projectBootstrapPayload(fixture.store, product());
+    expect(fixture.items[0]).toMatchObject({
+      stockQuantity: '10',
+      alertClassification: InventoryAlertClassification.HEALTHY,
+      incidentGeneration: 0,
+      lowAlertSourceWebhookEventId: null,
+      outAlertSourceWebhookEventId: null,
+    });
+
+    fixture.settings.lowStockThreshold = 5;
+    expect(fixture.items[0]).toMatchObject({
+      alertClassification: InventoryAlertClassification.HEALTHY,
+      incidentGeneration: 0,
+      lowAlertSourceWebhookEventId: null,
+      outAlertSourceWebhookEventId: null,
+    });
+
+    const low = await fixture.service.projectWebhook(
+      fixture.event(
+        'evt_low_after_rebaseline',
+        'product.updated',
+        product({
+          stock_quantity: 5,
+          date_modified_gmt: '2026-09-01T08:01:00',
+        })
+      )
+    );
+    expect(low).toEqual([
+      expect.objectContaining({
+        incidentGeneration: 1,
+        alertLevel: InventoryAlertLevel.LOW_STOCK,
+        sourceWebhookEventId: 'evt_low_after_rebaseline',
+      }),
+    ]);
+    expect(fixture.items[0]).toMatchObject({
+      alertClassification: InventoryAlertClassification.LOW_STOCK,
+      incidentGeneration: 1,
+      lowAlertSourceWebhookEventId: 'evt_low_after_rebaseline',
+    });
+
+    const out = await fixture.service.projectWebhook(
+      fixture.event(
+        'evt_out_after_low',
+        'product.updated',
+        product({
+          stock_quantity: 0,
+          stock_status: 'outofstock',
+          date_modified_gmt: '2026-09-01T08:02:00',
+        })
+      )
+    );
+    expect(out).toEqual([
+      expect.objectContaining({
+        incidentGeneration: 1,
+        alertLevel: InventoryAlertLevel.OUT_OF_STOCK,
+        sourceWebhookEventId: 'evt_out_after_low',
+      }),
+    ]);
+    expect(fixture.items[0]).toMatchObject({
+      alertClassification: InventoryAlertClassification.OUT_OF_STOCK,
+      incidentGeneration: 1,
+      lowAlertSourceWebhookEventId: 'evt_low_after_rebaseline',
+      outAlertSourceWebhookEventId: 'evt_out_after_low',
+    });
   });
 
   it('persists a non-empty fallback without weakening inventory identity', async () => {

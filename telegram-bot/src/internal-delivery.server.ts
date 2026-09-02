@@ -11,7 +11,7 @@ import type { BotConfiguration } from './config';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const CALLBACK_PATTERN =
-  /^(?:d\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}|t:d\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16})$/;
+  /^(?:(?:d|v)\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}|t:d\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16})$/;
 
 export interface PreparedTelegramMessage {
   chatId: string;
