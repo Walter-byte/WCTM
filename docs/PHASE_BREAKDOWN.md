@@ -584,8 +584,29 @@ architecture change.
   search. Revisit post-MVP only if a real Store reproduces a WCTM projection
   defect.
 
-M20 final decision: PASS. M21 — Notification / Localization Completion is next
-and has not been started. M22 remains after M21.
+M20 final decision: PASS.
+
+### M21 — Notification / Localization Completion 🟨 Implemented; review and live validation pending
+
+- D-027 locks presentation/localization only: `Tenant.language` is authoritative,
+  `fa`/`en` are supported, pre-context UX defaults to Persian, and unknown
+  runtime language falls back to English.
+- The stateless, database-free telegram-bot owns one typed bilingual catalog and
+  renders every existing M10–M20 manager surface plus M13 ORDER_CREATED and M19
+  LOW/OUT notifications from backend semantic data.
+- Persian rendering uses FSI/PDI isolation for LTR identifiers and Persian-
+  calendar `Intl` formatting in the Tenant timezone. English remains Gregorian.
+  Values, stored UTC timestamps, M20 report boundaries, and WooCommerce
+  authority are unchanged.
+- M13/M19 delivery identity, persistence, claims, retries, terminal/ambiguous
+  semantics, signed callbacks, M18 categories/modes/recipient policy, and M10
+  authorization are unchanged.
+- No schema migration, dependency, new queue/process/scheduler, onboarding or
+  connector localization, template system, notification category, or M22
+  capability was added.
+- Implementation and repository gates are complete. B review, merge,
+  backend/telegram-bot deployment, and production validation remain required;
+  M21 is not operationally closed.
 
 ## Phase 6 — SaaS Platform ⬜ Planned
 

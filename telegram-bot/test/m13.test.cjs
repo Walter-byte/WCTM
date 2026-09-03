@@ -80,7 +80,8 @@ test('authenticated endpoint sends exactly one prepared message with existing ca
     });
     assert.equal(calls.length, 1);
     assert.equal(calls[0][0], '2001');
-    assert.equal(calls[0][1], 'New Order\n#101');
+    assert.match(calls[0][1], /New Order/);
+    assert.match(calls[0][1], /Order #\u2068101\u2069/);
     assert.equal(
       calls[0][2].reply_markup.inline_keyboard[0][0].callback_data,
       VIEW_REF
@@ -120,8 +121,16 @@ test('authenticated endpoint accepts the M19 stock-detail callback', async () =>
         },
         body: JSON.stringify({
           chatId: '2001',
-          text: 'Low Stock\nFixture item',
-          buttons: [{ text: 'View Stock', callbackData: STOCK_REF }],
+          presentation: { language: 'en', timezone: 'UTC' },
+          notification: {
+            type: 'LOW_STOCK',
+            displayName: 'Fixture item',
+            sku: 'SKU-1',
+            quantity: '5',
+            stockStatus: 'instock',
+            threshold: 5,
+            viewStockRef: STOCK_REF,
+          },
         }),
       }
     );
@@ -156,10 +165,16 @@ test('M13 bot transport remains free of Prisma and database access', () => {
 function preparedMessage() {
   return {
     chatId: '2001',
-    text: 'New Order\n#101',
-    buttons: [
-      { text: 'View Order', callbackData: VIEW_REF },
-      { text: 'Change Status', callbackData: `t:${VIEW_REF}` },
-    ],
+    presentation: { language: 'en', timezone: 'UTC' },
+    notification: {
+      type: 'ORDER_CREATED',
+      orderNumber: '101',
+      status: 'processing',
+      currency: 'IRR',
+      total: '1000',
+      customerDisplayName: 'Test Customer',
+      viewOrderRef: VIEW_REF,
+      changeStatusAvailable: true,
+    },
   };
 }

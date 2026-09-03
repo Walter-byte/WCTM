@@ -1,11 +1,33 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 
 import { ApplicationConfigService } from '../config/application-config.service';
+import type { TelegramPresentation } from './telegram-presentation.service';
+
+export type PreparedTelegramNotification =
+  | {
+      type: 'ORDER_CREATED';
+      orderNumber: string;
+      status: string;
+      currency: string;
+      total: string;
+      customerDisplayName: string;
+      viewOrderRef: string;
+      changeStatusAvailable: boolean;
+    }
+  | {
+      type: 'LOW_STOCK' | 'OUT_OF_STOCK';
+      displayName: string;
+      sku: string | null;
+      quantity: string | null;
+      stockStatus: string;
+      threshold: number | null;
+      viewStockRef: string;
+    };
 
 export interface PreparedTelegramMessage {
   chatId: string;
-  text: string;
-  buttons: Array<{ text: string; callbackData: string }>;
+  presentation: TelegramPresentation;
+  notification: PreparedTelegramNotification;
 }
 
 export type TelegramDeliveryResult =

@@ -73,7 +73,7 @@ test('/settings renders compact OWNER controls with no internal identities', asy
   const message = apiCalls.find((call) => call.method === 'sendMessage');
   assert.match(message.payload.text, /Store Settings/);
   assert.match(message.payload.text, /Language: English/);
-  assert.match(message.payload.text, /Timezone: UTC/);
+  assert.match(message.payload.text, /Timezone: \u2068UTC\u2069/);
   assert.match(message.payload.text, /Not configured/);
   assert.match(message.payload.text, /New order/);
   assert.match(message.payload.text, /Selected managers/);
@@ -163,7 +163,7 @@ test('timezone/threshold input uses a backend-owned opaque ForceReply context', 
   const result = apiCalls
     .filter((call) => call.method === 'sendMessage')
     .at(-1);
-  assert.match(result.payload.text, /Timezone: Asia\/Tehran/);
+  assert.match(result.payload.text, /Timezone: \u2068Asia\/Tehran\u2069/);
 });
 
 test('stale and malformed settings outcomes recover safely through Settings/Home', async () => {

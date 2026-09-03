@@ -5,6 +5,10 @@ import { type Job, UnrecoverableError } from 'bullmq';
 import { TelegramInventoryService } from '../inventory/telegram-inventory.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramDeliveryClient } from '../telegram/telegram-delivery.client';
+import {
+  DEFAULT_TELEGRAM_PRESENTATION,
+  TelegramPresentationService,
+} from '../telegram/telegram-presentation.service';
 import type { TelegramOrderNotificationRecipient } from '../telegram/telegram-order.service';
 import { INVENTORY_NOTIFICATION_JOB_NAME } from './queue.constants';
 
@@ -70,7 +74,8 @@ export class InventoryNotificationProcessor {
     private readonly prisma: PrismaService,
     @Inject(forwardRef(() => TelegramInventoryService))
     private readonly inventory: TelegramInventoryService,
-    private readonly deliveryClient: TelegramDeliveryClient
+    private readonly deliveryClient: TelegramDeliveryClient,
+    private readonly presentation?: TelegramPresentationService
   ) {}
 
   async process(
@@ -185,10 +190,29 @@ export class InventoryNotificationProcessor {
       );
     }
 
+    const presentation = this.presentation
+      ? await this.presentation.resolve({
+          telegramUserId: recipient.telegramUserId,
+          telegramChatId: recipient.telegramChatId,
+        })
+      : { ...DEFAULT_TELEGRAM_PRESENTATION, language: 'en' as const };
     const result = await this.deliveryClient.send({
       chatId: recipient.telegramChatId,
-      text: renderInventoryNotification(prepared),
-      buttons: [{ text: 'View Stock', callbackData: prepared.viewStockRef }],
+      presentation,
+      notification: {
+        type:
+          prepared.classification === 'OUT_OF_STOCK'
+            ? 'OUT_OF_STOCK'
+            : 'LOW_STOCK',
+        displayName: safePresentationValue(prepared.displayName, 255),
+        sku: prepared.sku ? safePresentationValue(prepared.sku, 191) : null,
+        quantity: prepared.quantity
+          ? safePresentationValue(prepared.quantity, 64)
+          : null,
+        stockStatus: safePresentationValue(prepared.stockStatus, 32),
+        threshold: prepared.threshold,
+        viewStockRef: prepared.viewStockRef,
+      },
     });
 
     if (result.outcome === 'delivered') {
@@ -348,30 +372,17 @@ export class InventoryNotificationProcessor {
   }
 }
 
-function renderInventoryNotification(input: {
-  displayName: string;
-  sku: string | null;
-  quantity: string | null;
-  stockStatus: string;
-  classification: 'LOW_STOCK' | 'OUT_OF_STOCK';
-  threshold: number | null;
-}): string {
-  return [
-    input.classification === 'OUT_OF_STOCK' ? 'Out of Stock' : 'Low Stock',
-    safeDisplay(input.displayName, 255),
-    ...(input.sku ? [`SKU: ${safeDisplay(input.sku, 191)}`] : []),
-    `Quantity: ${input.quantity ?? 'not managed'}`,
-    `WooCommerce status: ${safeDisplay(input.stockStatus, 32)}`,
-    `WCTM threshold: ${input.threshold ?? 'not configured'}`,
-  ].join('\n');
-}
-
-function safeDisplay(value: string, maximumLength: number): string {
+function safePresentationValue(value: string, maximumLength: number): string {
   return (
     Array.from(value.replace(/\s+/g, ' '))
       .filter((character) => {
-        const code = character.charCodeAt(0);
-        return code >= 32 && code !== 127;
+        const code = character.codePointAt(0) ?? 0;
+        return (
+          code >= 32 &&
+          code !== 127 &&
+          !(code >= 0x202a && code <= 0x202e) &&
+          !(code >= 0x2066 && code <= 0x2069)
+        );
       })
       .join('')
       .trim()

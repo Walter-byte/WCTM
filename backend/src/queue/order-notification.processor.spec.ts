@@ -168,23 +168,17 @@ describe('M13 durable notification delivery', () => {
     );
     expect(fixture.send).toHaveBeenCalledWith({
       chatId: '2001',
-      text: [
-        'New Order',
-        '#101 secret',
-        'Status: processing',
-        'Total: 1000 IRR',
-        'Customer: Test Customer',
-      ].join('\n'),
-      buttons: [
-        {
-          text: 'View Order',
-          callbackData: 'd.AAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBB',
-        },
-        {
-          text: 'Change Status',
-          callbackData: 't:d.AAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBB',
-        },
-      ],
+      presentation: { language: 'en', timezone: 'UTC' },
+      notification: {
+        type: 'ORDER_CREATED',
+        orderNumber: '101 secret',
+        status: 'processing',
+        currency: 'IRR',
+        total: '1000',
+        customerDisplayName: 'Test Customer',
+        viewOrderRef: 'd.AAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBB',
+        changeStatusAvailable: true,
+      },
     });
     expect(fixture.delivery.state).toBe(
       TelegramOrderNotificationState.DELIVERED
@@ -208,8 +202,13 @@ describe('M13 durable notification delivery', () => {
 
     await fixture.processor.process(job());
 
-    expect(fixture.send.mock.calls[0]?.[0].buttons).toHaveLength(1);
-    expect(fixture.send.mock.calls[0]?.[0].buttons[0]?.text).toBe('View Order');
+    expect(fixture.send.mock.calls[0]?.[0].notification.type).toBe(
+      'ORDER_CREATED'
+    );
+    expect(
+      fixture.send.mock.calls[0]?.[0].notification.type === 'ORDER_CREATED' &&
+        fixture.send.mock.calls[0]?.[0].notification.changeStatusAvailable
+    ).toBe(false);
   });
 
   it('never resends an already delivered record', async () => {
