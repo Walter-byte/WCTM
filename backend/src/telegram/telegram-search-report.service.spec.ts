@@ -10,6 +10,7 @@ const identity = { userId: '100', chatId: '200' };
 function fixture(options?: {
   inventoryState?: InventorySyncState;
   exactOrders?: Array<{ wcOrderId: string }>;
+  exactSkuItems?: Array<{ id: string }>;
   searchRows?: unknown[];
   reportOrders?: Array<{
     status: string;
@@ -52,6 +53,7 @@ function fixture(options?: {
         ),
     },
     inventoryItem: {
+      findMany: jest.fn().mockResolvedValue(options?.exactSkuItems ?? []),
       count: jest.fn().mockResolvedValue(0),
       groupBy: jest.fn().mockResolvedValue([
         { alertClassification: 'LOW_STOCK', _count: { _all: 2 } },
@@ -94,9 +96,10 @@ function fixture(options?: {
 }
 
 describe('TelegramSearchReportService', () => {
-  it('uses the existing native Order detail for a unique exact order number', async () => {
+  it('keeps native Order detail ahead of an equal numeric SKU', async () => {
     const { service, prisma, orders } = fixture({
       exactOrders: [{ wcOrderId: '77' }],
+      exactSkuItems: [{ id: 'inventory_1001' }],
     });
 
     const result = await service.search({ telegram: identity, query: '1001' });
@@ -107,6 +110,110 @@ describe('TelegramSearchReportService', () => {
       wcOrderId: '77',
     });
     expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    expect(prisma.inventoryItem.findMany).not.toHaveBeenCalled();
+  });
+
+  it('returns a scoped exact numeric SKU when no exact Order exists', async () => {
+    const row = inventoryRow({
+      target_id: 'inventory_312',
+      stable_identity: '9501',
+      rank: 1,
+      display_name: 'Oakley OO9501 Velo Kato',
+      sku: '312',
+    });
+    const { service, prisma, inventory } = fixture({
+      exactOrders: [],
+      exactSkuItems: [{ id: 'inventory_312' }],
+    });
+    prisma.$queryRaw.mockImplementation((query: { values?: unknown[] }) =>
+      Promise.resolve(query.values?.includes('inventory_312') ? [row] : [])
+    );
+
+    const result = await service.search({
+      telegram: identity,
+      query: '312',
+    });
+
+    expect(result.state).toBe('OK');
+    if (result.state !== 'OK') return;
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0]).toMatchObject({
+      kind: 'INVENTORY',
+      displayName: 'Oakley OO9501 Velo Kato',
+      sku: '312',
+    });
+    expect(prisma.inventoryItem.findMany).toHaveBeenCalledWith({
+      where: {
+        tenantId: 'tenant_1',
+        storeId: 'store_1',
+        remoteDeletedAt: null,
+        sku: '312',
+      },
+      select: { id: true },
+      orderBy: [{ displayName: 'asc' }, { wcItemId: 'asc' }],
+      take: 200,
+    });
+
+    const created =
+      prisma.telegramSearchReference.createMany.mock.calls[0]![0].data;
+    const pageReference = created.find(
+      (reference: Record<string, unknown>) => reference['purpose'] === 'PAGE'
+    );
+    const resultReference = created.find(
+      (reference: Record<string, unknown>) =>
+        reference['targetInventoryItemId'] === 'inventory_312'
+    );
+    prisma.telegramSearchReference.findUnique.mockResolvedValue({
+      ...resultReference,
+      queryEncrypted: null,
+      pageOffset: null,
+      targetWcOrderId: null,
+    });
+    prisma.telegramSearchReference.findFirst.mockResolvedValue({
+      id: pageReference.id,
+    });
+    inventory.openProjectedDetail.mockResolvedValue({
+      state: 'OK',
+      item: { displayName: 'Oakley OO9501 Velo Kato', sku: '312' },
+    });
+
+    const selected = await service.select({
+      telegram: identity,
+      ref: result.results[0]!.ref,
+    });
+
+    expect(selected.state).toBe('INVENTORY');
+    expect(inventory.openProjectedDetail).toHaveBeenCalledWith({
+      telegram: identity,
+      inventoryItemId: 'inventory_312',
+    });
+  });
+
+  it('keeps numeric SKU prefix results after the exact SKU probe misses', async () => {
+    const { service, prisma } = fixture({
+      exactOrders: [],
+      searchRows: [
+        inventoryRow({
+          target_id: 'inventory_312',
+          stable_identity: '9501',
+          rank: 3,
+          display_name: 'Oakley OO9501 Velo Kato',
+          sku: '312',
+        }),
+      ],
+    });
+
+    const result = await service.search({ telegram: identity, query: '31' });
+
+    expect(result.state).toBe('OK');
+    if (result.state !== 'OK') return;
+    expect(result.results[0]).toMatchObject({
+      kind: 'INVENTORY',
+      sku: '312',
+    });
+    expect(prisma.inventoryItem.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ sku: '31' }) })
+    );
   });
 
   it('does not choose an ambiguous exact number and returns deterministic list refs', async () => {
@@ -239,6 +346,35 @@ describe('TelegramSearchReportService', () => {
     expect(prisma.inventoryItem.groupBy).not.toHaveBeenCalled();
   });
 });
+
+function inventoryRow(
+  overrides: Partial<{
+    target_id: string;
+    stable_identity: string;
+    rank: number;
+    display_name: string;
+    sku: string;
+  }> = {}
+) {
+  return {
+    entity_kind: 'INVENTORY',
+    target_id: 'inventory_1',
+    stable_identity: '1',
+    rank: 4,
+    order_number: null,
+    status: 'outofstock',
+    customer_display_name: null,
+    currency: null,
+    total: null,
+    wc_created_at: null,
+    display_name: 'Inventory Item',
+    sku: 'SKU-1',
+    quantity: '0',
+    classification: 'OUT_OF_STOCK',
+    inventory_kind: 'PRODUCT',
+    ...overrides,
+  };
+}
 
 describe('tenantDayBounds', () => {
   it.each([
