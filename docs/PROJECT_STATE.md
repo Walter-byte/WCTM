@@ -7,11 +7,10 @@ Version: 1.0
 Current Phase
 
 Phase 5 — Core Store Management (MVP) is in progress. M20 Search & Daily Report
-is implemented and repository-validated on `feat/m20-search-daily-report`;
-merge, deployment, and minimum production validation remain. M19 Inventory &
-Low-Stock MVP is implemented, merged, deployed, and fully operationally
-validated. Its
-production migrations, backend, telegram-bot, updated connector, eight
+is fully complete, merged, deployed, hotfixed, and operationally validated.
+M19 Inventory & Low-Stock MVP is implemented, merged, deployed, and fully
+operationally validated. Its production migrations, backend, telegram-bot,
+updated connector, eight
 canonical WooCommerce webhooks, health/readiness, bootstrap, projection,
 `/stock`, threshold behavior, LOW/OUT incident lifecycle, M18/M10 recipient
 integration, and durable delivery all passed. M18 and M17 remain fully closed.
@@ -21,9 +20,10 @@ Phase 4 and M1–M16 remain complete and unchanged.
 
 Current Task
 
-M20 Search & Daily Report implementation is complete. It awaits B review,
-merge, migration/deployment, and the locked minimum production validation. M21
-has not been started and is not authorized by this task.
+M20 Search & Daily Report operational closure is complete with final decision
+PASS. M21 — Notification / Localization Completion is next, has not been
+started, and is not authorized by this documentation task. M22 remains after
+M21.
 
 ---
 
@@ -35,7 +35,12 @@ Project Version
 
 Repository
 
-Current branch: `feat/m20-search-daily-report`.
+Current branch: `main`.
+
+M20 final implementation merge: `0281bb0 merge: complete M20 search and daily
+report`. Numeric-SKU correction:
+`c38af6edb2758c8c3f7b5b5a7b696fbf9a658827 fix(search): preserve numeric SKU
+fallback`, merged through `4b66c9a merge: fix M20 numeric SKU search`.
 
 M19 implementation commits `2143de4 feat(inventory): add low-stock MVP` and
 `047b306 fix(inventory): harden delivery recipient identity` were merged to
@@ -792,24 +797,22 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-M20 has no known repository blocker. Merge/deploy and the minimum real-Store
-search/report validation remain operational acceptance work. Existing known
-issues and technical debt remain unchanged.
+M20 has no remaining implementation, deployment, or operational-validation
+blocker. Existing known issues and technical debt remain unchanged.
 
 ---
 
 Next Milestone
 
 M21 — Notification / Localization Completion. It has not been started; this M20
-task neither plans nor authorizes M21 implementation.
+closure neither plans nor authorizes M21 implementation. M22 remains after M21.
 
 ---
 
 Last Completed
 
-M20 Search & Daily Report is implementation-complete and repository-validated.
-Operational closure remains pending its post-merge minimum production
-validation. M19 remains the latest fully operationally validated milestone.
+M20 Search & Daily Report is fully complete, merged, deployed, hotfixed, and
+operationally validated. Final decision: PASS.
 
 ---
 
@@ -825,7 +828,7 @@ Last Updated
 
 ---
 
-M20 Implementation State
+M20 Closure State
 
 - D-026 is Accepted. `/search <query>` reads only current Store Order and READY
   InventoryItem projections for exact/prefix Order number, projected customer
@@ -852,8 +855,29 @@ M20 Implementation State
   short-query handling, encrypted reference state, currency/status revenue
   semantics, inventory readiness, UTC/non-UTC/DST day boundaries, privacy, and
   Telegram rendering. Full repository gates are recorded at handoff.
-- Production acceptance remains: apply the M20 migration, deploy backend and
-  telegram-bot, pass health/readiness, validate known/absent search cases and
-  signed details, compare `/report` with projected real-Store data for the same
-  local day, confirm separate currencies and no automatic delivery, and observe
-  no regression in existing `/order`, `/stock`, and notification paths.
+- Final implementation merge `0281bb0` and hotfix merge `4b66c9a` are on
+  `main`. Production applied `20260903120000_m20_search_daily_report`, reported
+  all 15 migrations current, deployed backend and telegram-bot, passed health
+  and readiness with clean startup/runtime logs, and loaded the search/select
+  and report routes.
+- Real-Store validation passed exact Order lookup with native M17 detail,
+  customer-name and inventory-name prefix search, inventory result/detail, safe
+  empty search, `/order`, and `/stock`.
+- Numeric SKU `312` exposed a production defect because discovery depended only
+  on the heterogeneous raw-SQL text predicate. Hotfix
+  `c38af6edb2758c8c3f7b5b5a7b696fbf9a658827` performs a typed,
+  Store/Tenant-scoped exact-SKU lookup after a numeric query fails to resolve a
+  unique exact Order, then re-enters global ranking at exact-SKU rank 2. Unique
+  exact Order remains rank 1 and ranking, pagination, prefix, and reference
+  semantics are unchanged. The backend-only deployment and `/search 312`
+  production retest passed.
+- SKU `604` is present in the current InventoryItem projection and searchable;
+  SKU `903` has no current Store InventoryItem row. M20 searches the M19
+  projection, not the complete WooCommerce catalog, so this is a non-blocking
+  production-data/projection limitation and not current proof of an M19 or M20
+  defect. Revisit post-MVP only after a reproducible real-Store WCTM projection
+  defect.
+- The on-demand report passed for `Asia/Tehran` on 2026-09-03: zero Orders, no
+  gross operational sales or status distribution, two LOW and 101 OUT items,
+  delayed-projection warning, and projected-operational/non-accounting
+  disclaimer. No scheduled delivery occurred. M20 final decision: PASS.

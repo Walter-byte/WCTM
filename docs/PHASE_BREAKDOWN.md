@@ -542,9 +542,10 @@ rebaseline bind typing, and `ef0957b` for signed `v.` View Stock delivery
 callbacks. The pre-existing M8/M9 publication race remains recorded separately
 in `892fc925`. M19 is fully complete and operationally validated.
 
-M20 — Search & Daily Report is implementation-complete and repository-validated
-on `feat/m20-search-daily-report`; merge, deployment, and minimum production
-validation remain.
+M20 — Search & Daily Report is fully complete, merged, deployed, hotfixed, and
+operationally validated. Final implementation merge `0281bb0` and numeric-SKU
+hotfix merge `4b66c9a` are on `main`; D-026 remains Accepted without an
+architecture change.
 
 - D-026 locks projection-only Store-scoped search across current Order and
   InventoryItem projections, with exact/prefix Order number, projected customer
@@ -560,8 +561,31 @@ validation remain.
   search-reference persistence only. No live Woo report/search read, Customer,
   Product, report snapshot, analytics, scheduler, delivery, historical import,
   M21 localization, or M22 entitlement work was added.
+- Production applied the M20 migration with all 15 migrations current, deployed
+  backend and telegram-bot, passed health/readiness with clean runtime logs, and
+  loaded `/search`, `/search/select`, and `/report`. Exact Order search and M17
+  detail, customer-name search, inventory-name prefix search and detail, safe
+  empty search, `/order`, and `/stock` passed.
+- Production exposed one numeric exact-SKU defect: projected SKU `312` did not
+  match after the exact-Order path found no Order. Hotfix
+  `c38af6edb2758c8c3f7b5b5a7b696fbf9a658827` adds a typed, Store/Tenant-scoped
+  exact-SKU lookup after the unique exact-Order fast path and re-enters global
+  ranking at rank 2. Unique exact Order remains rank 1; pagination, prefix,
+  ranking, and reference semantics are unchanged. The backend-only deployment
+  and production `/search 312` retest passed.
+- The 2026-09-03 `Asia/Tehran` report passed with zero Orders, no gross
+  operational sales or status distribution, two LOW and 101 OUT items, the
+  delayed-projection warning, the projected-operational/non-accounting
+  disclaimer, and on-demand-only behavior.
+- SKU `604` is projected and searchable. SKU `903` has no current Store
+  `InventoryItem` row, so projection-only M20 cannot find it. This is a
+  non-blocking production-data/projection limitation, not current evidence of
+  an M19 or M20 defect; M20 does not promise complete WooCommerce catalog
+  search. Revisit post-MVP only if a real Store reproduces a WCTM projection
+  defect.
 
-M21 — Notification / Localization Completion is next and has not been started.
+M20 final decision: PASS. M21 — Notification / Localization Completion is next
+and has not been started. M22 remains after M21.
 
 ## Phase 6 — SaaS Platform ⬜ Planned
 

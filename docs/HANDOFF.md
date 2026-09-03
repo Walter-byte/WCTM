@@ -975,23 +975,53 @@ for PostgreSQL numeric threshold bind typing and transactional rebaseline, and
 publication race remains recorded in `892fc925`. M19 is fully complete and
 operationally validated; D-025 remains Accepted.
 
-M20 — Search & Daily Report is implementation-complete on
-`feat/m20-search-daily-report`. D-026 is Accepted. Search is projection-only,
+M20 — Search & Daily Report is fully complete, merged, deployed, hotfixed, and
+operationally validated. D-026 remains Accepted. Search is projection-only,
 deterministically ranked, eight rows per page within 200 results, and uses
 encrypted context-bound short-lived references. `/report` is on-demand only,
 uses Tenant-local half-open `wc_created_at` day boundaries, separates
 processing/completed gross and AOV by currency, and reports LOW/OUT only when
 M19 inventory is READY. No live Woo read, scheduler, delivery, Customer,
 Product, report, analytics, localization, or entitlement platform was added.
-Merge/deploy and minimum real-Store validation remain.
 
 Repository validation passes: Prisma format/validate/generate; complete backend
-suite (59 suites, 418 tests); complete telegram-bot suite (53 tests); root
+suite (59 suites, 420 tests); complete telegram-bot suite (54 tests); root
 format check, lint, typecheck, build, and `git diff --check`. PostgreSQL 16
 passes both the clean full migration chain and a representative pre-M20 upgrade
 with existing Order/InventoryItem rows preserved, all five M20 projection
 indexes present, and no reference backfill. No packaging file changed, so no
 M20-specific Docker image gate was required.
+
+Final closure evidence:
+
+- Final implementation merge `0281bb0` and numeric-SKU hotfix merge `4b66c9a`
+  are on `main`. Production applied migration
+  `20260903120000_m20_search_daily_report`; all 15 migrations are current.
+- Backend and telegram-bot deployment, health/readiness, clean startup/runtime
+  logs, and `/search`, `/search/select`, and `/report` route loading passed.
+- Exact Order search and native M17 detail, customer display-name search,
+  inventory display-name prefix search and detail, safe empty search, `/order`,
+  and `/stock` passed.
+- Numeric SKU `312` initially failed because numeric exact-SKU discovery
+  depended only on the heterogeneous raw-SQL text predicate. Hotfix
+  `c38af6edb2758c8c3f7b5b5a7b696fbf9a658827` adds a typed,
+  Store/Tenant-scoped exact-SKU lookup after the unique exact-Order fast path
+  finds no Order, then returns the result to global rank 2. Unique exact Order
+  remains rank 1; pagination, prefix, ranking, and reference semantics are
+  unchanged. The backend-only hotfix deployment and `/search 312` retest
+  passed. Regression coverage proves numeric exact SKU without an exact Order,
+  exact-Order precedence, SKU prefix behavior, selection/rendering, and
+  Store/Tenant isolation.
+- SKU `604` is projected and searchable. SKU `903` has no InventoryItem row in
+  the current production Store. M20 searches the existing M19 projection, not a
+  complete WooCommerce catalog, so this is a non-blocking production-data/
+  projection limitation and not current evidence of an M19 or M20 defect.
+  Revisit post-MVP only for a reproducible real-Store projection defect.
+- The on-demand 2026-09-03 report in `Asia/Tehran` returned zero Orders, no
+  gross operational sales or status distribution, two LOW and 101 OUT items,
+  and rendered both the delayed-projection warning and projected-operational/
+  non-accounting disclaimer. No scheduled delivery occurred.
+- Final M20 decision: PASS.
 
 ---
 
@@ -1002,22 +1032,22 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `feat/m20-search-daily-report`.
+Current branch: `main`.
 
 ---
 
 ## 6. Current Blockers
 
-M20 has no known repository blocker. Merge/deploy and minimum production
-validation remain. Existing known issues and technical debt remain unchanged.
+M20 has no remaining implementation, deployment, or operational-validation
+blocker. Existing known issues and technical debt remain unchanged.
 
 ---
 
 ## 7. Current Task
 
-M20 implementation and repository validation are complete. Await B review,
-merge, migration/deployment, and the locked minimum production validation. Do
-not start or plan M21 without a separate approved task.
+M20 documentation closure is complete. M21 — Notification / Localization
+Completion is next and has not been started. Do not start or plan M21 without a
+separate approved task; M22 remains after M21.
 
 ---
 
