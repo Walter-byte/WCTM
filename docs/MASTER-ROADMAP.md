@@ -253,11 +253,12 @@ Completed milestones:
 - M19 — Inventory & Low-Stock MVP, fully operationally validated
 - M20 — Search & Daily Report, fully complete, merged, deployed, hotfixed, and
   operationally validated
+- M21 — Notification / Localization Completion, fully complete, merged,
+  deployed, and operationally validated
 
 Next milestone:
 
-- M21 — Notification / Localization Completion; not started. M22 remains after
-  M21.
+- M22 — Basic MVP Entitlements & Phase 5 Closure; not started
 
 Modules
 

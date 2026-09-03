@@ -1033,22 +1033,22 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `feat/m21-notification-localization-completion`.
+Current branch: `main`.
 
 ---
 
 ## 6. Current Blockers
 
-M21 has no known implementation blocker. B review, merge, deployment, and live
-validation remain intentionally outstanding. Existing known issues and
-technical debt remain unchanged.
+No M21 blocker remains. Existing known issues and technical debt remain
+unchanged.
 
 ---
 
 ## 7. Current Task
 
-M21 — Notification / Localization Completion is implemented under accepted
-D-027 on `feat/m21-notification-localization-completion`. The bot owns one typed
+M21 — Notification / Localization Completion is fully complete, merged,
+deployed, and operationally validated under accepted D-027. Implementation
+`a1554a7` was merged through `7e3ad24`. The bot owns one typed
 `fa`/`en` catalog across all M10–M20 manager surfaces and renders M13
 ORDER_CREATED plus M19 LOW/OUT prepared notifications from semantic backend
 data. Tenant language/timezone remain authoritative; Persian uses bidi
@@ -1057,11 +1057,32 @@ unknown runtime language falls back to English. No schema, migration,
 dependency, queue/process topology, delivery identity/retry/recipient policy,
 onboarding/connector surface, or M22 capability changed.
 
-Repository implementation gates are complete. B review, merge, backend and
-telegram-bot deployment, health/readiness checks, representative Persian and
-English manager flows, one authorized Persian ORDER_CREATED/LOW validation if
-needed, and no-resend/log review remain. Do not mark M21 operationally closed
-or begin M22 before that validation.
+Backend and telegram-bot deployment passed with no migration; the connector was
+unchanged. Backend startup was clean, bot polling started normally, and
+`/api/health` plus `/api/health/readiness` passed. Production Persian validation
+broadly passed Home, order surfaces/actions, `/search`, `/report`, `/stock`,
+`/settings`, `/status`, `/help`, native command descriptions, and Back/Home
+navigation. Language changes applied immediately; Persian-calendar date/time
+used the configured Tenant timezone, and LTR identifiers remained exact and
+readable under RTL. Switching back to English immediately restored Home and
+representative operational surfaces.
+
+A Persian `ORDER_CREATED` notification delivered successfully, with some live-
+environment delay, and its View Order/action behavior remained functional. No
+historical order or inventory deliveries were resent solely because language
+changed.
+
+The bounded LOW live attempt remained `OUT_OF_STOCK`: `stock_quantity = 1`, Woo
+`stock_status = outofstock`, WCTM `alert_classification = OUT_OF_STOCK`, incident
+generation 5. M19 correctly makes explicit Woo `outofstock` authoritative
+regardless of numeric quantity. The accepted `product.updated` WebhookEvent was
+`COMPLETED` and the projection updated, so the attempt did not create a genuine
+HEALTHY to LOW_STOCK transition and no new LOW delivery row was expected.
+Automated localized LOW/OUT prepared-notification coverage is accepted for M21
+closure; this is not an M21 defect or a failed LOW notification.
+
+M21 final decision: PASS. M22 — Basic MVP Entitlements & Phase 5 Closure is
+next and has not been started.
 
 ---
 

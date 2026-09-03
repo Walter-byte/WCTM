@@ -7,9 +7,9 @@ Version: 1.0
 Current Phase
 
 Phase 5 — Core Store Management (MVP) is in progress. M21 Notification /
-Localization Completion is implemented on its feature branch and awaits B
-review, merge, deployment, and production validation. M20 Search & Daily Report
-is fully complete, merged, deployed, hotfixed, and operationally validated.
+Localization Completion is fully complete, merged, deployed, and operationally
+validated. M20 Search & Daily Report is fully complete, merged, deployed,
+hotfixed, and operationally validated.
 M19 Inventory & Low-Stock MVP is implemented, merged, deployed, and fully
 operationally validated. Its production migrations, backend, telegram-bot,
 updated connector, eight
@@ -22,10 +22,9 @@ Phase 4 and M1–M16 remain complete and unchanged.
 
 Current Task
 
-M21 — Notification / Localization Completion implementation is complete under
-approved D-027. Repository validation is complete; B review, merge, backend and
-telegram-bot deployment, and the authorized production validation remain. Do
-not mark M21 operationally closed before those steps and do not begin M22.
+M21 — Notification / Localization Completion is operationally closed under
+accepted D-027. M22 — Basic MVP Entitlements & Phase 5 Closure is next and has
+not been started.
 
 ---
 
@@ -37,7 +36,11 @@ Project Version
 
 Repository
 
-Current branch: `feat/m21-notification-localization-completion`.
+Current branch: `main`.
+
+M21 implementation commit: `a1554a7 feat(localization): complete MVP Telegram
+localization`, merged through `7e3ad24 merge: complete M21 notification
+localization`.
 
 M20 final implementation merge: `0281bb0 merge: complete M20 search and daily
 report`. Numeric-SKU correction:
@@ -799,23 +802,21 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-M21 has no known implementation blocker. B review, merge, deployment, and live
-validation are intentionally outstanding. Existing known issues and technical
-debt remain unchanged.
+No M21 blocker remains. Existing known issues and technical debt remain
+unchanged.
 
 ---
 
 Next Milestone
 
-Complete B review, merge, deployment, and production validation for M21 under
-D-027. Do not begin M22.
+M22 — Basic MVP Entitlements & Phase 5 Closure. M22 has not been started.
 
 ---
 
 Last Completed
 
-M20 Search & Daily Report is fully complete, merged, deployed, hotfixed, and
-operationally validated. Final decision: PASS.
+M21 Notification / Localization Completion is fully complete, merged, deployed,
+and operationally validated. Final decision: PASS.
 
 ---
 
@@ -831,7 +832,7 @@ Last Updated
 
 ---
 
-M21 Implementation State
+M21 Closure State
 
 - D-027 is Accepted. `Tenant.language` is authoritative; resolved `FA` renders
   Persian, resolved `EN` renders English, Telegram `language_code` is ignored,
@@ -859,8 +860,29 @@ M21 Implementation State
 - No Prisma schema, migration, dependency, service/process topology, queue,
   scheduler, template platform, notification category, or M22 capability was
   added.
-- Local implementation gates pass. Production validation remains pending until
-  B review and merge; M21 is not operationally closed.
+- Implementation `a1554a7` was merged through `7e3ad24`. Backend and
+  telegram-bot deployed successfully with no migration; the connector remained
+  unchanged. Backend startup was clean, bot polling started normally, and
+  `/api/health` plus `/api/health/readiness` passed.
+- Production Persian validation broadly passed Home, order surfaces/actions,
+  `/search`, `/report`, `/stock`, `/settings`, `/status`, `/help`, native command
+  descriptions, and Back/Home navigation. The `/settings` language mutation
+  changed UX immediately. Persian-calendar date/time used the configured Tenant
+  timezone, and LTR identifiers remained exact and readable under RTL.
+- A Persian `ORDER_CREATED` notification delivered successfully, albeit with
+  some live-environment delay, and its existing View Order/action behavior
+  remained functional. Switching back to English immediately restored Home and
+  representative operational surfaces. Neither language change resent
+  historical order or inventory deliveries.
+- The bounded LOW live attempt did not create a LOW transition. Production
+  state was `stock_quantity = 1`, Woo `stock_status = outofstock`, WCTM
+  `alert_classification = OUT_OF_STOCK`, incident generation 5. M19 correctly
+  treats explicit Woo `outofstock` as authoritative regardless of quantity; the
+  accepted `product.updated` WebhookEvent completed and updated the projection.
+  Therefore no new LOW delivery row was expected. Automated localized LOW/OUT
+  prepared-notification coverage is accepted for closure; no M21 defect or LOW
+  notification failure is recorded.
+- M21 final decision: PASS. M22 is next and was not started.
 
 ---
 

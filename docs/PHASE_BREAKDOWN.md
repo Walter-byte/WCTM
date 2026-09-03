@@ -586,7 +586,7 @@ architecture change.
 
 M20 final decision: PASS.
 
-### M21 — Notification / Localization Completion 🟨 Implemented; review and live validation pending
+### M21 — Notification / Localization Completion ✅ Complete / Merged / Operationally Validated
 
 - D-027 locks presentation/localization only: `Tenant.language` is authoritative,
   `fa`/`en` are supported, pre-context UX defaults to Persian, and unknown
@@ -604,9 +604,34 @@ M20 final decision: PASS.
 - No schema migration, dependency, new queue/process/scheduler, onboarding or
   connector localization, template system, notification category, or M22
   capability was added.
-- Implementation and repository gates are complete. B review, merge,
-  backend/telegram-bot deployment, and production validation remain required;
-  M21 is not operationally closed.
+- Implementation commit `a1554a7 feat(localization): complete MVP Telegram
+localization` was merged to `main` in `7e3ad24 merge: complete M21
+notification localization`. Backend and telegram-bot deployed successfully;
+  no migration was required, the connector was unchanged, backend startup was
+  clean, bot polling started normally, and `/api/health` plus
+  `/api/health/readiness` passed.
+- Production language changes through `/settings` took effect immediately.
+  Persian Home, order surfaces/actions, `/search`, `/report`, `/stock`,
+  `/settings`, `/status`, `/help`, command descriptions, and Back/Home
+  navigation passed broadly; Persian-calendar dates used the configured Tenant
+  timezone and LTR identifiers remained exact and readable under RTL. Switching
+  back to English immediately restored representative English surfaces.
+- A Persian `ORDER_CREATED` production notification was delivered successfully,
+  with its existing View Order/action behavior functional. Delivery was
+  somewhat delayed but completed, and language changes caused no duplicate or
+  historical order/inventory replay.
+- The bounded LOW live attempt remained `OUT_OF_STOCK`, not LOW: production
+  state was `stock_quantity = 1`, Woo `stock_status = outofstock`, WCTM
+  `alert_classification = OUT_OF_STOCK`, incident generation 5. Under M19,
+  explicit Woo `outofstock` is authoritative regardless of numeric quantity.
+  The accepted `product.updated` WebhookEvent completed and updated the
+  projection, so no genuine HEALTHY to LOW_STOCK transition occurred and no new
+  LOW delivery row was expected. Automated localized LOW/OUT prepared-
+  notification coverage is accepted for closure; this is not an M21 defect or
+  a failed LOW notification.
+
+M21 final decision: PASS. M22 — Basic MVP Entitlements & Phase 5 Closure is
+next and has not been started.
 
 ## Phase 6 — SaaS Platform ⬜ Planned
 
