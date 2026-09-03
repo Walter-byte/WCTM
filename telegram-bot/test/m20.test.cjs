@@ -82,6 +82,67 @@ test('/search renders mixed projection results and partial inventory state safel
   assert.doesNotMatch(message.payload.text, /email|phone|address|payment/i);
 });
 
+test('/search 312 preserves the numeric SKU and opens its signed inventory result', async () => {
+  const calls = [];
+  const backendCalls = [];
+  const bot = createBot(BOT_TOKEN, {
+    backend: {
+      search: async (_identity, input) => {
+        backendCalls.push({ operation: 'search', input });
+        return {
+          ...searchResult(),
+          results: [
+            {
+              ref: RESULT_REF,
+              kind: 'INVENTORY',
+              status: 'outofstock',
+              displayName: 'Oakley OO9501 Velo Kato',
+              sku: '312',
+              quantity: '0',
+              classification: 'OUT_OF_STOCK',
+            },
+          ],
+        };
+      },
+      selectSearchResult: async (_identity, ref) => {
+        backendCalls.push({ operation: 'select', ref });
+        return {
+          ...searchSelection(),
+          detail: {
+            ...searchSelection().detail,
+            item: {
+              ...searchSelection().detail.item,
+              displayName: 'Oakley OO9501 Velo Kato',
+              sku: '312',
+              quantity: '0',
+              stockStatus: 'outofstock',
+              classification: 'OUT_OF_STOCK',
+            },
+          },
+        };
+      },
+    },
+  });
+  installApiStub(bot, calls);
+
+  await bot.handleUpdate(commandUpdate(530, '/search 312'));
+  const searchMessage = calls.find((call) => call.method === 'sendMessage');
+  assert.match(searchMessage.payload.text, /Oakley OO9501 Velo Kato.*SKU 312/);
+  assert.ok(callbacks(searchMessage).includes(RESULT_REF));
+
+  await bot.handleUpdate(callbackUpdate(531, RESULT_REF));
+  const detailMessage = calls.find(
+    (call) =>
+      call.method === 'editMessageText' &&
+      /Oakley OO9501 Velo Kato/.test(call.payload.text)
+  );
+  assert.match(detailMessage.payload.text, /SKU: 312/);
+  assert.deepEqual(backendCalls, [
+    { operation: 'search', input: { query: '312' } },
+    { operation: 'select', ref: RESULT_REF },
+  ]);
+});
+
 test('/report renders separated currencies and unavailable inventory without scheduling', async () => {
   const calls = [];
   let reportCalls = 0;
@@ -184,6 +245,24 @@ function commandUpdate(updateId, text) {
       from: { id: 1001, is_bot: false, first_name: 'Test' },
       text,
       entities: [{ offset: 0, length: command.length, type: 'bot_command' }],
+    },
+  };
+}
+
+function callbackUpdate(updateId, data) {
+  return {
+    update_id: updateId,
+    callback_query: {
+      id: `callback-${updateId}`,
+      from: { id: 1001, is_bot: false, first_name: 'Test' },
+      message: {
+        message_id: 999,
+        date: 1,
+        chat: { id: 2001, type: 'private', first_name: 'Test' },
+        text: 'Search Results',
+      },
+      chat_instance: 'test-chat-instance',
+      data,
     },
   };
 }

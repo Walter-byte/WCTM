@@ -31,6 +31,7 @@ import {
 const PAGE_SIZE = 8;
 const MAX_REACHABLE = 200;
 const MAX_QUERY_LENGTH = 80;
+const NUMERIC_SKU_PATTERN = /^\d+$/u;
 const REFERENCE_ID_BYTES = 12;
 const REFERENCE_SIGNATURE_BYTES = 12;
 const REVENUE_STATUSES = new Set(['processing', 'completed']);
@@ -263,7 +264,16 @@ export class TelegramSearchReportService {
       return { state: 'CONTEXT_CHANGED' };
     }
 
-    const rows = await this.querySearch(context, normalized, offset);
+    const exactNumericSkuItemIds = await this.exactNumericSkuItemIds(
+      context,
+      normalized
+    );
+    const rows = await this.querySearch(
+      context,
+      normalized,
+      offset,
+      exactNumericSkuItemIds
+    );
     const pageRows = rows.slice(0, PAGE_SIZE);
     const expiresAt = this.referenceExpiry();
     const current = this.newPageReference(
@@ -486,11 +496,16 @@ export class TelegramSearchReportService {
   private async querySearch(
     context: SearchContext,
     normalized: string,
-    offset: number
+    offset: number,
+    exactNumericSkuItemIds: string[]
   ): Promise<SearchRow[]> {
     const prefix = `${this.escapeLike(normalized)}%`;
     const inventoryEnabled =
       context.inventorySyncState === InventorySyncState.READY;
+    const exactNumericSkuMatch =
+      exactNumericSkuItemIds.length === 0
+        ? Prisma.sql`FALSE`
+        : Prisma.sql`i.id IN (${Prisma.join(exactNumericSkuItemIds)})`;
 
     return this.prisma.$queryRaw<SearchRow[]>(Prisma.sql`
       WITH candidates AS (
@@ -533,6 +548,7 @@ export class TelegramSearchReportService {
           i.id AS target_id,
           i.wc_item_id AS stable_identity,
           CASE
+            WHEN ${exactNumericSkuMatch} THEN 1
             WHEN lower(i.sku) = ${normalized} THEN 1
             WHEN lower(i.display_name) = ${normalized} THEN 2
             WHEN lower(i.sku) LIKE ${prefix} ESCAPE '\\' THEN 3
@@ -555,7 +571,8 @@ export class TelegramSearchReportService {
           AND i.store_id = ${context.storeId}
           AND i.remote_deleted_at IS NULL
           AND (
-            lower(i.sku) = ${normalized}
+            ${exactNumericSkuMatch}
+            OR lower(i.sku) = ${normalized}
             OR lower(i.sku) LIKE ${prefix} ESCAPE '\\'
             OR lower(i.display_name) = ${normalized}
             OR lower(i.display_name) LIKE ${prefix} ESCAPE '\\'
@@ -573,6 +590,32 @@ export class TelegramSearchReportService {
       OFFSET ${offset}
       LIMIT ${PAGE_SIZE + 1}
     `);
+  }
+
+  private async exactNumericSkuItemIds(
+    context: SearchContext,
+    normalized: string
+  ): Promise<string[]> {
+    if (
+      context.inventorySyncState !== InventorySyncState.READY ||
+      !NUMERIC_SKU_PATTERN.test(normalized)
+    ) {
+      return [];
+    }
+
+    const items = await this.prisma.inventoryItem.findMany({
+      where: {
+        tenantId: context.tenantId,
+        storeId: context.storeId,
+        remoteDeletedAt: null,
+        sku: normalized,
+      },
+      select: { id: true },
+      orderBy: [{ displayName: 'asc' }, { wcItemId: 'asc' }],
+      take: MAX_REACHABLE,
+    });
+
+    return items.map((item) => item.id);
   }
 
   private async readyInventoryCounts(context: SearchContext) {
