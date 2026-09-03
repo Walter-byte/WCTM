@@ -20,6 +20,9 @@ import type {
   SettingsSummary,
   StockDetailResult,
   StockListResult,
+  DailyReportResult,
+  SearchResult,
+  SearchSelectionResult,
   TelegramAuthorizationStatus,
   TelegramIdentity,
 } from './internal-backend.client';
@@ -49,6 +52,8 @@ const NAVIGATION_CALLBACKS = {
   help: 'nav:help',
   settings: 'nav:settings',
   stock: 'nav:stock',
+  search: 'nav:search',
+  report: 'nav:report',
 } as const;
 
 export const BOT_COMMANDS = [
@@ -58,6 +63,8 @@ export const BOT_COMMANDS = [
   { command: 'status', description: 'Check account and store access' },
   { command: 'settings', description: 'View or manage store settings' },
   { command: 'stock', description: 'Show low and out-of-stock items' },
+  { command: 'search', description: 'Search orders and inventory' },
+  { command: 'report', description: "Show today's operational report" },
   { command: 'help', description: 'Show available commands' },
   { command: 'unlink', description: 'Unlink this Telegram account' },
 ] as const;
@@ -226,6 +233,46 @@ export function createBot(
     }
   });
 
+  bot.command('search', async (context) => {
+    const identity = privateIdentity(context);
+
+    if (!identity) {
+      return;
+    }
+
+    try {
+      await replyView(
+        context,
+        renderSearch(
+          await dependencies.backend.search(identity, {
+            query: context.match.trim(),
+          })
+        )
+      );
+    } catch (error: unknown) {
+      logTransportFailure(log, identity.updateId, error);
+      await replyView(context, renderTransportFailure(error, 'search'));
+    }
+  });
+
+  bot.command('report', async (context) => {
+    const identity = privateIdentity(context);
+
+    if (!identity) {
+      return;
+    }
+
+    try {
+      await replyView(
+        context,
+        renderDailyReport(await dependencies.backend.report(identity))
+      );
+    } catch (error: unknown) {
+      logTransportFailure(log, identity.updateId, error);
+      await replyView(context, renderTransportFailure(error, 'report'));
+    }
+  });
+
   bot.command('order', async (context) => {
     const identity = privateIdentity(context);
 
@@ -326,6 +373,75 @@ export function createBot(
       'stock'
     );
   });
+
+  bot.callbackQuery(NAVIGATION_CALLBACKS.search, async (context) => {
+    await handleViewCallback(context, async () => renderSearchUsage(), log);
+  });
+
+  bot.callbackQuery(NAVIGATION_CALLBACKS.report, async (context) => {
+    await handleViewCallback(
+      context,
+      async (identity) =>
+        renderDailyReport(await dependencies.backend.report(identity)),
+      log,
+      'report'
+    );
+  });
+
+  bot.callbackQuery(
+    /^q\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/,
+    async (context) => {
+      const identity = privateIdentity(context);
+
+      if (!identity) {
+        await safeAnswerCallback(context);
+        return;
+      }
+
+      try {
+        const rendered = renderSearch(
+          await dependencies.backend.search(identity, {
+            cursor: context.callbackQuery.data,
+          })
+        );
+        await safeAnswerCallback(context);
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      } catch (error: unknown) {
+        logTransportFailure(log, identity.updateId, error);
+        await safeAnswerCallback(context);
+        const rendered = renderTransportFailure(error, 'search');
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      }
+    }
+  );
+
+  bot.callbackQuery(
+    /^u\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/,
+    async (context) => {
+      const identity = privateIdentity(context);
+
+      if (!identity) {
+        await safeAnswerCallback(context);
+        return;
+      }
+
+      try {
+        const rendered = renderSearchSelection(
+          await dependencies.backend.selectSearchResult(
+            identity,
+            context.callbackQuery.data
+          )
+        );
+        await safeAnswerCallback(context);
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      } catch (error: unknown) {
+        logTransportFailure(log, identity.updateId, error);
+        await safeAnswerCallback(context);
+        const rendered = renderTransportFailure(error, 'search');
+        await editOrReply(context, rendered.text, rendered.keyboard);
+      }
+    }
+  );
 
   bot.callbackQuery(
     /^sg:g\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/,
@@ -850,6 +966,8 @@ function renderHelp(): RenderedView {
       '/orders — Browse recent orders',
       '/order <number> — Open one exact order number',
       '/stock — Show low and out-of-stock items',
+      '/search <query> — Search orders and inventory',
+      "/report — Show today's projected operational summary",
       '/status — Check account and store access',
       '/settings — View or manage store settings',
       '/help — Show this command list',
@@ -860,6 +978,9 @@ function renderHelp(): RenderedView {
     keyboard: new InlineKeyboard()
       .text('Recent Orders', NAVIGATION_CALLBACKS.orders)
       .text('Stock', NAVIGATION_CALLBACKS.stock)
+      .row()
+      .text('Search', NAVIGATION_CALLBACKS.search)
+      .text('Daily Report', NAVIGATION_CALLBACKS.report)
       .row()
       .text('Home', NAVIGATION_CALLBACKS.home),
   };
@@ -1018,7 +1139,8 @@ function recipientModeLabel(mode: SettingsSummary['recipientMode']): string {
 
 function renderRecoveryView(
   text: string,
-  primary: 'orders' | 'status' | 'help' | 'settings' | 'stock'
+  primary:
+    'orders' | 'status' | 'help' | 'settings' | 'stock' | 'search' | 'report'
 ): RenderedView {
   const labels = {
     orders: 'Refresh Recent Orders',
@@ -1026,6 +1148,8 @@ function renderRecoveryView(
     help: 'Help',
     settings: 'Settings',
     stock: 'Refresh Stock',
+    search: 'Search',
+    report: 'Daily Report',
   } as const;
 
   return {
@@ -1039,7 +1163,14 @@ function renderRecoveryView(
 
 function renderTransportFailure(
   error: unknown,
-  primary: 'orders' | 'status' | 'help' | 'settings' | 'stock' = 'help'
+  primary:
+    | 'orders'
+    | 'status'
+    | 'help'
+    | 'settings'
+    | 'stock'
+    | 'search'
+    | 'report' = 'help'
 ): RenderedView {
   return renderRecoveryView(transportFailureMessage(error), primary);
 }
@@ -1048,6 +1179,9 @@ function homeKeyboard(): InlineKeyboard {
   return new InlineKeyboard()
     .text('Recent Orders', NAVIGATION_CALLBACKS.orders)
     .text('Stock', NAVIGATION_CALLBACKS.stock)
+    .row()
+    .text('Search', NAVIGATION_CALLBACKS.search)
+    .text('Daily Report', NAVIGATION_CALLBACKS.report)
     .row()
     .text('Settings', NAVIGATION_CALLBACKS.settings)
     .row()
@@ -1212,6 +1346,230 @@ export function renderStockDetail(result: StockDetailResult): RenderedView {
     ].join('\n'),
     keyboard: new InlineKeyboard()
       .text('Back to Stock', result.backCursor)
+      .row()
+      .text('Home', NAVIGATION_CALLBACKS.home),
+  };
+}
+
+function renderSearchUsage(): RenderedView {
+  return {
+    text: [
+      'Search',
+      '',
+      'Use /search <query> to find projected orders by order number or customer display name, and inventory by SKU or display name.',
+      'Prefix searches require at least two characters.',
+    ].join('\n'),
+    keyboard: new InlineKeyboard().text('Home', NAVIGATION_CALLBACKS.home),
+  };
+}
+
+export function renderSearch(result: SearchResult): RenderedView {
+  if (result.state === 'ORDER_DETAIL') {
+    return renderOrderDetail(result.detail);
+  }
+
+  if (result.state === 'INVALID_QUERY') {
+    return renderSearchUsage();
+  }
+
+  if (result.state === 'QUERY_TOO_SHORT') {
+    return renderRecoveryView(
+      'Use at least two characters for a prefix search. A one-character exact order number or SKU is still accepted.',
+      'search'
+    );
+  }
+
+  if (result.state === 'UNAUTHORIZED') {
+    return renderRecoveryView(
+      'This chat is not authorized to search store projections.',
+      'status'
+    );
+  }
+
+  if (result.state === 'NO_ACTIVE_STORE') {
+    return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
+  }
+
+  if (result.state === 'CONTEXT_CHANGED') {
+    return renderRecoveryView(
+      'This search expired or the active context changed. Start a new search.',
+      'search'
+    );
+  }
+
+  if (result.state !== 'OK') {
+    return renderSearchUsage();
+  }
+
+  const keyboard = new InlineKeyboard();
+
+  for (const row of result.results) {
+    const label =
+      row.kind === 'ORDER'
+        ? `Order #${row.orderNumber} • ${row.status}`
+        : `${row.classification === 'OUT_OF_STOCK' ? 'OUT' : row.classification === 'LOW_STOCK' ? 'LOW' : 'OK'} • ${row.displayName}${row.sku ? ` • ${row.sku}` : ''}`;
+    keyboard
+      .text(label.length <= 64 ? label : `${label.slice(0, 61)}...`, row.ref)
+      .row();
+  }
+
+  if (result.previousCursor) {
+    keyboard.text('Previous', result.previousCursor);
+  }
+  if (result.nextCursor) {
+    keyboard.text('Next', result.nextCursor);
+  }
+  keyboard.row().text('New Search', NAVIGATION_CALLBACKS.search);
+  keyboard.text('Home', NAVIGATION_CALLBACKS.home);
+
+  return {
+    text: [
+      'Search Results',
+      '',
+      ...(result.results.length === 0
+        ? ['No matching projected orders or inventory items.']
+        : result.results.map((row) =>
+            row.kind === 'ORDER'
+              ? `Order #${row.orderNumber} • ${row.status} • ${row.total} ${row.currency}${row.customerDisplayName ? ` • ${row.customerDisplayName}` : ''}`
+              : `${row.classification} • ${row.displayName}${row.sku ? ` • SKU ${row.sku}` : ''}${row.quantity === null ? '' : ` • qty ${row.quantity}`}`
+          )),
+      ...(result.inventoryState === 'READY'
+        ? []
+        : [
+            '',
+            'Inventory is not READY; these results include Orders only and are therefore partial.',
+          ]),
+    ].join('\n'),
+    keyboard,
+  };
+}
+
+export function renderSearchSelection(
+  result: SearchSelectionResult
+): RenderedView {
+  if (result.state === 'ORDER') {
+    const rendered = renderOrderDetail(result.detail);
+    rendered.keyboard.row().text('Back to Search', result.backCursor);
+    return rendered;
+  }
+
+  if (result.state === 'INVENTORY') {
+    const item = result.detail.item;
+    const variation = item.variationContext.map(
+      (attribute) => `${attribute.name}: ${attribute.option}`
+    );
+
+    return {
+      text: [
+        item.classification === 'OUT_OF_STOCK'
+          ? 'Out of Stock'
+          : item.classification === 'LOW_STOCK'
+            ? 'Low Stock'
+            : 'Inventory Item',
+        '',
+        item.displayName,
+        ...(variation.length > 0 ? [`Variation: ${variation.join(', ')}`] : []),
+        ...(item.sku ? [`SKU: ${item.sku}`] : []),
+        `Quantity: ${item.quantity ?? 'not managed'}`,
+        `WooCommerce status: ${item.stockStatus}`,
+        `WCTM classification: ${item.classification}`,
+        `WCTM threshold: ${item.threshold ?? 'not configured'}`,
+        `Last synchronized: ${item.lastSyncedAt}`,
+      ].join('\n'),
+      keyboard: new InlineKeyboard()
+        .text('Back to Search', result.backCursor)
+        .row()
+        .text('Stock', NAVIGATION_CALLBACKS.stock)
+        .text('Home', NAVIGATION_CALLBACKS.home),
+    };
+  }
+
+  if (result.state === 'UNAUTHORIZED') {
+    return renderRecoveryView(
+      'This chat is not authorized to open this search result.',
+      'status'
+    );
+  }
+
+  if (result.state === 'NO_ACTIVE_STORE') {
+    return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
+  }
+
+  return renderRecoveryView(
+    result.state === 'SYNCING'
+      ? 'Inventory is not READY. Start a new search after synchronization completes.'
+      : 'This search result expired, changed context, or is no longer available.',
+    'search'
+  );
+}
+
+export function renderDailyReport(result: DailyReportResult): RenderedView {
+  if (result.state === 'UNAUTHORIZED') {
+    return renderRecoveryView(
+      'This chat is not authorized to view the daily report.',
+      'status'
+    );
+  }
+
+  if (result.state === 'NO_ACTIVE_STORE') {
+    return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
+  }
+
+  if (result.state !== 'OK') {
+    return renderRecoveryView('The daily report is unavailable.', 'report');
+  }
+
+  const sales =
+    result.sales.length === 0
+      ? ['Gross operational sales: none']
+      : result.sales.flatMap((currency) => [
+          `Gross sales (${currency.currency}): ${currency.gross}`,
+          `Average order value (${currency.currency}): ${currency.averageOrderValue}`,
+        ]);
+  const statuses =
+    result.statuses.length === 0
+      ? ['Status distribution: none']
+      : [
+          'Status distribution:',
+          ...result.statuses.map(
+            (status) => `• ${status.status}: ${status.count}`
+          ),
+        ];
+  const inventory =
+    result.inventory.state === 'READY'
+      ? [
+          `Current low stock: ${result.inventory.lowStock}`,
+          `Current out of stock: ${result.inventory.outOfStock}`,
+        ]
+      : [
+          `Inventory counts unavailable (${result.inventory.syncState.toLowerCase()}).`,
+        ];
+
+  return {
+    text: [
+      'Daily Operational Report',
+      `${result.localDate} • ${result.timezone}`,
+      '',
+      `Orders created today: ${result.ordersToday}`,
+      ...sales,
+      ...(result.omittedRevenueOrders > 0
+        ? [
+            `Revenue-eligible orders omitted for invalid total/currency: ${result.omittedRevenueOrders}`,
+          ]
+        : []),
+      '',
+      ...statuses,
+      '',
+      ...inventory,
+      ...(result.projection.delayed
+        ? ['', 'Order projection data may be delayed.']
+        : []),
+      '',
+      'Projected operational summary; not accounting or net revenue.',
+    ].join('\n'),
+    keyboard: new InlineKeyboard()
+      .text('Recent Orders', NAVIGATION_CALLBACKS.orders)
+      .text('Stock', NAVIGATION_CALLBACKS.stock)
       .row()
       .text('Home', NAVIGATION_CALLBACKS.home),
   };
@@ -1719,7 +2077,14 @@ async function handleViewCallback(
   context: Context,
   render: (identity: TelegramIdentity) => Promise<RenderedView>,
   log: (record: Readonly<Record<string, unknown>>) => void,
-  recovery: 'orders' | 'status' | 'help' | 'settings' | 'stock' = 'help'
+  recovery:
+    | 'orders'
+    | 'status'
+    | 'help'
+    | 'settings'
+    | 'stock'
+    | 'search'
+    | 'report' = 'help'
 ): Promise<void> {
   const identity = privateIdentity(context);
 

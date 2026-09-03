@@ -39,6 +39,7 @@ describe('M11 internal Telegram order authorization integration', () => {
       {} as TelegramLinkingService,
       { list } as unknown as TelegramOrderService,
       {} as never,
+      {} as never,
       {} as never
     );
 

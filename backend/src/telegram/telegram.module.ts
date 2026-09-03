@@ -9,6 +9,7 @@ import { TelegramInternalController } from './telegram-internal.controller';
 import { TelegramDeliveryClient } from './telegram-delivery.client';
 import { TelegramLinkingService } from './telegram-linking.service';
 import { TelegramOrderService } from './telegram-order.service';
+import { TelegramSearchReportService } from './telegram-search-report.service';
 import { TelegramSettingsService } from './telegram-settings.service';
 
 @Module({
@@ -21,6 +22,7 @@ import { TelegramSettingsService } from './telegram-settings.service';
     TelegramOrderService,
     TelegramSettingsService,
     TelegramInventoryService,
+    TelegramSearchReportService,
   ],
   exports: [
     TelegramDeliveryClient,
@@ -28,6 +30,7 @@ import { TelegramSettingsService } from './telegram-settings.service';
     TelegramOrderService,
     TelegramSettingsService,
     TelegramInventoryService,
+    TelegramSearchReportService,
   ],
 })
 export class TelegramModule {}

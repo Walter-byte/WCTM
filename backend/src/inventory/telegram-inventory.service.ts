@@ -47,7 +47,7 @@ export interface TelegramStockItemSummary {
   sku: string | null;
   quantity: string | null;
   stockStatus: string;
-  classification: 'LOW_STOCK' | 'OUT_OF_STOCK';
+  classification: 'HEALTHY' | 'LOW_STOCK' | 'OUT_OF_STOCK';
   kind: 'PRODUCT' | 'VARIATION';
 }
 
@@ -87,6 +87,17 @@ export type TelegramStockDetailResult =
         'NOT_FOUND' | 'NO_ACTIVE_STORE' | 'UNAUTHORIZED' | 'CONTEXT_CHANGED';
     }
   | { state: 'OK'; item: TelegramStockItemDetail; backCursor: string };
+
+export type TelegramProjectedStockDetailResult =
+  | {
+      state:
+        | 'NOT_FOUND'
+        | 'NO_ACTIVE_STORE'
+        | 'UNAUTHORIZED'
+        | 'CONTEXT_CHANGED'
+        | 'SYNCING';
+    }
+  | { state: 'OK'; item: TelegramStockItemDetail };
 
 export type TelegramPreparedInventoryNotification =
   | { state: 'UNAUTHORIZED' | 'NOT_FOUND' | 'DISABLED' | 'STALE' }
@@ -374,6 +385,69 @@ export class TelegramInventoryService {
     };
   }
 
+  async openProjectedDetail(input: {
+    telegram: TelegramOrderIdentityDto;
+    inventoryItemId: string;
+  }): Promise<TelegramProjectedStockDetailResult> {
+    const resolved = await this.resolveContext(input.telegram);
+
+    if (resolved.state !== 'OK') {
+      return { state: resolved.state };
+    }
+
+    const context = resolved.context;
+    const store = await this.loadStore(context);
+
+    if (!store) {
+      return { state: 'NO_ACTIVE_STORE' };
+    }
+
+    if (store.inventorySyncState !== InventorySyncState.READY) {
+      return { state: 'SYNCING' };
+    }
+
+    const item = await this.prisma.inventoryItem.findFirst({
+      where: {
+        id: input.inventoryItemId,
+        tenantId: context.tenantId,
+        storeId: context.storeId,
+        remoteDeletedAt: null,
+      },
+      select: {
+        displayName: true,
+        sku: true,
+        stockQuantity: true,
+        stockStatus: true,
+        alertClassification: true,
+        kind: true,
+        variationContext: true,
+        lastSyncedAt: true,
+        store: { select: { lowStockThreshold: true } },
+      },
+    });
+
+    if (!item) {
+      return { state: 'NOT_FOUND' };
+    }
+
+    const summary = this.toSummary(item, '');
+
+    return {
+      state: 'OK',
+      item: {
+        displayName: summary.displayName,
+        sku: summary.sku,
+        quantity: summary.quantity,
+        stockStatus: summary.stockStatus,
+        classification: summary.classification,
+        kind: summary.kind,
+        variationContext: this.readVariationContext(item.variationContext),
+        threshold: item.store.lowStockThreshold,
+        lastSyncedAt: item.lastSyncedAt.toISOString(),
+      },
+    };
+  }
+
   async prepareNotification(
     recipient: TelegramOrderNotificationRecipient,
     tenantId: string,
@@ -500,7 +574,10 @@ export class TelegramInventoryService {
       sku: summary.sku,
       quantity: summary.quantity,
       stockStatus: summary.stockStatus,
-      classification: summary.classification,
+      classification:
+        alertLevel === InventoryAlertLevel.OUT_OF_STOCK
+          ? 'OUT_OF_STOCK'
+          : 'LOW_STOCK',
       threshold: policy.lowStockThreshold,
       viewStockRef: detail.token,
     };
@@ -731,10 +808,7 @@ export class TelegramInventoryService {
       sku: item.sku,
       quantity: item.stockQuantity?.toString() ?? null,
       stockStatus: item.stockStatus,
-      classification:
-        item.alertClassification === InventoryAlertClassification.OUT_OF_STOCK
-          ? 'OUT_OF_STOCK'
-          : 'LOW_STOCK',
+      classification: item.alertClassification,
       kind: item.kind,
     };
   }

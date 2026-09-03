@@ -251,10 +251,12 @@ Completed milestones:
 - M17 — Order Workflow Completion
 - M18 — MVP Store Settings Foundation, fully operationally validated
 - M19 — Inventory & Low-Stock MVP, fully operationally validated
+- M20 — Search & Daily Report, implementation and repository validation
+  complete; minimum production validation remains after merge/deploy
 
 Next milestone:
 
-- M20 — Search & Daily Report; not started
+- M21 — Notification / Localization Completion; not started
 
 Modules
 

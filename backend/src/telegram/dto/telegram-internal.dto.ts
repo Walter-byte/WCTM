@@ -8,7 +8,7 @@ const decimalIdentifier = Joi.string()
     BigInt(value) <= MAX_SIGNED_BIGINT ? value : helpers.error('number.max')
   );
 const callbackReference = Joi.string()
-  .pattern(/^[cdgikpsv]\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/)
+  .pattern(/^[cdgikpqsuv]\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16}$/)
   .max(64);
 export const TELEGRAM_ORDER_NOTE_MAX_LENGTH = 1000;
 
@@ -58,6 +58,21 @@ export interface TelegramStockListDto {
 export interface TelegramStockDetailDto {
   telegram: TelegramOrderIdentityDto;
   ref: string;
+}
+
+export interface TelegramSearchDto {
+  telegram: TelegramOrderIdentityDto;
+  query?: string;
+  cursor?: string;
+}
+
+export interface TelegramSearchSelectDto {
+  telegram: TelegramOrderIdentityDto;
+  ref: string;
+}
+
+export interface TelegramDailyReportDto {
+  telegram: TelegramOrderIdentityDto;
 }
 
 export interface TelegramOrderNoteStartDto extends TelegramOrderDetailDto {
@@ -138,6 +153,21 @@ export const telegramStockListSchema = Joi.object<TelegramStockListDto>({
 export const telegramStockDetailSchema = Joi.object<TelegramStockDetailDto>({
   telegram: telegramOrderIdentitySchema,
   ref: callbackReference.required(),
+});
+
+export const telegramSearchSchema = Joi.object<TelegramSearchDto>({
+  telegram: telegramOrderIdentitySchema,
+  query: Joi.string().allow('').max(80).optional(),
+  cursor: callbackReference.optional(),
+}).xor('query', 'cursor');
+
+export const telegramSearchSelectSchema = Joi.object<TelegramSearchSelectDto>({
+  telegram: telegramOrderIdentitySchema,
+  ref: callbackReference.required(),
+});
+
+export const telegramDailyReportSchema = Joi.object<TelegramDailyReportDto>({
+  telegram: telegramOrderIdentitySchema,
 });
 
 export const telegramOrderNoteStartSchema =

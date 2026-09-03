@@ -329,6 +329,7 @@ describe('TelegramLinkingService', () => {
       fixture.service,
       {} as TelegramOrderService,
       {} as never,
+      {} as never,
       {} as never
     );
 
@@ -682,6 +683,7 @@ describe('TelegramLinkingService', () => {
     const controller = new TelegramInternalController(
       fixture.service,
       {} as TelegramOrderService,
+      {} as never,
       {} as never,
       {} as never
     );
