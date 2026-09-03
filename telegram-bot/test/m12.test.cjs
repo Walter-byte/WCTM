@@ -91,7 +91,7 @@ test('backend-controlled detail actions render server transitions and forward a 
     (call) => call.method === 'editMessageText'
   )[2];
   assert.match(statusEdit.payload.text, /Status updated/);
-  assert.match(statusEdit.payload.text, /Status: completed/);
+  assert.match(statusEdit.payload.text, /Status: Completed/);
   assert.deepEqual(
     calls.map((call) => call.operation),
     ['transitions', 'status']

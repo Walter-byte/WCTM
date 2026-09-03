@@ -43,7 +43,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-026)
+## 3. Architectural Decisions (D-001–D-027)
 
 | ID    | Decision                                                                                                                                                                                             | Status   |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -73,8 +73,9 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-024 | Tenant-owned timezone/language, Store-owned threshold/category/recipient policy, Membership-selected recipients under M10 authority, M13-only filtering, and stateless bot settings references       | Accepted |
 | D-025 | WooCommerce-authoritative narrow inventory projection, core product-webhook updates, Store threshold policy, stock-owning item semantics, incident delivery, M18/M10 recipients, and no stock writes | Accepted |
 | D-026 | Store-scoped projection-only exact/prefix Order/inventory search and on-demand Tenant-local projected operational daily report, with no live Woo reads, analytics platform, or scheduler             | Accepted |
+| D-027 | Tenant-authoritative typed Persian/English Telegram presentation, RTL/bidi and Tenant-timezone calendar formatting, and semantic M13/M19 notification rendering without delivery-policy changes      | Accepted |
 
-Next decision number: **D-027**, if a future task produces a genuine
+Next decision number: **D-028**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -1032,22 +1033,35 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `main`.
+Current branch: `feat/m21-notification-localization-completion`.
 
 ---
 
 ## 6. Current Blockers
 
-M20 has no remaining implementation, deployment, or operational-validation
-blocker. Existing known issues and technical debt remain unchanged.
+M21 has no known implementation blocker. B review, merge, deployment, and live
+validation remain intentionally outstanding. Existing known issues and
+technical debt remain unchanged.
 
 ---
 
 ## 7. Current Task
 
-M20 documentation closure is complete. M21 — Notification / Localization
-Completion is next and has not been started. Do not start or plan M21 without a
-separate approved task; M22 remains after M21.
+M21 — Notification / Localization Completion is implemented under accepted
+D-027 on `feat/m21-notification-localization-completion`. The bot owns one typed
+`fa`/`en` catalog across all M10–M20 manager surfaces and renders M13
+ORDER_CREATED plus M19 LOW/OUT prepared notifications from semantic backend
+data. Tenant language/timezone remain authoritative; Persian uses bidi
+isolation and Persian-calendar `Intl`, English uses Gregorian `Intl`, and
+unknown runtime language falls back to English. No schema, migration,
+dependency, queue/process topology, delivery identity/retry/recipient policy,
+onboarding/connector surface, or M22 capability changed.
+
+Repository implementation gates are complete. B review, merge, backend and
+telegram-bot deployment, health/readiness checks, representative Persian and
+English manager flows, one authorized Persian ORDER_CREATED/LOW validation if
+needed, and no-resend/log review remain. Do not mark M21 operationally closed
+or begin M22 before that validation.
 
 ---
 

@@ -9,6 +9,7 @@ import { TelegramInternalController } from './telegram-internal.controller';
 import { TelegramDeliveryClient } from './telegram-delivery.client';
 import { TelegramLinkingService } from './telegram-linking.service';
 import { TelegramOrderService } from './telegram-order.service';
+import { TelegramPresentationService } from './telegram-presentation.service';
 import { TelegramSearchReportService } from './telegram-search-report.service';
 import { TelegramSettingsService } from './telegram-settings.service';
 
@@ -20,6 +21,7 @@ import { TelegramSettingsService } from './telegram-settings.service';
     TelegramDeliveryClient,
     TelegramLinkingService,
     TelegramOrderService,
+    TelegramPresentationService,
     TelegramSettingsService,
     TelegramInventoryService,
     TelegramSearchReportService,
@@ -28,6 +30,7 @@ import { TelegramSettingsService } from './telegram-settings.service';
     TelegramDeliveryClient,
     TelegramLinkingService,
     TelegramOrderService,
+    TelegramPresentationService,
     TelegramSettingsService,
     TelegramInventoryService,
     TelegramSearchReportService,

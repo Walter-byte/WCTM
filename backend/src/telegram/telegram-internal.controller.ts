@@ -80,6 +80,10 @@ import {
   TelegramOrderService,
 } from './telegram-order.service';
 import {
+  type TelegramPresented,
+  TelegramPresentationService,
+} from './telegram-presentation.service';
+import {
   type TelegramSettingsInputStartResult,
   type TelegramSettingsResult,
   TelegramSettingsService,
@@ -98,7 +102,8 @@ export class TelegramInternalController {
     private readonly orders: TelegramOrderService,
     private readonly settings: TelegramSettingsService,
     private readonly inventory: TelegramInventoryService,
-    private readonly searchReport: TelegramSearchReportService
+    private readonly searchReport: TelegramSearchReportService,
+    private readonly presentation?: TelegramPresentationService
   ) {}
 
   @Post('link-tokens')
@@ -116,9 +121,9 @@ export class TelegramInternalController {
   redeem(
     @Body(new JoiValidationPipe(telegramRedeemSchema)) input: TelegramRedeemDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramRedeemResult> {
+  ): Promise<TelegramPresented<TelegramRedeemResult>> {
     this.assertUpdateId(input.updateId, headerUpdateId);
-    return this.linking.redeem(input);
+    return this.presentLinking(input, this.linking.redeem(input));
   }
 
   @Post('status')
@@ -128,9 +133,9 @@ export class TelegramInternalController {
   status(
     @Body(new JoiValidationPipe(telegramStatusSchema)) input: TelegramStatusDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramAuthorizationStatus> {
+  ): Promise<TelegramPresented<TelegramAuthorizationStatus>> {
     this.assertUpdateId(input.updateId, headerUpdateId);
-    return this.linking.status(input);
+    return this.presentLinking(input, this.linking.status(input));
   }
 
   @Post('unlink')
@@ -140,9 +145,9 @@ export class TelegramInternalController {
   unlink(
     @Body(new JoiValidationPipe(telegramUnlinkSchema)) input: TelegramUnlinkDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramUnlinkResult> {
+  ): Promise<TelegramPresented<TelegramUnlinkResult>> {
     this.assertUpdateId(input.updateId, headerUpdateId);
-    return this.linking.unlink(input);
+    return this.presentBeforeUnlink(input);
   }
 
   @Post('orders/list')
@@ -153,9 +158,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramOrderListSchema))
     input: TelegramOrderListDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramOrderListResult> {
+  ): Promise<TelegramPresented<TelegramOrderListResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.orders.list(input);
+    return this.present(input.telegram, this.orders.list(input));
   }
 
   @Post('orders/lookup')
@@ -166,9 +171,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramOrderLookupSchema))
     input: TelegramOrderLookupDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramOrderLookupResult> {
+  ): Promise<TelegramPresented<TelegramOrderLookupResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.orders.lookup(input);
+    return this.present(input.telegram, this.orders.lookup(input));
   }
 
   @Post('orders/detail')
@@ -179,9 +184,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramOrderDetailSchema))
     input: TelegramOrderDetailDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramOrderDetailResult> {
+  ): Promise<TelegramPresented<TelegramOrderDetailResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.orders.detail(input);
+    return this.present(input.telegram, this.orders.detail(input));
   }
 
   @Post('orders/refresh')
@@ -192,9 +197,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramOrderDetailSchema))
     input: TelegramOrderDetailDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramOrderRefreshResult> {
+  ): Promise<TelegramPresented<TelegramOrderRefreshResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.orders.refresh(input);
+    return this.present(input.telegram, this.orders.refresh(input));
   }
 
   @Post('orders/notes/options')
@@ -205,9 +210,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramOrderDetailSchema))
     input: TelegramOrderDetailDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramOrderNoteOptionsResult> {
+  ): Promise<TelegramPresented<TelegramOrderNoteOptionsResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.orders.noteOptions(input);
+    return this.present(input.telegram, this.orders.noteOptions(input));
   }
 
   @Post('orders/notes/start')
@@ -218,9 +223,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramOrderNoteStartSchema))
     input: TelegramOrderNoteStartDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramOrderNoteStartResult> {
+  ): Promise<TelegramPresented<TelegramOrderNoteStartResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.orders.startNote(input);
+    return this.present(input.telegram, this.orders.startNote(input));
   }
 
   @Post('orders/notes/prepare')
@@ -231,9 +236,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramOrderNotePrepareSchema))
     input: TelegramOrderNotePrepareDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramOrderNotePrepareResult> {
+  ): Promise<TelegramPresented<TelegramOrderNotePrepareResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.orders.prepareNote(input);
+    return this.present(input.telegram, this.orders.prepareNote(input));
   }
 
   @Post('orders/notes/cancel')
@@ -244,9 +249,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramOrderDetailSchema))
     input: TelegramOrderDetailDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramOrderNoteMutationResult> {
+  ): Promise<TelegramPresented<TelegramOrderNoteMutationResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.orders.cancelNote(input);
+    return this.present(input.telegram, this.orders.cancelNote(input));
   }
 
   @Post('orders/notes/confirm')
@@ -257,9 +262,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramOrderDetailSchema))
     input: TelegramOrderDetailDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramOrderNoteMutationResult> {
+  ): Promise<TelegramPresented<TelegramOrderNoteMutationResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.orders.confirmNote(input);
+    return this.present(input.telegram, this.orders.confirmNote(input));
   }
 
   @Post('orders/transitions')
@@ -270,9 +275,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramOrderTransitionsSchema))
     input: TelegramOrderTransitionsDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramOrderTransitionsResult> {
+  ): Promise<TelegramPresented<TelegramOrderTransitionsResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.orders.transitions(input);
+    return this.present(input.telegram, this.orders.transitions(input));
   }
 
   @Post('orders/status')
@@ -283,9 +288,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramOrderStatusUpdateSchema))
     input: TelegramOrderStatusUpdateDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramOrderStatusUpdateResult> {
+  ): Promise<TelegramPresented<TelegramOrderStatusUpdateResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.orders.updateStatus(input);
+    return this.present(input.telegram, this.orders.updateStatus(input));
   }
 
   @Post('settings/summary')
@@ -296,9 +301,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramSettingsSummarySchema))
     input: TelegramSettingsSummaryDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramSettingsResult> {
+  ): Promise<TelegramPresented<TelegramSettingsResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.settings.summary(input);
+    return this.present(input.telegram, this.settings.summary(input));
   }
 
   @Post('stock/list')
@@ -309,9 +314,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramStockListSchema))
     input: TelegramStockListDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramStockListResult> {
+  ): Promise<TelegramPresented<TelegramStockListResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.inventory.list(input);
+    return this.present(input.telegram, this.inventory.list(input));
   }
 
   @Post('stock/detail')
@@ -322,9 +327,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramStockDetailSchema))
     input: TelegramStockDetailDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramStockDetailResult> {
+  ): Promise<TelegramPresented<TelegramStockDetailResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.inventory.detail(input);
+    return this.present(input.telegram, this.inventory.detail(input));
   }
 
   @Post('search')
@@ -334,9 +339,9 @@ export class TelegramInternalController {
   search(
     @Body(new JoiValidationPipe(telegramSearchSchema)) input: TelegramSearchDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramSearchResult> {
+  ): Promise<TelegramPresented<TelegramSearchResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.searchReport.search(input);
+    return this.present(input.telegram, this.searchReport.search(input));
   }
 
   @Post('search/select')
@@ -347,9 +352,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramSearchSelectSchema))
     input: TelegramSearchSelectDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramSearchSelectionResult> {
+  ): Promise<TelegramPresented<TelegramSearchSelectionResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.searchReport.select(input);
+    return this.present(input.telegram, this.searchReport.select(input));
   }
 
   @Post('report')
@@ -360,9 +365,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramDailyReportSchema))
     input: TelegramDailyReportDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramDailyReportResult> {
+  ): Promise<TelegramPresented<TelegramDailyReportResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.searchReport.report(input);
+    return this.present(input.telegram, this.searchReport.report(input));
   }
 
   @Post('settings/action')
@@ -373,9 +378,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramSettingsReferenceSchema))
     input: TelegramSettingsReferenceDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramSettingsResult> {
+  ): Promise<TelegramPresented<TelegramSettingsResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.settings.applyAction(input);
+    return this.present(input.telegram, this.settings.applyAction(input));
   }
 
   @Post('settings/input/start')
@@ -386,9 +391,9 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramSettingsReferenceSchema))
     input: TelegramSettingsReferenceDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramSettingsInputStartResult> {
+  ): Promise<TelegramPresented<TelegramSettingsInputStartResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.settings.startInput(input);
+    return this.present(input.telegram, this.settings.startInput(input));
   }
 
   @Post('settings/input/apply')
@@ -399,9 +404,49 @@ export class TelegramInternalController {
     @Body(new JoiValidationPipe(telegramSettingsInputSchema))
     input: TelegramSettingsInputDto,
     @Headers('x-telegram-update-id') headerUpdateId?: string
-  ): Promise<TelegramSettingsResult> {
+  ): Promise<TelegramPresented<TelegramSettingsResult>> {
     this.assertUpdateIdHeader(headerUpdateId);
-    return this.settings.applyInput(input);
+    return this.present(input.telegram, this.settings.applyInput(input));
+  }
+
+  private async present<T>(
+    identity: { userId: string; chatId: string },
+    result: Promise<T>
+  ): Promise<TelegramPresented<T>> {
+    const resolved = await result;
+    if (!this.presentation) {
+      return resolved as TelegramPresented<T>;
+    }
+    return this.presentation.present(
+      {
+        telegramUserId: identity.userId,
+        telegramChatId: identity.chatId,
+      },
+      resolved
+    );
+  }
+
+  private async presentLinking<T>(
+    identity: { telegramUserId: string; telegramChatId: string },
+    result: Promise<T>
+  ): Promise<TelegramPresented<T>> {
+    const resolved = await result;
+    return this.presentation
+      ? this.presentation.present(identity, resolved)
+      : (resolved as TelegramPresented<T>);
+  }
+
+  private async presentBeforeUnlink(
+    input: TelegramUnlinkDto
+  ): Promise<TelegramPresented<TelegramUnlinkResult>> {
+    if (!this.presentation) {
+      return (await this.linking.unlink(
+        input
+      )) as TelegramPresented<TelegramUnlinkResult>;
+    }
+    const presentation = await this.presentation.resolve(input);
+    const result = await this.linking.unlink(input);
+    return { ...result, presentation };
   }
 
   private assertUpdateId(bodyUpdateId: string, headerUpdateId?: string): void {

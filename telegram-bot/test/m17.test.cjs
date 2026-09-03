@@ -116,7 +116,7 @@ test('/order performs exact lookup and renders minimized context plus secure act
     { operation: 'lookup', orderNumber: '1001' },
   ]);
   const message = apiCalls.find((call) => call.method === 'sendMessage');
-  assert.match(message.payload.text, /Order #1001/);
+  assert.match(message.payload.text, /Order #\u20681001\u2069/);
   assert.match(message.payload.text, /Payment: Cash on delivery • Unpaid/);
   assert.match(message.payload.text, /Shipping: Flat rate/);
   assert.match(message.payload.text, /Ship to: Fulfillment Street 1/);
@@ -322,7 +322,7 @@ test('MEMBER detail has no Add Note action and cancellation makes no mutation ca
   const detail = apiCalls.find(
     (call) =>
       call.method === 'editMessageText' &&
-      call.payload.text.includes('Order #1001')
+      call.payload.text.includes('Order #\u20681001\u2069')
   );
   assert.ok(!callbacks(detail).some((value) => value.startsWith('n:')));
   const cancelled = apiCalls

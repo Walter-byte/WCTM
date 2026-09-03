@@ -61,7 +61,7 @@ test('Home, Recent Orders, order detail, and Back reuse existing stateless endpo
 
   const detailEdit = apiCalls
     .filter((call) => call.method === 'editMessageText')
-    .find((call) => call.payload.text.includes('Order #1001'));
+    .find((call) => call.payload.text.includes('Customer: Test Customer'));
   assert.deepEqual(callbacks(detailEdit), [
     BACK_CURSOR,
     `t:${DETAIL_REF}`,
@@ -185,7 +185,7 @@ test('M13 notification callbacks continue through M11 detail and M12 status with
   assert.ok(callbacks(edits[0]).includes(`t:${DETAIL_REF}`));
   assert.ok(callbacks(edits[1]).includes(`${WRITE_REF}:completed`));
   assert.match(edits[2].payload.text, /Status updated successfully/);
-  assert.match(edits[2].payload.text, /Status: completed/);
+  assert.match(edits[2].payload.text, /Status: Completed/);
   assert.deepEqual(callbacks(edits[2]), [BACK_CURSOR, 'nav:home']);
 });
 
@@ -211,7 +211,7 @@ test('status-result failures preserve safe snapshots and provide fresh recovery'
 
   const edits = apiCalls.filter((call) => call.method === 'editMessageText');
   assert.match(edits[0].payload.text, /status action expired/i);
-  assert.match(edits[0].payload.text, /Order #1001/);
+  assert.match(edits[0].payload.text, /Order #\u20681001\u2069/);
   assert.deepEqual(callbacks(edits[0]), ['nav:orders', 'nav:home']);
   assert.ok(!callbacks(edits[0]).some((value) => value.startsWith('t:')));
   assert.match(edits[1].payload.text, /could not confirm/);
@@ -232,12 +232,12 @@ test('/help and command discovery list existing functionality only', async () =>
       'orders',
       'order',
       'status',
-    'settings',
-    'stock',
-    'search',
-    'report',
-    'help',
-    'unlink',
+      'settings',
+      'stock',
+      'search',
+      'report',
+      'help',
+      'unlink',
     ]
   );
   const message = apiCalls.find((call) => call.method === 'sendMessage');

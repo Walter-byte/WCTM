@@ -57,7 +57,10 @@ test('/orders renders backend summaries and opaque inline references', async () 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].cursor, undefined);
   const message = apiCalls.find((call) => call.method === 'sendMessage');
-  assert.match(message.payload.text, /#1001 • processing • 120000 IRR/);
+  assert.match(
+    message.payload.text,
+    /#\u20681001\u2069 • Processing • IRR\s?120,000/
+  );
   const callbackData = message.payload.reply_markup.inline_keyboard
     .flat()
     .map((button) => button.callback_data);

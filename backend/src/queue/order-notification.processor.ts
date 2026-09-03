@@ -5,6 +5,10 @@ import { type Job, UnrecoverableError } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramDeliveryClient } from '../telegram/telegram-delivery.client';
 import {
+  DEFAULT_TELEGRAM_PRESENTATION,
+  TelegramPresentationService,
+} from '../telegram/telegram-presentation.service';
+import {
   type TelegramOrderNotificationRecipient,
   TelegramOrderService,
 } from '../telegram/telegram-order.service';
@@ -71,7 +75,8 @@ export class OrderNotificationProcessor {
   constructor(
     private readonly prisma: PrismaService,
     private readonly telegramOrders: TelegramOrderService,
-    private readonly deliveryClient: TelegramDeliveryClient
+    private readonly deliveryClient: TelegramDeliveryClient,
+    private readonly presentation?: TelegramPresentationService
   ) {}
 
   async process(
@@ -178,20 +183,28 @@ export class OrderNotificationProcessor {
       );
     }
 
+    const presentation = this.presentation
+      ? await this.presentation.resolve({
+          telegramUserId: recipient.telegramUserId,
+          telegramChatId: recipient.telegramChatId,
+        })
+      : { ...DEFAULT_TELEGRAM_PRESENTATION, language: 'en' as const };
     const result = await this.deliveryClient.send({
       chatId: recipient.telegramChatId,
-      text: renderNotification(prepared),
-      buttons: [
-        { text: 'View Order', callbackData: prepared.viewOrderRef },
-        ...(prepared.changeStatusAvailable
-          ? [
-              {
-                text: 'Change Status',
-                callbackData: `t:${prepared.viewOrderRef}`,
-              },
-            ]
-          : []),
-      ],
+      presentation,
+      notification: {
+        type: 'ORDER_CREATED',
+        orderNumber: safePresentationValue(prepared.orderNumber, 191),
+        status: safePresentationValue(prepared.status, 64),
+        currency: safePresentationValue(prepared.currency, 16),
+        total: safePresentationValue(prepared.total, 64),
+        customerDisplayName: safePresentationValue(
+          prepared.customerDisplayName,
+          255
+        ),
+        viewOrderRef: prepared.viewOrderRef,
+        changeStatusAvailable: prepared.changeStatusAvailable,
+      },
     });
 
     if (result.outcome === 'delivered') {
@@ -347,29 +360,17 @@ export class OrderNotificationProcessor {
   }
 }
 
-function renderNotification(input: {
-  orderNumber: string;
-  status: string;
-  currency: string;
-  total: string;
-  customerDisplayName: string;
-}): string {
-  return [
-    'New Order',
-    `#${safeDisplay(input.orderNumber, 191)}`,
-    `Status: ${safeDisplay(input.status, 64)}`,
-    `Total: ${safeDisplay(input.total, 64)} ${safeDisplay(input.currency, 16)}`,
-    `Customer: ${safeDisplay(input.customerDisplayName, 255)}`,
-  ].join('\n');
-}
-
-function safeDisplay(value: string, maximumLength: number): string {
+function safePresentationValue(value: string, maximumLength: number): string {
   return (
     Array.from(value.replace(/\s+/g, ' '))
       .filter((character) => {
-        const code = character.charCodeAt(0);
-
-        return code >= 32 && code !== 127;
+        const code = character.codePointAt(0) ?? 0;
+        return (
+          code >= 32 &&
+          code !== 127 &&
+          !(code >= 0x202a && code <= 0x202e) &&
+          !(code >= 0x2066 && code <= 0x2069)
+        );
       })
       .join('')
       .trim()

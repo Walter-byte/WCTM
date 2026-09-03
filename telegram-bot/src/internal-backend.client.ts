@@ -1,4 +1,9 @@
 import type { BotConfiguration } from './config';
+import type { PresentationMetadata } from './localization';
+
+interface PresentedResult {
+  presentation?: PresentationMetadata;
+}
 
 export interface TelegramIdentity {
   telegramUserId: string;
@@ -6,7 +11,7 @@ export interface TelegramIdentity {
   updateId: string;
 }
 
-export interface TelegramAuthorizationStatus {
+export interface TelegramAuthorizationStatus extends PresentedResult {
   linked: boolean;
   authorized: boolean;
   membershipState: 'active' | 'none';
@@ -17,14 +22,18 @@ export interface TelegramAuthorizationStatus {
   selectionRequired: boolean;
 }
 
-export type TelegramRedeemResult =
+export type TelegramRedeemResult = (
   | { status: 'invalid_or_expired' }
-  | ({ status: 'linked' } & TelegramAuthorizationStatus);
+  | ({ status: 'linked' } & TelegramAuthorizationStatus)
+) &
+  PresentedResult;
 
-export type TelegramUnlinkResult =
+export type TelegramUnlinkResult = (
   | { status: 'confirmation_required' }
   | { status: 'unauthorized' }
-  | { status: 'unlinked' };
+  | { status: 'unlinked' }
+) &
+  PresentedResult;
 
 export interface OrderFreshness {
   asOf: string;
@@ -42,7 +51,7 @@ export interface OrderSummary {
   remoteDeleted: boolean;
 }
 
-export interface OrderListResult {
+export interface OrderListResult extends PresentedResult {
   state: 'OK' | 'NO_ACTIVE_STORE' | 'UNAUTHORIZED' | 'CONTEXT_CHANGED';
   orders: OrderSummary[];
   nextCursor: string | null;
@@ -70,7 +79,7 @@ export interface OrderDetailPayload {
   remoteDeleted: boolean;
 }
 
-export interface OrderDetailResult {
+export interface OrderDetailResult extends PresentedResult {
   state:
     | 'OK'
     | 'NOT_FOUND'
@@ -112,13 +121,13 @@ export type OrderNoteState =
 
 export type OrderNoteVisibility = 'INTERNAL' | 'CUSTOMER';
 
-export interface OrderNoteOptionsResult {
+export interface OrderNoteOptionsResult extends PresentedResult {
   state: OrderNoteState;
   ref?: string;
   visibilities?: OrderNoteVisibility[];
 }
 
-export interface OrderNoteStartResult {
+export interface OrderNoteStartResult extends PresentedResult {
   state: OrderNoteState;
   inputRef?: string;
   detailRef?: string;
@@ -126,7 +135,7 @@ export interface OrderNoteStartResult {
   maxLength?: number;
 }
 
-export interface OrderNotePrepareResult {
+export interface OrderNotePrepareResult extends PresentedResult {
   state: OrderNoteState;
   confirmRef?: string;
   detailRef?: string;
@@ -134,14 +143,14 @@ export interface OrderNotePrepareResult {
   preview?: string;
 }
 
-export interface OrderNoteMutationResult {
+export interface OrderNoteMutationResult extends PresentedResult {
   state: OrderNoteState;
   detailRef?: string;
   visibility?: OrderNoteVisibility;
   orderNumber?: string;
 }
 
-export interface OrderTransitionsResult {
+export interface OrderTransitionsResult extends PresentedResult {
   state:
     | 'OK'
     | 'NOT_FOUND'
@@ -155,7 +164,7 @@ export interface OrderTransitionsResult {
   targets?: string[];
 }
 
-export interface OrderStatusUpdateResult {
+export interface OrderStatusUpdateResult extends PresentedResult {
   state:
     | 'OK'
     | 'NO_OP'
@@ -219,12 +228,12 @@ export interface SettingsSummary {
   };
 }
 
-export interface SettingsResult {
+export interface SettingsResult extends PresentedResult {
   state: SettingsState;
   settings?: SettingsSummary;
 }
 
-export interface SettingsInputStartResult {
+export interface SettingsInputStartResult extends PresentedResult {
   state: SettingsState;
   purpose?: 'TIMEZONE' | 'THRESHOLD';
   inputRef?: string;
@@ -240,7 +249,7 @@ export interface StockSummary {
   kind: 'PRODUCT' | 'VARIATION';
 }
 
-export interface StockListResult {
+export interface StockListResult extends PresentedResult {
   state:
     | 'OK'
     | 'SYNCING'
@@ -260,7 +269,7 @@ export interface StockDetailPayload extends Omit<StockSummary, 'ref'> {
   lastSyncedAt: string;
 }
 
-export interface StockDetailResult {
+export interface StockDetailResult extends PresentedResult {
   state:
     'OK' | 'NOT_FOUND' | 'NO_ACTIVE_STORE' | 'UNAUTHORIZED' | 'CONTEXT_CHANGED';
   item?: StockDetailPayload;
@@ -281,7 +290,7 @@ export interface SearchRow {
   classification?: 'HEALTHY' | 'LOW_STOCK' | 'OUT_OF_STOCK';
 }
 
-export type SearchResult =
+export type SearchResult = (
   | {
       state:
         | 'INVALID_QUERY'
@@ -297,9 +306,11 @@ export type SearchResult =
       nextCursor: string | null;
       previousCursor: string | null;
       inventoryState: string;
-    };
+    }
+) &
+  PresentedResult;
 
-export type SearchSelectionResult =
+export type SearchSelectionResult = (
   | {
       state:
         | 'UNAUTHORIZED'
@@ -313,14 +324,18 @@ export type SearchSelectionResult =
       state: 'INVENTORY';
       detail: { state: 'OK'; item: StockDetailPayload };
       backCursor: string;
-    };
+    }
+) &
+  PresentedResult;
 
-export type DailyReportResult =
+export type DailyReportResult = (
   | { state: 'UNAUTHORIZED' | 'NO_ACTIVE_STORE' }
   | {
       state: 'OK';
       localDate: string;
       timezone: string;
+      dayStartUtc?: string;
+      nextDayStartUtc?: string;
       ordersToday: number;
       statuses: Array<{ status: string; count: number }>;
       sales: Array<{
@@ -334,7 +349,9 @@ export type DailyReportResult =
         | { state: 'READY'; lowStock: number; outOfStock: number }
         | { state: 'UNAVAILABLE'; syncState: string };
       projection: { asOf: string | null; delayed: boolean };
-    };
+    }
+) &
+  PresentedResult;
 
 export class BackendUnavailableError extends Error {
   constructor() {
@@ -362,29 +379,38 @@ export class InternalBackendClient {
     private readonly request: typeof fetch = fetch
   ) {}
 
-  redeem(
+  async redeem(
     identity: TelegramIdentity,
     token: string
   ): Promise<TelegramRedeemResult> {
-    return this.post<TelegramRedeemResult>('redeem', identity, {
+    const value = await this.post<TelegramRedeemResult>('redeem', identity, {
       ...identity,
       chatType: 'private',
       token,
     });
+    return attachPresentation(value, value);
   }
 
-  status(identity: TelegramIdentity): Promise<TelegramAuthorizationStatus> {
-    return this.post<TelegramAuthorizationStatus>('status', identity, identity);
+  async status(
+    identity: TelegramIdentity
+  ): Promise<TelegramAuthorizationStatus> {
+    const value = await this.post<TelegramAuthorizationStatus>(
+      'status',
+      identity,
+      identity
+    );
+    return attachPresentation(value, value);
   }
 
-  unlink(
+  async unlink(
     identity: TelegramIdentity,
     confirmed: boolean
   ): Promise<TelegramUnlinkResult> {
-    return this.post<TelegramUnlinkResult>('unlink', identity, {
+    const value = await this.post<TelegramUnlinkResult>('unlink', identity, {
       ...identity,
       confirmed,
     });
+    return attachPresentation(value, value);
   }
 
   async listOrders(
@@ -399,7 +425,7 @@ export class InternalBackendClient {
       ...(cursor ? { cursor } : {}),
     });
 
-    return parseOrderListResult(value);
+    return attachPresentation(value, parseOrderListResult(value));
   }
 
   async lookupOrder(
@@ -414,7 +440,7 @@ export class InternalBackendClient {
       orderNumber,
     });
 
-    return parseOrderLookupResult(value);
+    return attachPresentation(value, parseOrderLookupResult(value));
   }
 
   async orderDetail(
@@ -429,7 +455,7 @@ export class InternalBackendClient {
       ref,
     });
 
-    return parseOrderDetailResult(value);
+    return attachPresentation(value, parseOrderDetailResult(value));
   }
 
   async refreshOrder(
@@ -449,7 +475,7 @@ export class InternalBackendClient {
       this.configuration.statusWriteTimeoutMs ?? 50_000
     );
 
-    return parseOrderRefreshResult(value);
+    return attachPresentation(value, parseOrderRefreshResult(value));
   }
 
   async orderNoteOptions(
@@ -464,7 +490,7 @@ export class InternalBackendClient {
       ref,
     });
 
-    return parseOrderNoteOptionsResult(value);
+    return attachPresentation(value, parseOrderNoteOptionsResult(value));
   }
 
   async startOrderNote(
@@ -481,7 +507,7 @@ export class InternalBackendClient {
       visibility,
     });
 
-    return parseOrderNoteStartResult(value);
+    return attachPresentation(value, parseOrderNoteStartResult(value));
   }
 
   async prepareOrderNote(
@@ -498,7 +524,7 @@ export class InternalBackendClient {
       note,
     });
 
-    return parseOrderNotePrepareResult(value);
+    return attachPresentation(value, parseOrderNotePrepareResult(value));
   }
 
   async cancelOrderNote(
@@ -513,7 +539,7 @@ export class InternalBackendClient {
       ref,
     });
 
-    return parseOrderNoteMutationResult(value);
+    return attachPresentation(value, parseOrderNoteMutationResult(value));
   }
 
   async confirmOrderNote(
@@ -533,7 +559,7 @@ export class InternalBackendClient {
       this.configuration.statusWriteTimeoutMs ?? 50_000
     );
 
-    return parseOrderNoteMutationResult(value);
+    return attachPresentation(value, parseOrderNoteMutationResult(value));
   }
 
   async orderTransitions(
@@ -548,7 +574,7 @@ export class InternalBackendClient {
       ref,
     });
 
-    return parseOrderTransitionsResult(value);
+    return attachPresentation(value, parseOrderTransitionsResult(value));
   }
 
   async updateOrderStatus(
@@ -570,7 +596,7 @@ export class InternalBackendClient {
       this.configuration.statusWriteTimeoutMs ?? 50_000
     );
 
-    return parseOrderStatusUpdateResult(value);
+    return attachPresentation(value, parseOrderStatusUpdateResult(value));
   }
 
   async settings(identity: TelegramIdentity): Promise<SettingsResult> {
@@ -581,7 +607,7 @@ export class InternalBackendClient {
       },
     });
 
-    return parseSettingsResult(value);
+    return attachPresentation(value, parseSettingsResult(value));
   }
 
   async listStock(
@@ -596,7 +622,7 @@ export class InternalBackendClient {
       ...(cursor ? { cursor } : {}),
     });
 
-    return parseStockListResult(value);
+    return attachPresentation(value, parseStockListResult(value));
   }
 
   async stockDetail(
@@ -611,7 +637,7 @@ export class InternalBackendClient {
       ref,
     });
 
-    return parseStockDetailResult(value);
+    return attachPresentation(value, parseStockDetailResult(value));
   }
 
   async search(
@@ -625,7 +651,7 @@ export class InternalBackendClient {
       },
       ...queryOrCursor,
     });
-    return parseSearchResult(value);
+    return attachPresentation(value, parseSearchResult(value));
   }
 
   async selectSearchResult(
@@ -639,7 +665,7 @@ export class InternalBackendClient {
       },
       ref,
     });
-    return parseSearchSelectionResult(value);
+    return attachPresentation(value, parseSearchSelectionResult(value));
   }
 
   async report(identity: TelegramIdentity): Promise<DailyReportResult> {
@@ -649,7 +675,7 @@ export class InternalBackendClient {
         chatId: identity.telegramChatId,
       },
     });
-    return parseDailyReportResult(value);
+    return attachPresentation(value, parseDailyReportResult(value));
   }
 
   async applySettingsAction(
@@ -664,7 +690,7 @@ export class InternalBackendClient {
       ref,
     });
 
-    return parseSettingsResult(value);
+    return attachPresentation(value, parseSettingsResult(value));
   }
 
   async startSettingsInput(
@@ -679,7 +705,7 @@ export class InternalBackendClient {
       ref,
     });
 
-    return parseSettingsInputStartResult(value);
+    return attachPresentation(value, parseSettingsInputStartResult(value));
   }
 
   async applySettingsInput(
@@ -696,7 +722,7 @@ export class InternalBackendClient {
       value,
     });
 
-    return parseSettingsResult(result);
+    return attachPresentation(result, parseSettingsResult(result));
   }
 
   private async post<T>(
@@ -1085,6 +1111,10 @@ function parseDailyReportResult(value: unknown): DailyReportResult {
     state !== 'OK' ||
     !isString(record['localDate']) ||
     !isString(record['timezone']) ||
+    (record['dayStartUtc'] !== undefined &&
+      !isIsoDate(record['dayStartUtc'])) ||
+    (record['nextDayStartUtc'] !== undefined &&
+      !isIsoDate(record['nextDayStartUtc'])) ||
     !isSafeCount(record['ordersToday']) ||
     !Array.isArray(record['statuses']) ||
     !Array.isArray(record['sales']) ||
@@ -1675,6 +1705,31 @@ function isIsoDate(value: unknown): value is string {
 
 function isString(value: unknown): value is string {
   return typeof value === 'string';
+}
+
+function attachPresentation<T extends object>(
+  value: unknown,
+  result: T
+): T & {
+  presentation: PresentationMetadata;
+} {
+  const presentation = asRecord(asRecord(value)?.['presentation']);
+  const language =
+    typeof presentation?.['language'] === 'string'
+      ? presentation['language'].slice(0, 16)
+      : 'en';
+  const timezone =
+    typeof presentation?.['timezone'] === 'string'
+      ? presentation['timezone'].slice(0, 64)
+      : 'UTC';
+
+  return {
+    ...result,
+    presentation: {
+      language: language || 'en',
+      timezone: timezone || 'UTC',
+    },
+  };
 }
 
 function requireRecord(value: unknown): Record<string, unknown> {

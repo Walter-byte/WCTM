@@ -172,20 +172,16 @@ describe('M19 durable Telegram inventory delivery', () => {
     );
     expect(fixture.send).toHaveBeenCalledWith({
       chatId: '2001',
-      text: [
-        'Low Stock',
-        'Product One',
-        'SKU: SKU-1',
-        'Quantity: 5',
-        'WooCommerce status: instock',
-        'WCTM threshold: 5',
-      ].join('\n'),
-      buttons: [
-        {
-          text: 'View Stock',
-          callbackData: `v.${'a'.repeat(16)}.${'b'.repeat(16)}`,
-        },
-      ],
+      presentation: { language: 'en', timezone: 'UTC' },
+      notification: {
+        type: 'LOW_STOCK',
+        displayName: 'Product One',
+        sku: 'SKU-1',
+        quantity: '5',
+        stockStatus: 'instock',
+        threshold: 5,
+        viewStockRef: `v.${'a'.repeat(16)}.${'b'.repeat(16)}`,
+      },
     });
     expect(fixture.delivery.state).toBe(
       TelegramInventoryNotificationState.DELIVERED

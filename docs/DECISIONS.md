@@ -899,4 +899,71 @@ Accepted.
 
 ---
 
-Next decision number: D-027.
+## D-027
+
+Date
+
+2026-09-03
+
+Decision
+
+M21 completes MVP Telegram localization and notification presentation only.
+`Tenant.language` is the sole resolved business-language authority, with `FA`
+and `EN` as the persisted values and `fa` and `en` as the bot presentation
+locales. Telegram client language never overrides the Tenant. Pre-Tenant and
+unlinked UX defaults to Persian; an impossible runtime language falls back to
+English. No per-user or Store language is introduced. Existing migrated
+Tenants remain English and newly created Tenants remain Persian under D-024.
+
+The telegram-bot owns one source-controlled, compile-time-checked Persian and
+English presentation catalog. Backend contracts continue to provide
+authorization outcomes, stable semantic codes, sanitized values, current
+Tenant language/timezone metadata, notification policy, and signed action
+references. The bot remains stateless and database-free and renders all M10–M20
+manager surfaces plus current M13 `ORDER_CREATED` and M19 `LOW_STOCK`/OUT
+notification presentations. A language change through `/settings` re-resolves
+the Tenant after mutation and immediately renders the resulting locale.
+
+Persian presentation uses RTL-aware composition with Unicode bidi isolation
+for inherently LTR identifiers. Human-facing Persian dates use built-in
+`Intl`, the Tenant IANA timezone, and the Persian calendar; English uses the
+same Tenant timezone with the Gregorian calendar. Stored UTC timestamps, M20
+half-open report boundaries, `wc_created_at`, WooCommerce authority, and
+DATE-001 remain unchanged. Money formatting never converts value or currency;
+unsupported currency codes retain both the original amount and exact code.
+Known WooCommerce status, inventory, role, category, recipient-mode, payment,
+note, settings, and navigation concepts receive localized labels. Unknown Woo
+statuses remain valid semantic states and render a localized generic label plus
+the bounded raw code without gaining transitions.
+
+M13 and M19 scheduling, incidents, delivery rows and identity, deterministic
+jobs, recipient policy, retries, terminal/ambiguous handling, and no-blind-
+resend behavior remain unchanged. M18 retains exactly `ORDER_CREATED` and
+`LOW_STOCK`, `ALL_ELIGIBLE` and `SELECTED`, zero-selected behavior,
+Membership-based preferences, current authorization revalidation, and
+unlink/relink non-resurrection. Callback data and signed-reference purposes do
+not contain language and existing references remain compatible.
+
+Reason
+
+The MVP already owns business language and timezone at Tenant scope and all
+notification authorization and persistence in the backend. A small semantic
+presentation envelope and bot-owned typed catalogs complete Persian-first,
+English-ready manager UX without splitting business policy across processes or
+introducing a template/localization platform.
+
+Boundary
+
+M21 adds no schema migration, dependency, translation service, translation or
+template table, scheduler, notification category, user locale, Store locale,
+service/process, queue topology, entitlement, onboarding/web localization,
+WordPress connector localization, stock mutation, report period, or other
+post-M21 capability.
+
+Status
+
+Accepted.
+
+---
+
+Next decision number: D-028.

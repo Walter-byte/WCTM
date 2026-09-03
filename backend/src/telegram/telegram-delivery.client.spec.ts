@@ -13,13 +13,17 @@ const configuration = {
 
 const message = {
   chatId: '2001',
-  text: 'New Order\n#101',
-  buttons: [
-    {
-      text: 'View Order',
-      callbackData: 'd.AAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBB',
-    },
-  ],
+  presentation: { language: 'en' as const, timezone: 'UTC' },
+  notification: {
+    type: 'ORDER_CREATED' as const,
+    orderNumber: '101',
+    status: 'processing',
+    currency: 'IRR',
+    total: '1000',
+    customerDisplayName: 'Test Customer',
+    viewOrderRef: 'd.AAAAAAAAAAAAAAAA.BBBBBBBBBBBBBBBB',
+    changeStatusAvailable: false,
+  },
 };
 
 describe('backend to bot prepared-message client', () => {

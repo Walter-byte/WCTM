@@ -63,15 +63,18 @@ test('/stock renders current low/out rows and opaque pagination/detail callbacks
   const message = calls.find((call) => call.method === 'sendMessage');
   assert.match(message.payload.text, /Inventory/);
   assert.match(message.payload.text, /WCTM low-stock threshold: 5/);
-  assert.match(message.payload.text, /OUT OF STOCK.*Product One/);
-  assert.match(message.payload.text, /LOW STOCK.*Blue Shirt/);
+  assert.match(message.payload.text, /Out of stock.*Product One/);
+  assert.match(message.payload.text, /Low stock.*Blue Shirt/);
   assert.deepEqual(callbacks(message), [
     DETAIL_REF,
     SECOND_DETAIL_REF,
     NEXT_REF,
     'nav:home',
   ]);
-  assert.doesNotMatch(message.payload.text, /ten_|sto_|wcItemId|description|price/i);
+  assert.doesNotMatch(
+    message.payload.text,
+    /ten_|sto_|wcItemId|description|price/i
+  );
 });
 
 test('stock pagination and detail callbacks stay stateless and read-only', async () => {
@@ -104,9 +107,11 @@ test('stock pagination and detail callbacks stay stateless and read-only', async
   assert.match(detail.payload.text, /Blue Shirt/);
   assert.match(detail.payload.text, /Variation: Color: Blue, Size: M/);
   assert.match(detail.payload.text, /Quantity: 2/);
-  assert.match(detail.payload.text, /WooCommerce status: instock/);
+  assert.match(detail.payload.text, /WooCommerce status: \u2068instock\u2069/);
   assert.deepEqual(callbacks(detail), [LIST_REF, 'nav:home']);
-  assert.ok(!callbacks(detail).some((value) => /set|adjust|write/i.test(value)));
+  assert.ok(
+    !callbacks(detail).some((value) => /set|adjust|write/i.test(value))
+  );
 });
 
 test('initializing and failed stock projections render actionable safe states', async () => {

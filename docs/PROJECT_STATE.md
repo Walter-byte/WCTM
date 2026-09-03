@@ -6,7 +6,9 @@ Version: 1.0
 
 Current Phase
 
-Phase 5 — Core Store Management (MVP) is in progress. M20 Search & Daily Report
+Phase 5 — Core Store Management (MVP) is in progress. M21 Notification /
+Localization Completion is implemented on its feature branch and awaits B
+review, merge, deployment, and production validation. M20 Search & Daily Report
 is fully complete, merged, deployed, hotfixed, and operationally validated.
 M19 Inventory & Low-Stock MVP is implemented, merged, deployed, and fully
 operationally validated. Its production migrations, backend, telegram-bot,
@@ -20,10 +22,10 @@ Phase 4 and M1–M16 remain complete and unchanged.
 
 Current Task
 
-M20 Search & Daily Report operational closure is complete with final decision
-PASS. M21 — Notification / Localization Completion is next, has not been
-started, and is not authorized by this documentation task. M22 remains after
-M21.
+M21 — Notification / Localization Completion implementation is complete under
+approved D-027. Repository validation is complete; B review, merge, backend and
+telegram-bot deployment, and the authorized production validation remain. Do
+not mark M21 operationally closed before those steps and do not begin M22.
 
 ---
 
@@ -35,7 +37,7 @@ Project Version
 
 Repository
 
-Current branch: `main`.
+Current branch: `feat/m21-notification-localization-completion`.
 
 M20 final implementation merge: `0281bb0 merge: complete M20 search and daily
 report`. Numeric-SKU correction:
@@ -797,15 +799,16 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-M20 has no remaining implementation, deployment, or operational-validation
-blocker. Existing known issues and technical debt remain unchanged.
+M21 has no known implementation blocker. B review, merge, deployment, and live
+validation are intentionally outstanding. Existing known issues and technical
+debt remain unchanged.
 
 ---
 
 Next Milestone
 
-M21 — Notification / Localization Completion. It has not been started; this M20
-closure neither plans nor authorizes M21 implementation. M22 remains after M21.
+Complete B review, merge, deployment, and production validation for M21 under
+D-027. Do not begin M22.
 
 ---
 
@@ -825,6 +828,39 @@ Excellent
 Last Updated
 
 2026-09-03
+
+---
+
+M21 Implementation State
+
+- D-027 is Accepted. `Tenant.language` is authoritative; resolved `FA` renders
+  Persian, resolved `EN` renders English, Telegram `language_code` is ignored,
+  pre-Tenant/unlinked UX defaults to Persian, and unknown runtime language
+  falls back to English.
+- The telegram-bot owns one typed `fa`/`en` catalog with exact key-parity tests,
+  bounded named interpolation, safe missing-key recovery, semantic label maps,
+  Tenant-timezone `Intl` date/calendar formatting, exact currency preservation,
+  and Unicode FSI/PDI isolation for LTR identifiers.
+- Backend Telegram operations append one small authoritative presentation
+  envelope after the existing operation. `/settings` language mutation resolves
+  that envelope after the mutation, so the returned screen and private-chat
+  native command descriptions switch immediately.
+- All existing M10–M20 manager Telegram commands, callbacks, navigation,
+  normal/empty/success/failure/recovery states, order/note/status flows,
+  settings and recipients, inventory, search, and report presentation now use
+  the catalog. M16 onboarding, public web surfaces, and the connector are
+  unchanged.
+- M13 ORDER_CREATED and M19 LOW/OUT prepared delivery now carry sanitized
+  semantic data, resolved Tenant presentation metadata, and the same authorized
+  signed references to the bot for final localized rendering. Delivery rows,
+  identity, queue jobs, claims, retries, terminal/ambiguous handling,
+  no-blind-resend behavior, categories, and recipient selection policy are
+  unchanged.
+- No Prisma schema, migration, dependency, service/process topology, queue,
+  scheduler, template platform, notification category, or M22 capability was
+  added.
+- Local implementation gates pass. Production validation remains pending until
+  B review and merge; M21 is not operationally closed.
 
 ---
 

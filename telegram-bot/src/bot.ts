@@ -27,23 +27,20 @@ import type {
   TelegramIdentity,
 } from './internal-backend.client';
 import { UpdateDeduplicator } from './update-deduplicator';
-
-const PRIVATE_ONLY_MESSAGE =
-  'This bot can only be used in a private Telegram chat.';
-const TRANSIENT_FAILURE_MESSAGE =
-  'The service is temporarily unavailable. Return Home or try again shortly.';
-const INVALID_TOKEN_MESSAGE =
-  'This link token is invalid or expired. Request a new token and try again.';
-const EXPIRED_LIST_MESSAGE =
-  'This order view expired or the active context changed. Refresh Recent Orders to continue.';
-const UNAUTHORIZED_ORDERS_MESSAGE =
-  'This chat is not authorized to view orders. Check Status for recovery details.';
-const NO_ACTIVE_STORE_MESSAGE =
-  'No single active store is available for this chat. Check Status before trying again.';
-const MALFORMED_RESPONSE_MESSAGE =
-  'The service returned an unexpected response. Return Home or try again shortly.';
-const NOTE_REFERENCE_LABEL = 'Note reference:';
-const SETTINGS_REFERENCE_LABEL = 'Settings reference:';
+import {
+  commandMenu,
+  formatDate,
+  formatDateTime,
+  formatMoney,
+  formatNumber,
+  inventoryLabel,
+  isolateLtr,
+  languageOf,
+  statusLabel,
+  timezoneOf,
+  translate,
+  type TelegramLanguage,
+} from './localization';
 
 const NAVIGATION_CALLBACKS = {
   home: 'nav:home',
@@ -56,18 +53,7 @@ const NAVIGATION_CALLBACKS = {
   report: 'nav:report',
 } as const;
 
-export const BOT_COMMANDS = [
-  { command: 'start', description: 'Open Home or link your account' },
-  { command: 'orders', description: 'Open recent orders' },
-  { command: 'order', description: 'Open an exact order number' },
-  { command: 'status', description: 'Check account and store access' },
-  { command: 'settings', description: 'View or manage store settings' },
-  { command: 'stock', description: 'Show low and out-of-stock items' },
-  { command: 'search', description: 'Search orders and inventory' },
-  { command: 'report', description: "Show today's operational report" },
-  { command: 'help', description: 'Show available commands' },
-  { command: 'unlink', description: 'Unlink this Telegram account' },
-] as const;
+export const BOT_COMMANDS = commandMenu('fa');
 
 interface RenderedView {
   text: string;
@@ -100,7 +86,7 @@ export function createBot(
     });
 
     if (context.chat && context.chat.type !== 'private') {
-      await context.reply(PRIVATE_ONLY_MESSAGE);
+      await context.reply(translate('fa', 'general.privateOnly'));
       return;
     }
 
@@ -124,20 +110,27 @@ export function createBot(
         );
         const rendered =
           result.status === 'invalid_or_expired'
-            ? renderRecoveryView(INVALID_TOKEN_MESSAGE, 'help')
-            : renderLanding(result, 'Account linked successfully.');
+            ? renderRecoveryView(
+                translate(languageOf(result, 'fa'), 'general.invalidToken'),
+                'help',
+                languageOf(result, 'fa')
+              )
+            : renderLanding(
+                result,
+                translate(languageOf(result), 'home.linked')
+              );
 
+        await configureChatCommandMenu(context, languageOf(result), log);
         await replyView(context, rendered);
         return;
       }
 
-      await replyView(
-        context,
-        renderLanding(await dependencies.backend.status(identity))
-      );
+      const result = await dependencies.backend.status(identity);
+      await configureChatCommandMenu(context, languageOf(result, 'fa'), log);
+      await replyView(context, renderLanding(result));
     } catch (error: unknown) {
       logTransportFailure(log, identity.updateId, error);
-      await replyView(context, renderTransportFailure(error, 'status'));
+      await replyView(context, renderTransportFailure(error, 'status', 'fa'));
     }
   });
 
@@ -155,16 +148,27 @@ export function createBot(
       );
     } catch (error: unknown) {
       logTransportFailure(log, identity.updateId, error);
-      await replyView(context, renderTransportFailure(error, 'status'));
+      await replyView(context, renderTransportFailure(error, 'status', 'fa'));
     }
   });
 
   bot.command('help', async (context) => {
-    if (!privateIdentity(context)) {
+    const identity = privateIdentity(context);
+    if (!identity) {
+      return;
+    }
+    if (typeof dependencies.backend.status !== 'function') {
+      await replyView(context, renderHelp());
       return;
     }
 
-    await replyView(context, renderHelp());
+    try {
+      const status = await dependencies.backend.status(identity);
+      await replyView(context, renderHelp(languageOf(status, 'fa')));
+    } catch (error: unknown) {
+      logTransportFailure(log, identity.updateId, error);
+      await replyView(context, renderTransportFailure(error, 'help', 'fa'));
+    }
   });
 
   bot.command('settings', async (context) => {
@@ -181,22 +185,29 @@ export function createBot(
       );
     } catch (error: unknown) {
       logTransportFailure(log, identity.updateId, error);
-      await replyView(context, renderTransportFailure(error, 'settings'));
+      await replyView(context, renderTransportFailure(error, 'settings', 'fa'));
     }
   });
 
   bot.command('unlink', async (context) => {
-    if (!privateIdentity(context)) {
+    const identity = privateIdentity(context);
+    if (!identity) {
       return;
     }
-
-    await replyView(context, {
-      text: 'Unlink this Telegram account? You will need a new token to link again.',
-      keyboard: new InlineKeyboard()
-        .text('Confirm Unlink', 'unlink:confirm')
-        .row()
-        .text('Home', NAVIGATION_CALLBACKS.home),
-    });
+    try {
+      const status = await dependencies.backend.status(identity);
+      const language = languageOf(status, 'fa');
+      await replyView(context, {
+        text: translate(language, 'unlink.confirm'),
+        keyboard: new InlineKeyboard()
+          .text(translate(language, 'action.confirmUnlink'), 'unlink:confirm')
+          .row()
+          .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home),
+      });
+    } catch (error: unknown) {
+      logTransportFailure(log, identity.updateId, error);
+      await replyView(context, renderTransportFailure(error, 'status', 'fa'));
+    }
   });
 
   bot.command('orders', async (context) => {
@@ -211,7 +222,7 @@ export function createBot(
       await replyView(context, renderOrderList(result));
     } catch (error: unknown) {
       logTransportFailure(log, identity.updateId, error);
-      await replyView(context, renderTransportFailure(error, 'orders'));
+      await replyView(context, renderTransportFailure(error, 'orders', 'fa'));
     }
   });
 
@@ -229,7 +240,7 @@ export function createBot(
       );
     } catch (error: unknown) {
       logTransportFailure(log, identity.updateId, error);
-      await replyView(context, renderTransportFailure(error, 'stock'));
+      await replyView(context, renderTransportFailure(error, 'stock', 'fa'));
     }
   });
 
@@ -251,7 +262,7 @@ export function createBot(
       );
     } catch (error: unknown) {
       logTransportFailure(log, identity.updateId, error);
-      await replyView(context, renderTransportFailure(error, 'search'));
+      await replyView(context, renderTransportFailure(error, 'search', 'fa'));
     }
   });
 
@@ -269,7 +280,7 @@ export function createBot(
       );
     } catch (error: unknown) {
       logTransportFailure(log, identity.updateId, error);
-      await replyView(context, renderTransportFailure(error, 'report'));
+      await replyView(context, renderTransportFailure(error, 'report', 'fa'));
     }
   });
 
@@ -288,7 +299,7 @@ export function createBot(
       await replyView(context, renderOrderLookup(result));
     } catch (error: unknown) {
       logTransportFailure(log, identity.updateId, error);
-      await replyView(context, renderTransportFailure(error, 'orders'));
+      await replyView(context, renderTransportFailure(error, 'orders', 'fa'));
     }
   });
 
@@ -309,15 +320,20 @@ export function createBot(
         context,
         result.status === 'unlinked'
           ? renderRecoveryView(
-              'Your Telegram account has been unlinked.',
-              'help'
+              translate(languageOf(result, 'fa'), 'unlink.success'),
+              'help',
+              languageOf(result, 'fa')
             )
-          : renderRecoveryView('This chat is not authorized.', 'status')
+          : renderRecoveryView(
+              translate(languageOf(result, 'fa'), 'unlink.unauthorized'),
+              'status',
+              languageOf(result, 'fa')
+            )
       );
     } catch (error: unknown) {
       logTransportFailure(log, identity.updateId, error);
       await safeAnswerCallback(context);
-      await replyView(context, renderTransportFailure(error, 'status'));
+      await replyView(context, renderTransportFailure(error, 'status', 'fa'));
     }
   });
 
@@ -351,7 +367,17 @@ export function createBot(
   });
 
   bot.callbackQuery(NAVIGATION_CALLBACKS.help, async (context) => {
-    await handleViewCallback(context, async () => renderHelp(), log);
+    await handleViewCallback(
+      context,
+      async (identity) => {
+        if (typeof dependencies.backend.status !== 'function') {
+          return renderHelp();
+        }
+        const status = await dependencies.backend.status(identity);
+        return renderHelp(languageOf(status, 'fa'));
+      },
+      log
+    );
   });
 
   bot.callbackQuery(NAVIGATION_CALLBACKS.settings, async (context) => {
@@ -375,7 +401,17 @@ export function createBot(
   });
 
   bot.callbackQuery(NAVIGATION_CALLBACKS.search, async (context) => {
-    await handleViewCallback(context, async () => renderSearchUsage(), log);
+    await handleViewCallback(
+      context,
+      async (identity) => {
+        if (typeof dependencies.backend.status !== 'function') {
+          return renderSearchUsage();
+        }
+        const status = await dependencies.backend.status(identity);
+        return renderSearchUsage(languageOf(status, 'fa'));
+      },
+      log
+    );
   });
 
   bot.callbackQuery(NAVIGATION_CALLBACKS.report, async (context) => {
@@ -458,6 +494,7 @@ export function createBot(
           identity,
           context.callbackQuery.data.slice(3)
         );
+        await configureChatCommandMenu(context, languageOf(result), log);
         const rendered = renderSettings(result);
         await safeAnswerCallback(context);
         await editOrReply(context, rendered.text, rendered.keyboard);
@@ -490,13 +527,16 @@ export function createBot(
         await editOrReply(context, rendered.text, rendered.keyboard);
 
         if (result.state === 'OK' && result.inputRef && result.purpose) {
+          const language = languageOf(result);
           await context.reply(
             [
               result.purpose === 'TIMEZONE'
-                ? 'Reply with a canonical IANA timezone, for example Asia/Tehran.'
-                : 'Reply with a non-negative whole-number low-stock threshold.',
+                ? translate(language, 'settings.timezonePrompt', {
+                    value: isolateLtr('Asia/Tehran'),
+                  })
+                : translate(language, 'settings.thresholdPrompt'),
               '',
-              `${SETTINGS_REFERENCE_LABEL} ${result.inputRef}`,
+              `${translate(language, 'settings.reference')} ${result.inputRef}`,
             ].join('\n'),
             {
               reply_markup: {
@@ -505,7 +545,7 @@ export function createBot(
                 input_field_placeholder:
                   result.purpose === 'TIMEZONE'
                     ? 'Asia/Tehran'
-                    : 'Enter threshold',
+                    : translate(language, 'settings.thresholdPlaceholder'),
               },
             }
           );
@@ -716,17 +756,23 @@ export function createBot(
         await editOrReply(context, rendered.text, rendered.keyboard);
 
         if (result.state === 'OK' && result.inputRef && result.maxLength) {
+          const language = languageOf(result);
           await context.reply(
             [
-              `Reply to this message with the plain-text note (maximum ${result.maxLength} characters).`,
+              translate(language, 'notes.prompt', {
+                value: formatNumber(result.maxLength, language),
+              }),
               '',
-              `${NOTE_REFERENCE_LABEL} ${result.inputRef}`,
+              `${translate(language, 'notes.reference')} ${result.inputRef}`,
             ].join('\n'),
             {
               reply_markup: {
                 force_reply: true,
                 selective: true,
-                input_field_placeholder: 'Enter order note',
+                input_field_placeholder: translate(
+                  language,
+                  'notes.placeholder'
+                ),
               },
             }
           );
@@ -923,6 +969,7 @@ function renderLanding(
   status: TelegramAuthorizationStatus,
   notice?: string
 ): RenderedView {
+  const language = languageOf(status);
   if (!isReadyStatus(status)) {
     const statusView = renderStatusView(status);
 
@@ -933,101 +980,122 @@ function renderLanding(
   }
 
   return {
-    text: [notice, 'WooCommerce Management', '', 'Choose an action.']
+    text: [
+      notice,
+      translate(language, 'home.title'),
+      '',
+      translate(language, 'home.choose'),
+    ]
       .filter((line): line is string => line !== undefined)
       .join('\n'),
-    keyboard: homeKeyboard(),
+    keyboard: homeKeyboard(language),
   };
 }
 
 function renderStatusView(status: TelegramAuthorizationStatus): RenderedView {
+  const language = languageOf(status);
   const keyboard = new InlineKeyboard();
 
   if (isReadyStatus(status)) {
-    keyboard.text('Recent Orders', NAVIGATION_CALLBACKS.orders).row();
+    keyboard
+      .text(translate(language, 'nav.orders'), NAVIGATION_CALLBACKS.orders)
+      .row();
   } else {
-    keyboard.text('Help', NAVIGATION_CALLBACKS.help).row();
+    keyboard
+      .text(translate(language, 'nav.help'), NAVIGATION_CALLBACKS.help)
+      .row();
   }
 
-  keyboard.text('Home', NAVIGATION_CALLBACKS.home);
+  keyboard.text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home);
 
   return {
-    text: ['Account Status', '', renderStatus(status)].join('\n'),
+    text: [translate(language, 'status.title'), '', renderStatus(status)].join(
+      '\n'
+    ),
     keyboard,
   };
 }
 
-function renderHelp(): RenderedView {
+function renderHelp(language: TelegramLanguage = 'en'): RenderedView {
   return {
     text: [
-      'Help',
+      translate(language, 'help.title'),
       '',
-      '/start — Open Home or link with a token',
-      '/orders — Browse recent orders',
-      '/order <number> — Open one exact order number',
-      '/stock — Show low and out-of-stock items',
-      '/search <query> — Search orders and inventory',
-      "/report — Show today's projected operational summary",
-      '/status — Check account and store access',
-      '/settings — View or manage store settings',
-      '/help — Show this command list',
-      '/unlink — Unlink this Telegram account',
+      translate(language, 'help.body'),
       '',
-      'Order details, refresh, status changes, and permitted notes use the secure buttons shown by the bot.',
+      translate(language, 'help.secureActions'),
     ].join('\n'),
     keyboard: new InlineKeyboard()
-      .text('Recent Orders', NAVIGATION_CALLBACKS.orders)
-      .text('Stock', NAVIGATION_CALLBACKS.stock)
+      .text(translate(language, 'nav.orders'), NAVIGATION_CALLBACKS.orders)
+      .text(translate(language, 'nav.stock'), NAVIGATION_CALLBACKS.stock)
       .row()
-      .text('Search', NAVIGATION_CALLBACKS.search)
-      .text('Daily Report', NAVIGATION_CALLBACKS.report)
+      .text(translate(language, 'nav.search'), NAVIGATION_CALLBACKS.search)
+      .text(translate(language, 'nav.report'), NAVIGATION_CALLBACKS.report)
       .row()
-      .text('Home', NAVIGATION_CALLBACKS.home),
+      .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home),
   };
 }
 
 export function renderSettings(result: SettingsResult): RenderedView {
+  const language = languageOf(result);
   if (result.state !== 'OK' || !result.settings) {
     return renderRecoveryView(
-      settingsStateMessage(result.state),
+      settingsStateMessage(result.state, language),
       result.state === 'UNAUTHORIZED' || result.state === 'NO_ACTIVE_STORE'
         ? 'status'
-        : 'settings'
+        : 'settings',
+      language
     );
   }
 
   const settings = result.settings;
-  const categories = settings.enabledNotificationCategories.map(
-    notificationCategoryLabel
+  const categories = settings.enabledNotificationCategories.map((category) =>
+    notificationCategoryLabel(category, language)
   );
   const recipients = settings.recipients
     .filter((recipient) => recipient.selected)
     .map(
       (recipient) =>
-        `• ${recipient.displayName}${recipient.availability === 'UNAVAILABLE' ? ' — unavailable' : ''}`
+        `• ${recipient.displayName}${recipient.availability === 'UNAVAILABLE' ? translate(language, 'settings.unavailableSuffix') : ''}`
     );
   const keyboard = new InlineKeyboard();
 
   if (settings.editable && settings.actions) {
     for (const language of settings.actions.languages) {
       keyboard.text(
-        `${settings.language === language.language ? '✓ ' : ''}${language.language === 'FA' ? 'Persian' : 'English'}`,
+        `${settings.language === language.language ? '✓ ' : ''}${translate(
+          languageOf(result),
+          language.language === 'FA' ? 'label.fa' : 'label.en'
+        )}`,
         `sg:${language.ref}`
       );
     }
 
     keyboard
       .row()
-      .text('Set Timezone', `si:${settings.actions.timezoneInputRef}`)
+      .text(
+        translate(language, 'action.setTimezone'),
+        `si:${settings.actions.timezoneInputRef}`
+      )
       .row()
-      .text('Set Threshold', `si:${settings.actions.thresholdInputRef}`)
-      .text('Clear Threshold', `sg:${settings.actions.thresholdClearRef}`);
+      .text(
+        translate(language, 'action.setThreshold'),
+        `si:${settings.actions.thresholdInputRef}`
+      )
+      .text(
+        translate(language, 'action.clearThreshold'),
+        `sg:${settings.actions.thresholdClearRef}`
+      );
 
     for (const category of settings.actions.categories) {
       keyboard
         .row()
         .text(
-          `${category.enabled ? 'Disable' : 'Enable'} ${notificationCategoryLabel(category.category)}`,
+          translate(
+            language,
+            category.enabled ? 'action.disable' : 'action.enable',
+            { value: notificationCategoryLabel(category.category, language) }
+          ),
           `sg:${category.enabled ? category.disableRef : category.enableRef}`
         );
     }
@@ -1036,7 +1104,7 @@ export function renderSettings(result: SettingsResult): RenderedView {
       keyboard
         .row()
         .text(
-          `${settings.recipientMode === mode.mode ? '✓ ' : ''}${recipientModeLabel(mode.mode)}`,
+          `${settings.recipientMode === mode.mode ? '✓ ' : ''}${recipientModeLabel(mode.mode, language)}`,
           `sg:${mode.ref}`
         );
     }
@@ -1046,10 +1114,15 @@ export function renderSettings(result: SettingsResult): RenderedView {
         continue;
       }
 
-      const action = recipient.action === 'SELECT' ? 'Select' : 'Remove';
+      const actionKey =
+        recipient.action === 'SELECT' ? 'action.select' : 'action.remove';
       const availability =
-        recipient.availability === 'UNAVAILABLE' ? ' (unavailable)' : '';
-      const label = `${action} ${recipient.displayName}${availability}`;
+        recipient.availability === 'UNAVAILABLE'
+          ? translate(language, 'settings.unavailableSuffix')
+          : '';
+      const label = translate(language, actionKey, {
+        value: `${recipient.displayName}${availability}`,
+      });
       keyboard
         .row()
         .text(
@@ -1059,23 +1132,47 @@ export function renderSettings(result: SettingsResult): RenderedView {
     }
   }
 
-  keyboard.row().text('Home', NAVIGATION_CALLBACKS.home);
+  keyboard
+    .row()
+    .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home);
 
   return {
     text: [
-      'Store Settings',
+      translate(language, 'settings.title'),
       '',
-      `Language: ${settings.language === 'FA' ? 'Persian' : 'English'}`,
-      `Timezone: ${settings.timezone}`,
-      `Low-stock threshold: ${settings.lowStockThreshold === null ? 'Not configured' : settings.lowStockThreshold}`,
-      `Notifications: ${categories.length > 0 ? categories.join(', ') : 'None'}`,
-      `Recipients: ${recipientModeLabel(settings.recipientMode)}`,
-      `Selected: ${settings.selectedRecipientCount} • currently available: ${settings.availableRecipientCount}`,
+      translate(language, 'settings.language', {
+        value: translate(
+          language,
+          settings.language === 'FA' ? 'label.fa' : 'label.en'
+        ),
+      }),
+      translate(language, 'settings.timezone', {
+        value: isolateLtr(settings.timezone),
+      }),
+      translate(language, 'settings.threshold', {
+        value:
+          settings.lowStockThreshold === null
+            ? translate(language, 'general.notConfigured')
+            : formatNumber(settings.lowStockThreshold, language),
+      }),
+      translate(language, 'settings.notifications', {
+        value:
+          categories.length > 0
+            ? categories.join(', ')
+            : translate(language, 'general.none'),
+      }),
+      translate(language, 'settings.recipients', {
+        value: recipientModeLabel(settings.recipientMode, language),
+      }),
+      translate(language, 'settings.selected', {
+        selected: formatNumber(settings.selectedRecipientCount, language),
+        available: formatNumber(settings.availableRecipientCount, language),
+      }),
       ...(recipients.length > 0
-        ? ['', 'Selected managers', ...recipients]
+        ? ['', translate(language, 'settings.selectedManagers'), ...recipients]
         : []),
       ...(!settings.editable
-        ? ['', 'Your membership has read-only access to settings.']
+        ? ['', translate(language, 'settings.readOnly')]
         : []),
     ].join('\n'),
     keyboard,
@@ -1085,71 +1182,90 @@ export function renderSettings(result: SettingsResult): RenderedView {
 function renderSettingsInputStart(
   result: SettingsInputStartResult
 ): RenderedView {
+  const language = languageOf(result);
   if (result.state !== 'OK' || !result.purpose || !result.inputRef) {
     return renderRecoveryView(
-      settingsStateMessage(result.state),
+      settingsStateMessage(result.state, language),
       result.state === 'UNAUTHORIZED' || result.state === 'NO_ACTIVE_STORE'
         ? 'status'
-        : 'settings'
+        : 'settings',
+      language
     );
   }
 
   return {
     text:
       result.purpose === 'TIMEZONE'
-        ? 'Timezone entry is ready. Reply to the new prompt with a canonical IANA timezone.'
-        : 'Threshold entry is ready. Reply to the new prompt with a non-negative whole number.',
+        ? translate(language, 'settings.timezoneReady')
+        : translate(language, 'settings.thresholdReady'),
     keyboard: new InlineKeyboard()
-      .text('Back to Settings', NAVIGATION_CALLBACKS.settings)
+      .text(
+        translate(language, 'nav.backSettings'),
+        NAVIGATION_CALLBACKS.settings
+      )
       .row()
-      .text('Home', NAVIGATION_CALLBACKS.home),
+      .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home),
   };
 }
 
-function settingsStateMessage(state: SettingsResult['state']): string {
+function settingsStateMessage(
+  state: SettingsResult['state'],
+  language: TelegramLanguage
+): string {
   switch (state) {
     case 'FORBIDDEN_ROLE':
-      return 'Your membership can view settings but cannot change them.';
+      return translate(language, 'settings.forbidden');
     case 'UNAUTHORIZED':
-      return 'This chat is not authorized to view store settings.';
+      return translate(language, 'settings.unauthorized');
     case 'NO_ACTIVE_STORE':
-      return NO_ACTIVE_STORE_MESSAGE;
+      return translate(language, 'general.noActiveStore');
     case 'INVALID_VALUE':
-      return 'That setting value is invalid. Nothing changed. Reply to the original prompt again or reopen Settings.';
+      return translate(language, 'settings.invalid');
     case 'EXPIRED_REF':
-      return 'This settings input expired or was already used. Nothing changed.';
+      return translate(language, 'settings.expiredInput');
     case 'CONTEXT_CHANGED':
-      return 'This settings action expired or the active context changed. Nothing changed.';
+      return translate(language, 'settings.contextChanged');
     default:
-      return 'Settings are unavailable. Return Home and try again.';
+      return translate(language, 'settings.unavailable');
   }
 }
 
 function notificationCategoryLabel(
-  category: 'ORDER_CREATED' | 'LOW_STOCK'
+  category: 'ORDER_CREATED' | 'LOW_STOCK',
+  language: TelegramLanguage
 ): string {
-  return category === 'ORDER_CREATED' ? 'New order' : 'Low stock';
+  return translate(
+    language,
+    category === 'ORDER_CREATED'
+      ? 'label.orderCreated'
+      : 'label.lowStockCategory'
+  );
 }
 
-function recipientModeLabel(mode: SettingsSummary['recipientMode']): string {
-  return mode === 'ALL_ELIGIBLE'
-    ? 'All eligible managers'
-    : 'Selected managers';
+function recipientModeLabel(
+  mode: SettingsSummary['recipientMode'],
+  language: TelegramLanguage
+): string {
+  return translate(
+    language,
+    mode === 'ALL_ELIGIBLE' ? 'label.allEligible' : 'label.selected'
+  );
 }
 
 function renderRecoveryView(
   text: string,
   primary:
-    'orders' | 'status' | 'help' | 'settings' | 'stock' | 'search' | 'report'
+    'orders' | 'status' | 'help' | 'settings' | 'stock' | 'search' | 'report',
+  language: TelegramLanguage = 'en'
 ): RenderedView {
   const labels = {
-    orders: 'Refresh Recent Orders',
-    status: 'Check Status',
-    help: 'Help',
-    settings: 'Settings',
-    stock: 'Refresh Stock',
-    search: 'Search',
-    report: 'Daily Report',
+    orders: translate(language, 'nav.refreshOrders'),
+    status: translate(language, 'nav.checkStatus'),
+    help: translate(language, 'nav.help'),
+    settings: translate(language, 'nav.settings'),
+    stock: translate(language, 'nav.refreshStock'),
+    search: translate(language, 'nav.search'),
+    report: translate(language, 'nav.report'),
   } as const;
 
   return {
@@ -1157,7 +1273,7 @@ function renderRecoveryView(
     keyboard: new InlineKeyboard()
       .text(labels[primary], NAVIGATION_CALLBACKS[primary])
       .row()
-      .text('Home', NAVIGATION_CALLBACKS.home),
+      .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home),
   };
 }
 
@@ -1170,23 +1286,28 @@ function renderTransportFailure(
     | 'settings'
     | 'stock'
     | 'search'
-    | 'report' = 'help'
+    | 'report' = 'help',
+  language: TelegramLanguage = 'fa'
 ): RenderedView {
-  return renderRecoveryView(transportFailureMessage(error), primary);
+  return renderRecoveryView(
+    transportFailureMessage(error, language),
+    primary,
+    language
+  );
 }
 
-function homeKeyboard(): InlineKeyboard {
+function homeKeyboard(language: TelegramLanguage): InlineKeyboard {
   return new InlineKeyboard()
-    .text('Recent Orders', NAVIGATION_CALLBACKS.orders)
-    .text('Stock', NAVIGATION_CALLBACKS.stock)
+    .text(translate(language, 'nav.orders'), NAVIGATION_CALLBACKS.orders)
+    .text(translate(language, 'nav.stock'), NAVIGATION_CALLBACKS.stock)
     .row()
-    .text('Search', NAVIGATION_CALLBACKS.search)
-    .text('Daily Report', NAVIGATION_CALLBACKS.report)
+    .text(translate(language, 'nav.search'), NAVIGATION_CALLBACKS.search)
+    .text(translate(language, 'nav.report'), NAVIGATION_CALLBACKS.report)
     .row()
-    .text('Settings', NAVIGATION_CALLBACKS.settings)
+    .text(translate(language, 'nav.settings'), NAVIGATION_CALLBACKS.settings)
     .row()
-    .text('Status', NAVIGATION_CALLBACKS.status)
-    .text('Help', NAVIGATION_CALLBACKS.help);
+    .text(translate(language, 'nav.status'), NAVIGATION_CALLBACKS.status)
+    .text(translate(language, 'nav.help'), NAVIGATION_CALLBACKS.help);
 }
 
 function isReadyStatus(status: TelegramAuthorizationStatus): boolean {
@@ -1205,64 +1326,78 @@ export function renderStatus(status: {
   selectionRequired: boolean;
   activeTenantId: string | null;
   activeStoreId: string | null;
+  presentation?: { language?: string; timezone?: string };
 }): string {
+  const language = languageOf(status);
   if (!status.linked) {
-    return 'This Telegram account is not linked. Use /start <token> to link it.';
+    return translate(language, 'status.unlinked');
   }
 
   if (!status.authorized) {
-    return 'Your Telegram account is linked, but no active tenant membership is available.';
+    return translate(language, 'status.noMembership');
   }
 
   if (status.selectionRequired) {
-    return 'Your Telegram account is linked. Tenant or store selection is required in a later setup step.';
+    return translate(language, 'status.selectionRequired');
   }
 
   if (status.activeTenantId && status.activeStoreId) {
-    return 'Your Telegram account is linked and authorized.';
+    return translate(language, 'status.ready');
   }
 
-  return 'Your Telegram account is linked, but no active store context is available.';
+  return translate(language, 'status.noStore');
 }
 
 export function renderStockList(result: StockListResult): RenderedView {
+  const language = languageOf(result);
   if (result.state === 'SYNCING') {
     return renderRecoveryView(
-      'Inventory is synchronizing from the current WooCommerce catalog. Try again shortly.',
-      'stock'
+      translate(language, 'stock.syncing'),
+      'stock',
+      language
     );
   }
 
   if (result.state === 'SYNC_FAILED') {
     return renderRecoveryView(
-      'The previous inventory synchronization did not complete. Recovery has been queued; try again shortly.',
-      'stock'
+      translate(language, 'stock.syncFailed'),
+      'stock',
+      language
     );
   }
 
   if (result.state === 'CONTEXT_CHANGED') {
     return renderRecoveryView(
-      'This stock view expired or the active context changed.',
-      'stock'
+      translate(language, 'stock.expired'),
+      'stock',
+      language
     );
   }
 
   if (result.state === 'UNAUTHORIZED') {
     return renderRecoveryView(
-      'This chat is not authorized to view inventory.',
-      'status'
+      translate(language, 'stock.unauthorized'),
+      'status',
+      language
     );
   }
 
   if (result.state === 'NO_ACTIVE_STORE') {
-    return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
+    return renderRecoveryView(
+      translate(language, 'general.noActiveStore'),
+      'status',
+      language
+    );
   }
 
   const keyboard = new InlineKeyboard();
 
   for (const item of result.items) {
-    const status = item.classification === 'OUT_OF_STOCK' ? 'OUT' : 'LOW';
-    const quantity = item.quantity === null ? '' : ` • ${item.quantity}`;
+    const status = inventoryLabel(item.classification, language);
+    const quantity =
+      item.quantity === null
+        ? ''
+        : ` • ${formatNumber(item.quantity, language)}`;
     const label = `${status} • ${item.displayName}${quantity}`;
     keyboard
       .text(label.length <= 64 ? label : `${label.slice(0, 61)}...`, item.ref)
@@ -1270,31 +1405,38 @@ export function renderStockList(result: StockListResult): RenderedView {
   }
 
   if (result.previousCursor) {
-    keyboard.text('Previous', result.previousCursor);
+    keyboard.text(translate(language, 'nav.previous'), result.previousCursor);
   }
 
   if (result.nextCursor) {
-    keyboard.text('Next', result.nextCursor);
+    keyboard.text(translate(language, 'nav.next'), result.nextCursor);
   }
 
-  keyboard.row().text('Home', NAVIGATION_CALLBACKS.home);
+  keyboard
+    .row()
+    .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home);
 
   return {
     text: [
-      'Inventory',
+      translate(language, 'stock.title'),
       '',
       result.threshold === null
-        ? 'WCTM quantitative low-stock threshold is not configured. Explicit WooCommerce out-of-stock items still appear.'
-        : `WCTM low-stock threshold: ${result.threshold}`,
+        ? translate(language, 'stock.thresholdUnset')
+        : translate(language, 'stock.threshold', {
+            value: formatNumber(result.threshold, language),
+          }),
       '',
       ...(result.items.length === 0
-        ? ['No low-stock or out-of-stock items are currently projected.']
+        ? [translate(language, 'stock.empty')]
         : result.items.map((item) => {
-            const status =
-              item.classification === 'OUT_OF_STOCK'
-                ? 'OUT OF STOCK'
-                : 'LOW STOCK';
-            return `${status} • ${item.displayName}${item.quantity === null ? '' : ` • qty ${item.quantity}`}`;
+            const status = inventoryLabel(item.classification, language);
+            return `${status} • ${item.displayName}${
+              item.quantity === null
+                ? ''
+                : ` • ${translate(language, 'stock.qtyShort', {
+                    value: formatNumber(item.quantity, language),
+                  })}`
+            }`;
           })),
     ].join('\n'),
     keyboard,
@@ -1302,28 +1444,37 @@ export function renderStockList(result: StockListResult): RenderedView {
 }
 
 export function renderStockDetail(result: StockDetailResult): RenderedView {
+  const language = languageOf(result);
+  const timezone = timezoneOf(result);
   if (result.state === 'CONTEXT_CHANGED') {
     return renderRecoveryView(
-      'This stock item reference expired or the active context changed.',
-      'stock'
+      translate(language, 'stock.itemExpired'),
+      'stock',
+      language
     );
   }
 
   if (result.state === 'UNAUTHORIZED') {
     return renderRecoveryView(
-      'This chat is not authorized to view inventory.',
-      'status'
+      translate(language, 'stock.unauthorized'),
+      'status',
+      language
     );
   }
 
   if (result.state === 'NO_ACTIVE_STORE') {
-    return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
+    return renderRecoveryView(
+      translate(language, 'general.noActiveStore'),
+      'status',
+      language
+    );
   }
 
   if (result.state !== 'OK' || !result.item || !result.backCursor) {
     return renderRecoveryView(
-      'This inventory item is no longer low or out of stock.',
-      'stock'
+      translate(language, 'stock.noLongerAlerting'),
+      'stock',
+      language
     );
   }
 
@@ -1334,71 +1485,107 @@ export function renderStockDetail(result: StockDetailResult): RenderedView {
 
   return {
     text: [
-      item.classification === 'OUT_OF_STOCK' ? 'Out of Stock' : 'Low Stock',
+      inventoryLabel(item.classification, language),
       '',
       item.displayName,
-      ...(variation.length > 0 ? [`Variation: ${variation.join(', ')}`] : []),
-      ...(item.sku ? [`SKU: ${item.sku}`] : []),
-      `Quantity: ${item.quantity ?? 'not managed'}`,
-      `WooCommerce status: ${item.stockStatus}`,
-      `WCTM threshold: ${item.threshold ?? 'not configured'}`,
-      `Last synchronized: ${item.lastSyncedAt}`,
+      ...(variation.length > 0
+        ? [
+            translate(language, 'stock.variation', {
+              value: variation.join(', '),
+            }),
+          ]
+        : []),
+      ...(item.sku
+        ? [translate(language, 'stock.sku', { value: isolateLtr(item.sku) })]
+        : []),
+      translate(language, 'stock.quantity', {
+        value:
+          item.quantity === null
+            ? translate(language, 'general.notManaged')
+            : formatNumber(item.quantity, language),
+      }),
+      translate(language, 'stock.wooStatus', {
+        value: isolateLtr(item.stockStatus),
+      }),
+      translate(language, 'stock.wctmThreshold', {
+        value:
+          item.threshold === null
+            ? translate(language, 'general.notConfigured')
+            : formatNumber(item.threshold, language),
+      }),
+      translate(language, 'stock.lastSynced', {
+        value: formatDateTime(item.lastSyncedAt, language, timezone),
+      }),
     ].join('\n'),
     keyboard: new InlineKeyboard()
-      .text('Back to Stock', result.backCursor)
+      .text(translate(language, 'nav.backStock'), result.backCursor)
       .row()
-      .text('Home', NAVIGATION_CALLBACKS.home),
+      .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home),
   };
 }
 
-function renderSearchUsage(): RenderedView {
+function renderSearchUsage(language: TelegramLanguage = 'en'): RenderedView {
   return {
     text: [
-      'Search',
+      translate(language, 'search.title'),
       '',
-      'Use /search <query> to find projected orders by order number or customer display name, and inventory by SKU or display name.',
-      'Prefix searches require at least two characters.',
+      translate(language, 'search.usage'),
+      translate(language, 'search.prefix'),
     ].join('\n'),
-    keyboard: new InlineKeyboard().text('Home', NAVIGATION_CALLBACKS.home),
+    keyboard: new InlineKeyboard().text(
+      translate(language, 'nav.home'),
+      NAVIGATION_CALLBACKS.home
+    ),
   };
 }
 
 export function renderSearch(result: SearchResult): RenderedView {
+  const language = languageOf(result);
   if (result.state === 'ORDER_DETAIL') {
-    return renderOrderDetail(result.detail);
+    return renderOrderDetail({
+      ...result.detail,
+      presentation: result.presentation,
+    });
   }
 
   if (result.state === 'INVALID_QUERY') {
-    return renderSearchUsage();
+    return renderSearchUsage(language);
   }
 
   if (result.state === 'QUERY_TOO_SHORT') {
     return renderRecoveryView(
-      'Use at least two characters for a prefix search. A one-character exact order number or SKU is still accepted.',
-      'search'
+      translate(language, 'search.tooShort'),
+      'search',
+      language
     );
   }
 
   if (result.state === 'UNAUTHORIZED') {
     return renderRecoveryView(
-      'This chat is not authorized to search store projections.',
-      'status'
+      translate(language, 'search.unauthorized'),
+      'status',
+      language
     );
   }
 
   if (result.state === 'NO_ACTIVE_STORE') {
-    return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
+    return renderRecoveryView(
+      translate(language, 'general.noActiveStore'),
+      'status',
+      language
+    );
   }
 
   if (result.state === 'CONTEXT_CHANGED') {
     return renderRecoveryView(
-      'This search expired or the active context changed. Start a new search.',
-      'search'
+      translate(language, 'search.expired'),
+      'search',
+      language
     );
   }
 
   if (result.state !== 'OK') {
-    return renderSearchUsage();
+    return renderSearchUsage(language);
   }
 
   const keyboard = new InlineKeyboard();
@@ -1406,39 +1593,46 @@ export function renderSearch(result: SearchResult): RenderedView {
   for (const row of result.results) {
     const label =
       row.kind === 'ORDER'
-        ? `Order #${row.orderNumber} • ${row.status}`
-        : `${row.classification === 'OUT_OF_STOCK' ? 'OUT' : row.classification === 'LOW_STOCK' ? 'LOW' : 'OK'} • ${row.displayName}${row.sku ? ` • ${row.sku}` : ''}`;
+        ? `${translate(language, 'orders.order', {
+            number: isolateLtr(row.orderNumber ?? ''),
+          })} • ${statusLabel(row.status, language)}`
+        : `${inventoryLabel(row.classification ?? 'HEALTHY', language)} • ${row.displayName}${row.sku ? ` • ${isolateLtr(row.sku)}` : ''}`;
     keyboard
       .text(label.length <= 64 ? label : `${label.slice(0, 61)}...`, row.ref)
       .row();
   }
 
   if (result.previousCursor) {
-    keyboard.text('Previous', result.previousCursor);
+    keyboard.text(translate(language, 'nav.previous'), result.previousCursor);
   }
   if (result.nextCursor) {
-    keyboard.text('Next', result.nextCursor);
+    keyboard.text(translate(language, 'nav.next'), result.nextCursor);
   }
-  keyboard.row().text('New Search', NAVIGATION_CALLBACKS.search);
-  keyboard.text('Home', NAVIGATION_CALLBACKS.home);
+  keyboard
+    .row()
+    .text(translate(language, 'nav.newSearch'), NAVIGATION_CALLBACKS.search);
+  keyboard.text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home);
 
   return {
     text: [
-      'Search Results',
+      translate(language, 'search.results'),
       '',
       ...(result.results.length === 0
-        ? ['No matching projected orders or inventory items.']
+        ? [translate(language, 'search.empty')]
         : result.results.map((row) =>
             row.kind === 'ORDER'
-              ? `Order #${row.orderNumber} • ${row.status} • ${row.total} ${row.currency}${row.customerDisplayName ? ` • ${row.customerDisplayName}` : ''}`
-              : `${row.classification} • ${row.displayName}${row.sku ? ` • SKU ${row.sku}` : ''}${row.quantity === null ? '' : ` • qty ${row.quantity}`}`
+              ? `${translate(language, 'orders.order', {
+                  number: isolateLtr(row.orderNumber ?? ''),
+                })} • ${statusLabel(row.status, language)} • ${formatMoney(
+                  row.total ?? '',
+                  row.currency ?? '',
+                  language
+                )}${row.customerDisplayName ? ` • ${row.customerDisplayName}` : ''}`
+              : `${inventoryLabel(row.classification ?? 'HEALTHY', language)} • ${row.displayName}${row.sku ? ` • ${translate(language, 'stock.sku', { value: isolateLtr(row.sku) })}` : ''}${row.quantity === null ? '' : ` • ${translate(language, 'stock.qtyShort', { value: formatNumber(row.quantity ?? '', language) })}`}`
           )),
       ...(result.inventoryState === 'READY'
         ? []
-        : [
-            '',
-            'Inventory is not READY; these results include Orders only and are therefore partial.',
-          ]),
+        : ['', translate(language, 'search.partial')]),
     ].join('\n'),
     keyboard,
   };
@@ -1447,9 +1641,16 @@ export function renderSearch(result: SearchResult): RenderedView {
 export function renderSearchSelection(
   result: SearchSelectionResult
 ): RenderedView {
+  const language = languageOf(result);
+  const timezone = timezoneOf(result);
   if (result.state === 'ORDER') {
-    const rendered = renderOrderDetail(result.detail);
-    rendered.keyboard.row().text('Back to Search', result.backCursor);
+    const rendered = renderOrderDetail({
+      ...result.detail,
+      presentation: result.presentation,
+    });
+    rendered.keyboard
+      .row()
+      .text(translate(language, 'nav.backSearch'), result.backCursor);
     return rendered;
   }
 
@@ -1462,99 +1663,168 @@ export function renderSearchSelection(
     return {
       text: [
         item.classification === 'OUT_OF_STOCK'
-          ? 'Out of Stock'
+          ? inventoryLabel('OUT_OF_STOCK', language)
           : item.classification === 'LOW_STOCK'
-            ? 'Low Stock'
-            : 'Inventory Item',
+            ? inventoryLabel('LOW_STOCK', language)
+            : inventoryLabel('HEALTHY', language),
         '',
         item.displayName,
-        ...(variation.length > 0 ? [`Variation: ${variation.join(', ')}`] : []),
-        ...(item.sku ? [`SKU: ${item.sku}`] : []),
-        `Quantity: ${item.quantity ?? 'not managed'}`,
-        `WooCommerce status: ${item.stockStatus}`,
-        `WCTM classification: ${item.classification}`,
-        `WCTM threshold: ${item.threshold ?? 'not configured'}`,
-        `Last synchronized: ${item.lastSyncedAt}`,
+        ...(variation.length > 0
+          ? [
+              translate(language, 'stock.variation', {
+                value: variation.join(', '),
+              }),
+            ]
+          : []),
+        ...(item.sku
+          ? [translate(language, 'stock.sku', { value: isolateLtr(item.sku) })]
+          : []),
+        translate(language, 'stock.quantity', {
+          value:
+            item.quantity === null
+              ? translate(language, 'general.notManaged')
+              : formatNumber(item.quantity, language),
+        }),
+        translate(language, 'stock.wooStatus', {
+          value: isolateLtr(item.stockStatus),
+        }),
+        translate(language, 'stock.wctmClass', {
+          value: inventoryLabel(item.classification, language),
+        }),
+        translate(language, 'stock.wctmThreshold', {
+          value:
+            item.threshold === null
+              ? translate(language, 'general.notConfigured')
+              : formatNumber(item.threshold, language),
+        }),
+        translate(language, 'stock.lastSynced', {
+          value: formatDateTime(item.lastSyncedAt, language, timezone),
+        }),
       ].join('\n'),
       keyboard: new InlineKeyboard()
-        .text('Back to Search', result.backCursor)
+        .text(translate(language, 'nav.backSearch'), result.backCursor)
         .row()
-        .text('Stock', NAVIGATION_CALLBACKS.stock)
-        .text('Home', NAVIGATION_CALLBACKS.home),
+        .text(translate(language, 'nav.stock'), NAVIGATION_CALLBACKS.stock)
+        .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home),
     };
   }
 
   if (result.state === 'UNAUTHORIZED') {
     return renderRecoveryView(
-      'This chat is not authorized to open this search result.',
-      'status'
+      translate(language, 'search.resultUnauthorized'),
+      'status',
+      language
     );
   }
 
   if (result.state === 'NO_ACTIVE_STORE') {
-    return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
+    return renderRecoveryView(
+      translate(language, 'general.noActiveStore'),
+      'status',
+      language
+    );
   }
 
   return renderRecoveryView(
     result.state === 'SYNCING'
-      ? 'Inventory is not READY. Start a new search after synchronization completes.'
-      : 'This search result expired, changed context, or is no longer available.',
-    'search'
+      ? translate(language, 'search.inventorySyncing')
+      : translate(language, 'search.resultExpired'),
+    'search',
+    language
   );
 }
 
 export function renderDailyReport(result: DailyReportResult): RenderedView {
+  const language = languageOf(result);
+  const timezone = timezoneOf(result);
   if (result.state === 'UNAUTHORIZED') {
     return renderRecoveryView(
-      'This chat is not authorized to view the daily report.',
-      'status'
+      translate(language, 'report.unauthorized'),
+      'status',
+      language
     );
   }
 
   if (result.state === 'NO_ACTIVE_STORE') {
-    return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
+    return renderRecoveryView(
+      translate(language, 'general.noActiveStore'),
+      'status',
+      language
+    );
   }
 
   if (result.state !== 'OK') {
-    return renderRecoveryView('The daily report is unavailable.', 'report');
+    return renderRecoveryView(
+      translate(language, 'report.unavailable'),
+      'report',
+      language
+    );
   }
 
   const sales =
     result.sales.length === 0
-      ? ['Gross operational sales: none']
+      ? [translate(language, 'report.grossNone')]
       : result.sales.flatMap((currency) => [
-          `Gross sales (${currency.currency}): ${currency.gross}`,
-          `Average order value (${currency.currency}): ${currency.averageOrderValue}`,
+          translate(language, 'report.gross', {
+            currency: isolateLtr(currency.currency),
+            value: formatMoney(currency.gross, currency.currency, language),
+          }),
+          translate(language, 'report.aov', {
+            currency: isolateLtr(currency.currency),
+            value: formatMoney(
+              currency.averageOrderValue,
+              currency.currency,
+              language
+            ),
+          }),
         ]);
   const statuses =
     result.statuses.length === 0
-      ? ['Status distribution: none']
+      ? [translate(language, 'report.statusNone')]
       : [
-          'Status distribution:',
+          translate(language, 'report.statuses'),
           ...result.statuses.map(
-            (status) => `• ${status.status}: ${status.count}`
+            (status) =>
+              `• ${statusLabel(status.status, language)}: ${formatNumber(
+                status.count,
+                language
+              )}`
           ),
         ];
   const inventory =
     result.inventory.state === 'READY'
       ? [
-          `Current low stock: ${result.inventory.lowStock}`,
-          `Current out of stock: ${result.inventory.outOfStock}`,
+          translate(language, 'report.low', {
+            value: formatNumber(result.inventory.lowStock, language),
+          }),
+          translate(language, 'report.out', {
+            value: formatNumber(result.inventory.outOfStock, language),
+          }),
         ]
       : [
-          `Inventory counts unavailable (${result.inventory.syncState.toLowerCase()}).`,
+          translate(language, 'report.inventoryUnavailable', {
+            value: isolateLtr(result.inventory.syncState),
+          }),
         ];
 
   return {
     text: [
-      'Daily Operational Report',
-      `${result.localDate} • ${result.timezone}`,
+      translate(language, 'report.title'),
+      `${
+        result.dayStartUtc
+          ? formatDate(result.dayStartUtc, language, timezone)
+          : isolateLtr(result.localDate)
+      } • ${isolateLtr(timezone)}`,
       '',
-      `Orders created today: ${result.ordersToday}`,
+      translate(language, 'report.ordersToday', {
+        value: formatNumber(result.ordersToday, language),
+      }),
       ...sales,
       ...(result.omittedRevenueOrders > 0
         ? [
-            `Revenue-eligible orders omitted for invalid total/currency: ${result.omittedRevenueOrders}`,
+            translate(language, 'report.omitted', {
+              value: formatNumber(result.omittedRevenueOrders, language),
+            }),
           ]
         : []),
       '',
@@ -1562,16 +1832,16 @@ export function renderDailyReport(result: DailyReportResult): RenderedView {
       '',
       ...inventory,
       ...(result.projection.delayed
-        ? ['', 'Order projection data may be delayed.']
+        ? ['', translate(language, 'report.delayed')]
         : []),
       '',
-      'Projected operational summary; not accounting or net revenue.',
+      translate(language, 'report.disclaimer'),
     ].join('\n'),
     keyboard: new InlineKeyboard()
-      .text('Recent Orders', NAVIGATION_CALLBACKS.orders)
-      .text('Stock', NAVIGATION_CALLBACKS.stock)
+      .text(translate(language, 'nav.orders'), NAVIGATION_CALLBACKS.orders)
+      .text(translate(language, 'nav.stock'), NAVIGATION_CALLBACKS.stock)
       .row()
-      .text('Home', NAVIGATION_CALLBACKS.home),
+      .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home),
   };
 }
 
@@ -1579,51 +1849,77 @@ export function renderOrderList(result: OrderListResult): {
   text: string;
   keyboard: InlineKeyboard;
 } {
+  const language = languageOf(result);
+  const timezone = timezoneOf(result);
   if (result.state === 'CONTEXT_CHANGED') {
-    return renderRecoveryView(EXPIRED_LIST_MESSAGE, 'orders');
+    return renderRecoveryView(
+      translate(language, 'general.expiredList'),
+      'orders',
+      language
+    );
   }
 
   if (result.state === 'UNAUTHORIZED') {
-    return renderRecoveryView(UNAUTHORIZED_ORDERS_MESSAGE, 'status');
+    return renderRecoveryView(
+      translate(language, 'general.unauthorizedOrders'),
+      'status',
+      language
+    );
   }
 
   if (result.state === 'NO_ACTIVE_STORE') {
-    return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
+    return renderRecoveryView(
+      translate(language, 'general.noActiveStore'),
+      'status',
+      language
+    );
   }
 
   const keyboard = new InlineKeyboard();
 
   for (const order of result.orders) {
-    keyboard.text(orderButtonLabel(order), order.ref).row();
+    keyboard.text(orderButtonLabel(order, language), order.ref).row();
   }
 
   if (result.previousCursor) {
-    keyboard.text('Previous', result.previousCursor);
+    keyboard.text(translate(language, 'nav.previous'), result.previousCursor);
   }
 
   if (result.nextCursor) {
-    keyboard.text('Next', result.nextCursor);
+    keyboard.text(translate(language, 'nav.next'), result.nextCursor);
   }
 
-  keyboard.row().text('Home', NAVIGATION_CALLBACKS.home);
+  keyboard
+    .row()
+    .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home);
 
   const text =
     result.orders.length === 0
       ? [
-          'Recent Orders',
+          translate(language, 'orders.title'),
           '',
-          'No recent orders are available yet.',
-          'New orders will appear here after they are received.',
+          translate(language, 'orders.empty'),
+          translate(language, 'orders.emptyHint'),
         ].join('\n')
       : [
-          'Recent Orders',
+          translate(language, 'orders.title'),
           '',
           ...result.orders.map(
             (order) =>
-              `#${order.orderNumber} • ${order.status} • ${order.total} ${order.currency}${order.remoteDeleted ? ' • deleted' : ''}`
+              `${translate(language, 'orders.order', {
+                number: isolateLtr(order.orderNumber),
+              })} • ${statusLabel(order.status, language)} • ${formatMoney(
+                order.total,
+                order.currency,
+                language
+              )}${
+                order.remoteDeleted
+                  ? ` • ${translate(language, 'general.deleted')}`
+                  : ''
+              }`
           ),
           '',
-          freshnessLine(result.freshness),
+          freshnessLine(result.freshness, language, timezone),
         ].join('\n');
 
   return { text, keyboard };
@@ -1633,28 +1929,43 @@ export function renderOrderDetail(result: OrderDetailResult): {
   text: string;
   keyboard: InlineKeyboard;
 } {
+  const language = languageOf(result);
+  const timezone = timezoneOf(result);
   if (result.state === 'CONTEXT_CHANGED') {
-    return renderRecoveryView(EXPIRED_LIST_MESSAGE, 'orders');
+    return renderRecoveryView(
+      translate(language, 'general.expiredList'),
+      'orders',
+      language
+    );
   }
 
   if (result.state === 'UNAUTHORIZED') {
-    return renderRecoveryView(UNAUTHORIZED_ORDERS_MESSAGE, 'status');
+    return renderRecoveryView(
+      translate(language, 'general.unauthorizedOrders'),
+      'status',
+      language
+    );
   }
 
   if (result.state === 'NO_ACTIVE_STORE') {
-    return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
+    return renderRecoveryView(
+      translate(language, 'general.noActiveStore'),
+      'status',
+      language
+    );
   }
 
   const keyboard = orderDetailKeyboard(
     result.backCursor,
     result.transitionsRef,
     result.refreshRef,
-    result.addNoteRef
+    result.addNoteRef,
+    language
   );
 
   if (result.state === 'NOT_FOUND' || !result.order) {
     return {
-      text: 'This order is no longer available. Return to Recent Orders to continue.',
+      text: translate(language, 'orders.notFound'),
       keyboard,
     };
   }
@@ -1662,34 +1973,48 @@ export function renderOrderDetail(result: OrderDetailResult): {
   if (result.state === 'DELETED' || result.order.remoteDeleted) {
     return {
       text: [
-        `Order #${result.order.orderNumber}`,
-        `Status: ${result.order.status}`,
-        `Customer: ${result.order.customerDisplayName}`,
-        'This order was deleted in WooCommerce.',
-        freshnessLine(result.freshness),
+        translate(language, 'orders.order', {
+          number: isolateLtr(result.order.orderNumber),
+        }),
+        translate(language, 'orders.status', {
+          value: statusLabel(result.order.status, language),
+        }),
+        translate(language, 'orders.customer', {
+          value: result.order.customerDisplayName,
+        }),
+        translate(language, 'orders.deletedWoo'),
+        freshnessLine(result.freshness, language, timezone),
       ].join('\n'),
       keyboard,
     };
   }
 
   return {
-    text: renderActiveOrderDetail(result.order, result.freshness),
+    text: renderActiveOrderDetail(
+      result.order,
+      result.freshness,
+      language,
+      timezone
+    ),
     keyboard,
   };
 }
 
 export function renderOrderLookup(result: OrderLookupResult): RenderedView {
+  const language = languageOf(result);
   if (result.state === 'MALFORMED_ORDER_NUMBER') {
     return renderRecoveryView(
-      'Use /order <number> with one exact order number, for example /order 1001.',
-      'orders'
+      translate(language, 'orders.lookupUsage'),
+      'orders',
+      language
     );
   }
 
   if (result.state === 'AMBIGUOUS') {
     return renderRecoveryView(
-      'A single exact order could not be identified. No order was opened.',
-      'orders'
+      translate(language, 'orders.ambiguous'),
+      'orders',
+      language
     );
   }
 
@@ -1697,26 +2022,29 @@ export function renderOrderLookup(result: OrderLookupResult): RenderedView {
 }
 
 export function renderOrderRefresh(result: OrderRefreshResult): RenderedView {
+  const language = languageOf(result);
   if (result.state === 'OK' || result.state === 'DELETED') {
     const rendered = renderOrderDetail(result as OrderDetailResult);
 
     return {
-      text: `Order refreshed from WooCommerce.\n\n${rendered.text}`,
+      text: `${translate(language, 'orders.refreshed')}\n\n${rendered.text}`,
       keyboard: rendered.keyboard,
     };
   }
 
   if (result.state === 'RETRYABLE') {
     return renderRecoveryView(
-      'WooCommerce could not be reached to refresh this order. No repeated refresh was started.',
-      'orders'
+      translate(language, 'orders.refreshRetryable'),
+      'orders',
+      language
     );
   }
 
   if (result.state === 'FAILED') {
     return renderRecoveryView(
-      'WooCommerce returned an invalid refresh result. The existing order projection was not replaced.',
-      'orders'
+      translate(language, 'orders.refreshFailed'),
+      'orders',
+      language
     );
   }
 
@@ -1727,31 +2055,35 @@ export function renderOrderNoteOptions(
   result: OrderNoteOptionsResult,
   detailRef: string
 ): RenderedView {
+  const language = languageOf(result);
   if (result.state !== 'OK' || !result.ref || !result.visibilities) {
-    return renderOrderNoteFailure(result.state, detailRef);
+    return renderOrderNoteFailure(result.state, detailRef, language);
   }
 
   const keyboard = new InlineKeyboard();
 
   for (const visibility of result.visibilities) {
     keyboard
-      .text(noteVisibilityLabel(visibility), `v:${result.ref}:${visibility}`)
+      .text(
+        noteVisibilityLabel(visibility, language),
+        `v:${result.ref}:${visibility}`
+      )
       .row();
   }
 
   keyboard
-    .text('Back to Order', detailRef)
+    .text(translate(language, 'nav.backOrder'), detailRef)
     .row()
-    .text('Home', NAVIGATION_CALLBACKS.home);
+    .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home);
 
   return {
     text: [
-      'Add Order Note',
+      translate(language, 'notes.title'),
       '',
-      'Internal notes are visible to store staff only.',
-      'Customer-visible notes use WooCommerce customer-note delivery behavior.',
+      translate(language, 'notes.internalHelp'),
+      translate(language, 'notes.customerHelp'),
       '',
-      'Choose visibility:',
+      translate(language, 'notes.choose'),
     ].join('\n'),
     keyboard,
   };
@@ -1760,28 +2092,31 @@ export function renderOrderNoteOptions(
 export function renderOrderNoteStart(
   result: OrderNoteStartResult
 ): RenderedView {
+  const language = languageOf(result);
   if (
     result.state !== 'OK' ||
     !result.inputRef ||
     !result.detailRef ||
     !result.visibility
   ) {
-    return renderOrderNoteFailure(result.state, result.detailRef);
+    return renderOrderNoteFailure(result.state, result.detailRef, language);
   }
 
   return {
     text: [
-      'Add Order Note',
+      translate(language, 'notes.title'),
       '',
-      `Visibility: ${noteVisibilityLabel(result.visibility)}`,
-      'Reply to the prompt with plain text. You will review it before anything is sent to WooCommerce.',
+      translate(language, 'notes.visibility', {
+        value: noteVisibilityLabel(result.visibility, language),
+      }),
+      translate(language, 'notes.replyReview'),
     ].join('\n'),
     keyboard: new InlineKeyboard()
-      .text('Cancel', `x:${result.inputRef}`)
+      .text(translate(language, 'action.cancel'), `x:${result.inputRef}`)
       .row()
-      .text('Back to Order', result.detailRef)
+      .text(translate(language, 'nav.backOrder'), result.detailRef)
       .row()
-      .text('Home', NAVIGATION_CALLBACKS.home),
+      .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home),
   };
 }
 
@@ -1789,6 +2124,7 @@ export function renderOrderNotePrepare(
   result: OrderNotePrepareResult,
   inputRef: string
 ): RenderedView {
+  const language = languageOf(result);
   if (
     result.state !== 'OK' ||
     !result.confirmRef ||
@@ -1798,51 +2134,56 @@ export function renderOrderNotePrepare(
   ) {
     if (result.state === 'INVALID_NOTE') {
       return {
-        text: 'The note must be non-empty plain text, at most 1,000 characters, without HTML markup or control characters. No note was created.',
+        text: translate(language, 'notes.invalidDetailed'),
         keyboard: new InlineKeyboard()
-          .text('Cancel', `x:${inputRef}`)
+          .text(translate(language, 'action.cancel'), `x:${inputRef}`)
           .row()
-          .text('Home', NAVIGATION_CALLBACKS.home),
+          .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home),
       };
     }
 
-    return renderOrderNoteFailure(result.state, result.detailRef);
+    return renderOrderNoteFailure(result.state, result.detailRef, language);
   }
 
   return {
     text: [
-      'Confirm Order Note',
+      translate(language, 'notes.confirmTitle'),
       '',
-      `Visibility: ${noteVisibilityLabel(result.visibility)}`,
-      `Preview: ${result.preview}`,
+      translate(language, 'notes.visibility', {
+        value: noteVisibilityLabel(result.visibility, language),
+      }),
+      translate(language, 'notes.preview', { value: result.preview }),
       '',
-      'Confirming creates one WooCommerce note. This action cannot be edited or deleted here.',
+      translate(language, 'notes.confirmHelp'),
     ].join('\n'),
     keyboard: new InlineKeyboard()
-      .text('Confirm', `nc:${result.confirmRef}`)
-      .text('Cancel', `x:${result.confirmRef}`)
+      .text(translate(language, 'action.confirm'), `nc:${result.confirmRef}`)
+      .text(translate(language, 'action.cancel'), `x:${result.confirmRef}`)
       .row()
-      .text('Back to Order', result.detailRef)
+      .text(translate(language, 'nav.backOrder'), result.detailRef)
       .row()
-      .text('Home', NAVIGATION_CALLBACKS.home),
+      .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home),
   };
 }
 
 export function renderOrderNoteMutation(
   result: OrderNoteMutationResult
 ): RenderedView {
+  const language = languageOf(result);
   const keyboard = new InlineKeyboard();
 
   if (result.detailRef) {
-    keyboard.text('Back to Order', result.detailRef).row();
+    keyboard.text(translate(language, 'nav.backOrder'), result.detailRef).row();
   } else {
-    keyboard.text('Recent Orders', NAVIGATION_CALLBACKS.orders).row();
+    keyboard
+      .text(translate(language, 'nav.orders'), NAVIGATION_CALLBACKS.orders)
+      .row();
   }
 
-  keyboard.text('Home', NAVIGATION_CALLBACKS.home);
+  keyboard.text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home);
 
   return {
-    text: orderNoteStateMessage(result),
+    text: orderNoteStateMessage(result, language),
     keyboard,
   };
 }
@@ -1851,48 +2192,80 @@ export function renderOrderTransitions(
   result: OrderTransitionsResult,
   detailRef: string
 ): { text: string; keyboard: InlineKeyboard } {
+  const language = languageOf(result);
   if (result.state !== 'OK' || !result.ref || !result.targets) {
     if (result.state === 'CONTEXT_CHANGED') {
-      return renderRecoveryView(EXPIRED_LIST_MESSAGE, 'orders');
+      return renderRecoveryView(
+        translate(language, 'general.expiredList'),
+        'orders',
+        language
+      );
     }
 
     if (result.state === 'UNAUTHORIZED') {
-      return renderRecoveryView(UNAUTHORIZED_ORDERS_MESSAGE, 'status');
+      return renderRecoveryView(
+        translate(language, 'general.unauthorizedOrders'),
+        'status',
+        language
+      );
     }
 
     if (result.state === 'NO_ACTIVE_STORE') {
-      return renderRecoveryView(NO_ACTIVE_STORE_MESSAGE, 'status');
+      return renderRecoveryView(
+        translate(language, 'general.noActiveStore'),
+        'status',
+        language
+      );
     }
 
     if (result.state === 'NOT_FOUND' || result.state === 'DELETED') {
-      return renderRecoveryView(orderWriteStateMessage(result.state), 'orders');
+      return renderRecoveryView(
+        orderWriteStateMessage(result.state, language),
+        'orders',
+        language
+      );
     }
 
     return {
-      text: orderWriteStateMessage(result.state),
+      text: orderWriteStateMessage(result.state, language),
       keyboard: new InlineKeyboard()
-        .text('Back to Order', detailRef)
+        .text(translate(language, 'nav.backOrder'), detailRef)
         .row()
-        .text('Home', NAVIGATION_CALLBACKS.home),
+        .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home),
     };
   }
 
   const keyboard = new InlineKeyboard();
 
   for (const target of result.targets) {
-    keyboard.text(statusLabel(target), `${result.ref}:${target}`).row();
+    keyboard
+      .text(statusLabel(target, language), `${result.ref}:${target}`)
+      .row();
   }
 
   keyboard
-    .text('Back to Order', detailRef)
+    .text(translate(language, 'nav.backOrder'), detailRef)
     .row()
-    .text('Home', NAVIGATION_CALLBACKS.home);
+    .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home);
 
   return {
     text:
       result.targets.length === 0
-        ? `No supported status changes are available from ${statusLabel(result.currentStatus ?? 'the current status')}.`
-        : `Change Status\n\nCurrent status: ${statusLabel(result.currentStatus ?? 'the current status')}\nChoose the new status:`,
+        ? translate(language, 'statusChange.none', {
+            value: result.currentStatus
+              ? statusLabel(result.currentStatus, language)
+              : translate(language, 'label.currentStatus'),
+          })
+        : [
+            translate(language, 'statusChange.title'),
+            '',
+            translate(language, 'statusChange.current', {
+              value: result.currentStatus
+                ? statusLabel(result.currentStatus, language)
+                : translate(language, 'label.currentStatus'),
+            }),
+            translate(language, 'statusChange.choose'),
+          ].join('\n'),
     keyboard,
   };
 }
@@ -1901,6 +2274,7 @@ export function renderOrderStatusUpdate(result: OrderStatusUpdateResult): {
   text: string;
   keyboard: InlineKeyboard;
 } {
+  const language = languageOf(result);
   if (result.order && result.freshness) {
     const completed = result.state === 'OK' || result.state === 'NO_OP';
     const rendered = renderOrderDetail({
@@ -1910,137 +2284,181 @@ export function renderOrderStatusUpdate(result: OrderStatusUpdateResult): {
         ? { backCursor: result.backCursor }
         : {}),
       freshness: result.freshness,
+      presentation: result.presentation,
     });
 
     return {
       text: `${
         result.state === 'OK'
-          ? 'Status updated successfully.'
+          ? translate(language, 'statusChange.success')
           : result.state === 'NO_OP'
-            ? 'The order already has that status.'
-            : orderWriteStateMessage(result.state)
+            ? translate(language, 'statusChange.noOp')
+            : orderWriteStateMessage(result.state, language)
       }\n\n${rendered.text}`,
       keyboard: rendered.keyboard,
     };
   }
 
   if (result.state === 'UNAUTHORIZED' || result.state === 'NO_ACTIVE_STORE') {
-    return renderRecoveryView(orderWriteStateMessage(result.state), 'status');
+    return renderRecoveryView(
+      orderWriteStateMessage(result.state, language),
+      'status',
+      language
+    );
   }
 
-  return renderRecoveryView(orderWriteStateMessage(result.state), 'orders');
+  return renderRecoveryView(
+    orderWriteStateMessage(result.state, language),
+    'orders',
+    language
+  );
 }
 
 function orderWriteStateMessage(
-  state: OrderTransitionsResult['state'] | OrderStatusUpdateResult['state']
+  state: OrderTransitionsResult['state'] | OrderStatusUpdateResult['state'],
+  language: TelegramLanguage
 ): string {
   switch (state) {
     case 'FORBIDDEN_ROLE':
-      return 'Your membership can view orders but cannot change their status.';
+      return translate(language, 'statusChange.forbidden');
     case 'UNAUTHORIZED':
-      return UNAUTHORIZED_ORDERS_MESSAGE;
+      return translate(language, 'general.unauthorizedOrders');
     case 'NO_ACTIVE_STORE':
-      return NO_ACTIVE_STORE_MESSAGE;
+      return translate(language, 'general.noActiveStore');
     case 'CONTEXT_CHANGED':
-      return EXPIRED_LIST_MESSAGE;
+      return translate(language, 'general.expiredList');
     case 'EXPIRED_REF':
-      return 'This status action expired. No change was made. Refresh Recent Orders and open the order again.';
+      return translate(language, 'statusChange.expired');
     case 'INVALID_TARGET':
-      return 'That status is no longer available for this order. No change was made.';
+      return translate(language, 'statusChange.invalid');
     case 'RETRYABLE':
-      return 'WooCommerce could not confirm the change. Refresh Recent Orders and verify the current status before trying again.';
+      return translate(language, 'statusChange.retryable');
     case 'FAILED':
-      return 'WooCommerce did not accept the status change. Refresh Recent Orders to continue.';
+      return translate(language, 'statusChange.failed');
     case 'DELETED':
-      return 'This order was deleted in WooCommerce.';
+      return translate(language, 'orders.deletedWoo');
     case 'NOT_FOUND':
-      return 'This order is no longer available.';
+      return translate(language, 'statusChange.notFound');
     default:
-      return 'No status change is available.';
+      return translate(language, 'statusChange.noneAvailable');
   }
 }
 
 function renderOrderNoteFailure(
   state: OrderNoteMutationResult['state'],
-  detailRef?: string
+  detailRef: string | undefined,
+  language: TelegramLanguage
 ): RenderedView {
   const keyboard = new InlineKeyboard();
 
   if (detailRef) {
-    keyboard.text('Back to Order', detailRef).row();
+    keyboard.text(translate(language, 'nav.backOrder'), detailRef).row();
   } else {
-    keyboard.text('Recent Orders', NAVIGATION_CALLBACKS.orders).row();
+    keyboard
+      .text(translate(language, 'nav.orders'), NAVIGATION_CALLBACKS.orders)
+      .row();
   }
 
-  keyboard.text('Home', NAVIGATION_CALLBACKS.home);
+  keyboard.text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home);
 
-  return { text: orderNoteStateMessage({ state }), keyboard };
+  return { text: orderNoteStateMessage({ state }, language), keyboard };
 }
 
-function orderNoteStateMessage(result: OrderNoteMutationResult): string {
+function orderNoteStateMessage(
+  result: OrderNoteMutationResult,
+  language: TelegramLanguage
+): string {
   switch (result.state) {
     case 'OK':
-      return `The ${noteVisibilityLabel(result.visibility ?? 'INTERNAL').toLowerCase()} note was created once in WooCommerce${result.orderNumber ? ` for order #${result.orderNumber}` : ''}.`;
+      return translate(language, 'notes.success', {
+        visibility: noteVisibilityLabel(
+          result.visibility ?? 'INTERNAL',
+          language
+        ),
+        order: result.orderNumber
+          ? translate(language, 'notes.forOrder', {
+              number: isolateLtr(result.orderNumber),
+            })
+          : '',
+      });
     case 'CANCELLED':
-      return 'Note creation was cancelled. Nothing was sent to WooCommerce.';
+      return translate(language, 'notes.cancelled');
     case 'FORBIDDEN_ROLE':
-      return 'Your membership can view orders but cannot create order notes.';
+      return translate(language, 'notes.forbidden');
     case 'UNAUTHORIZED':
-      return UNAUTHORIZED_ORDERS_MESSAGE;
+      return translate(language, 'general.unauthorizedOrders');
     case 'NO_ACTIVE_STORE':
-      return NO_ACTIVE_STORE_MESSAGE;
+      return translate(language, 'general.noActiveStore');
     case 'CONTEXT_CHANGED':
-      return EXPIRED_LIST_MESSAGE;
+      return translate(language, 'general.expiredList');
     case 'EXPIRED_REF':
-      return 'This note action expired. No note was created.';
+      return translate(language, 'notes.expired');
     case 'INVALID_NOTE':
-      return 'The note text is invalid. No note was created.';
+      return translate(language, 'notes.invalid');
     case 'IN_PROGRESS':
-      return 'This note action is already being processed. It was not dispatched again.';
+      return translate(language, 'notes.inProgress');
     case 'AMBIGUOUS':
-      return 'WooCommerce may have received this note, but the result could not be confirmed. It will not be sent again automatically.';
+      return translate(language, 'notes.ambiguous');
     case 'RETRYABLE':
-      return 'WooCommerce safely rejected or deferred this note request. It was not sent again; start a new note action if needed.';
+      return translate(language, 'notes.retryable');
     case 'DELETED':
-      return 'This order was deleted in WooCommerce. No note was created.';
+      return translate(language, 'notes.deleted');
     case 'NOT_FOUND':
-      return 'This order is no longer available. No note was created.';
+      return translate(language, 'notes.notFound');
     default:
-      return 'WooCommerce did not create the note. It was not sent again.';
+      return translate(language, 'notes.failed');
   }
 }
 
-function noteVisibilityLabel(visibility: OrderNoteVisibility): string {
-  return visibility === 'CUSTOMER' ? 'Customer-visible' : 'Internal';
+function noteVisibilityLabel(
+  visibility: OrderNoteVisibility,
+  language: TelegramLanguage
+): string {
+  return translate(
+    language,
+    visibility === 'CUSTOMER' ? 'label.customer' : 'label.internal'
+  );
 }
 
 function orderDetailKeyboard(
   backCursor?: string,
   transitionsRef?: string,
   refreshRef?: string,
-  addNoteRef?: string
+  addNoteRef?: string,
+  language: TelegramLanguage = 'en'
 ): InlineKeyboard {
   const keyboard = new InlineKeyboard();
 
   if (backCursor) {
-    keyboard.text('Back to Orders', backCursor);
+    keyboard.text(translate(language, 'nav.backOrders'), backCursor);
   } else {
-    keyboard.text('Recent Orders', NAVIGATION_CALLBACKS.orders);
+    keyboard.text(
+      translate(language, 'nav.orders'),
+      NAVIGATION_CALLBACKS.orders
+    );
   }
 
   if (transitionsRef) {
-    keyboard.row().text('Change Status', `t:${transitionsRef}`);
+    keyboard
+      .row()
+      .text(translate(language, 'action.changeStatus'), `t:${transitionsRef}`);
   }
 
   if (refreshRef) {
-    keyboard.row().text('Refresh', `r:${refreshRef}`);
+    keyboard
+      .row()
+      .text(translate(language, 'action.refresh'), `r:${refreshRef}`);
   }
 
   if (addNoteRef) {
-    keyboard.row().text('Add Note', `n:${addNoteRef}`);
+    keyboard
+      .row()
+      .text(translate(language, 'action.addNote'), `n:${addNoteRef}`);
   }
 
-  keyboard.row().text('Home', NAVIGATION_CALLBACKS.home);
+  keyboard
+    .row()
+    .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home);
   return keyboard;
 }
 
@@ -2050,7 +2468,7 @@ function noteInputReference(text: string | undefined): string | undefined {
   }
 
   const match = text.match(
-    /(?:^|\n)Note reference: (i\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16})(?:\n|$)/
+    /(?:^|\n)(?:Note reference:|شناسه یادداشت:) (i\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16})(?:\n|$)/
   );
 
   return match?.[1];
@@ -2062,15 +2480,10 @@ function settingsInputReference(text: string | undefined): string | undefined {
   }
 
   const match = text.match(
-    /(?:^|\n)Settings reference: (g\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16})(?:\n|$)/
+    /(?:^|\n)(?:Settings reference:|شناسه تنظیمات:) (g\.[A-Za-z0-9_-]{16}\.[A-Za-z0-9_-]{16})(?:\n|$)/
   );
 
   return match?.[1];
-}
-
-function statusLabel(status: string): string {
-  const words = status.replace(/-/g, ' ');
-  return `${words.charAt(0).toUpperCase()}${words.slice(1)}`;
 }
 
 async function handleViewCallback(
@@ -2134,48 +2547,125 @@ async function safeAnswerCallback(context: Context): Promise<void> {
 
 function renderActiveOrderDetail(
   order: OrderDetailPayload,
-  freshness: OrderDetailResult['freshness']
+  freshness: OrderDetailResult['freshness'],
+  language: TelegramLanguage,
+  timezone: string
 ): string {
   const total = order.totals?.['total'];
   const lines = (order.lineItems ?? []).map(
-    (item) => `• ${item.name} × ${String(item.quantity)} — ${item.total}`
+    (item) =>
+      `• ${item.name} × ${formatNumber(item.quantity, language)} — ${formatNumber(
+        item.total,
+        language
+      )}`
   );
   const payment = order.payment
-    ? `Payment: ${order.payment.method ?? 'Not specified'} • ${order.payment.paid ? 'Paid' : 'Unpaid'}`
+    ? translate(language, 'orders.payment', {
+        method:
+          order.payment.method ?? translate(language, 'general.notSpecified'),
+        state: translate(
+          language,
+          order.payment.paid ? 'label.paid' : 'label.unpaid'
+        ),
+      })
     : undefined;
   const shippingMethods = order.shipping?.methods.join(', ');
   const shippingAddress = order.shipping?.addressLines.join(' • ');
 
   return [
-    `Order #${order.orderNumber}`,
-    `Status: ${order.status}`,
-    `Customer: ${order.customerDisplayName}`,
-    `Total: ${total === undefined ? '—' : String(total)} ${order.currency ?? ''}`.trim(),
+    translate(language, 'orders.order', {
+      number: isolateLtr(order.orderNumber),
+    }),
+    translate(language, 'orders.status', {
+      value: statusLabel(order.status, language),
+    }),
+    translate(language, 'orders.customer', {
+      value: order.customerDisplayName,
+    }),
+    translate(language, 'orders.total', {
+      value:
+        total === undefined
+          ? '—'
+          : formatMoney(String(total), order.currency ?? '', language),
+    }),
     ...(payment ? [payment] : []),
-    ...(shippingMethods ? [`Shipping: ${shippingMethods}`] : []),
-    ...(shippingAddress ? [`Ship to: ${shippingAddress}`] : []),
-    `Created: ${order.wcCreatedAt ?? '—'}`,
-    `Modified: ${order.wcModifiedAt ?? '—'}`,
-    ...(lines.length > 0 ? ['', 'Items', ...lines] : []),
+    ...(shippingMethods
+      ? [translate(language, 'orders.shipping', { value: shippingMethods })]
+      : []),
+    ...(shippingAddress
+      ? [translate(language, 'orders.shipTo', { value: shippingAddress })]
+      : []),
+    translate(language, 'orders.created', {
+      value: order.wcCreatedAt
+        ? formatDateTime(order.wcCreatedAt, language, timezone)
+        : '—',
+    }),
+    translate(language, 'orders.modified', {
+      value: order.wcModifiedAt
+        ? formatDateTime(order.wcModifiedAt, language, timezone)
+        : '—',
+    }),
+    ...(lines.length > 0
+      ? ['', translate(language, 'orders.items'), ...lines]
+      : []),
     '',
-    freshnessLine(freshness),
+    freshnessLine(freshness, language, timezone),
   ].join('\n');
 }
 
-function freshnessLine(freshness: OrderListResult['freshness']): string {
-  return `Last updated ${freshness.asOf}${freshness.delayed ? ' • delayed' : ''}`;
+function freshnessLine(
+  freshness: OrderListResult['freshness'],
+  language: TelegramLanguage,
+  timezone: string
+): string {
+  const date = formatDateTime(freshness.asOf, language, timezone);
+  return `${translate(language, 'orders.lastUpdated', {
+    value: date,
+  })}${freshness.delayed ? ` • ${translate(language, 'orders.delayed')}` : ''}`;
 }
 
-function orderButtonLabel(order: OrderSummary): string {
-  const label = `#${order.orderNumber} • ${order.status} • ${order.total} ${order.currency}`;
+function orderButtonLabel(
+  order: OrderSummary,
+  language: TelegramLanguage
+): string {
+  const label = `${isolateLtr(`#${order.orderNumber}`)} • ${statusLabel(
+    order.status,
+    language
+  )} • ${formatMoney(order.total, order.currency, language)}`;
 
   return label.length <= 64 ? label : `${label.slice(0, 61)}...`;
 }
 
-function transportFailureMessage(error: unknown): string {
+function transportFailureMessage(
+  error: unknown,
+  language: TelegramLanguage
+): string {
   return error?.constructor?.name === 'MalformedBackendResponseError'
-    ? MALFORMED_RESPONSE_MESSAGE
-    : TRANSIENT_FAILURE_MESSAGE;
+    ? translate(language, 'general.malformedResponse')
+    : translate(language, 'general.transientFailure');
+}
+
+async function configureChatCommandMenu(
+  context: Context,
+  language: TelegramLanguage,
+  log: (record: Readonly<Record<string, unknown>>) => void
+): Promise<void> {
+  if (!context.chat || context.chat.type !== 'private') {
+    return;
+  }
+
+  try {
+    await context.api.setMyCommands(commandMenu(language), {
+      scope: { type: 'chat', chat_id: context.chat.id },
+    });
+  } catch (error: unknown) {
+    log({
+      event: 'telegram_chat_command_menu_configuration_failed',
+      correlationId: `telegram-update-${context.update.update_id.toString()}`,
+      telegramUpdateId: context.update.update_id.toString(),
+      errorName: error instanceof Error ? error.name : 'UnknownError',
+    });
+  }
 }
 
 function logTransportFailure(
@@ -2192,11 +2682,11 @@ function logTransportFailure(
 }
 
 export const BOT_MESSAGES = {
-  privateOnly: PRIVATE_ONLY_MESSAGE,
-  transientFailure: TRANSIENT_FAILURE_MESSAGE,
-  invalidToken: INVALID_TOKEN_MESSAGE,
-  expiredList: EXPIRED_LIST_MESSAGE,
-  unauthorizedOrders: UNAUTHORIZED_ORDERS_MESSAGE,
-  noActiveStore: NO_ACTIVE_STORE_MESSAGE,
-  malformedResponse: MALFORMED_RESPONSE_MESSAGE,
+  privateOnly: translate('fa', 'general.privateOnly'),
+  transientFailure: translate('fa', 'general.transientFailure'),
+  invalidToken: translate('fa', 'general.invalidToken'),
+  expiredList: translate('en', 'general.expiredList'),
+  unauthorizedOrders: translate('fa', 'general.unauthorizedOrders'),
+  noActiveStore: translate('fa', 'general.noActiveStore'),
+  malformedResponse: translate('fa', 'general.malformedResponse'),
 } as const;

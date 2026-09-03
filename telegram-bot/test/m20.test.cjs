@@ -39,12 +39,10 @@ test('M20 client sends only Telegram identity, query, and opaque references', as
   await client.selectSearchResult(identity, RESULT_REF);
   await client.report(identity);
 
-  assert.deepEqual(requests.map(({ url }) => url.split('/').at(-1)), [
-    'search',
-    'search',
-    'select',
-    'report',
-  ]);
+  assert.deepEqual(
+    requests.map(({ url }) => url.split('/').at(-1)),
+    ['search', 'search', 'select', 'report']
+  );
   assert.deepEqual(requests[0].body, {
     telegram: { userId: '1001', chatId: '2001' },
     query: 'safe',
@@ -75,8 +73,11 @@ test('/search renders mixed projection results and partial inventory state safel
   await bot.handleUpdate(commandUpdate(510, '/search sam'));
 
   const message = calls.find((call) => call.method === 'sendMessage');
-  assert.match(message.payload.text, /Order #1001.*Sam Example/);
-  assert.match(message.payload.text, /HEALTHY.*Sample Product.*SKU SKU-1/);
+  assert.match(message.payload.text, /Order #\u20681001\u2069.*Sam Example/);
+  assert.match(
+    message.payload.text,
+    /Healthy.*Sample Product.*SKU: \u2068SKU-1\u2069/
+  );
   assert.match(message.payload.text, /include Orders only.*partial/);
   assert.ok(callbacks(message).includes(RESULT_REF));
   assert.doesNotMatch(message.payload.text, /email|phone|address|payment/i);
@@ -127,7 +128,10 @@ test('/search 312 preserves the numeric SKU and opens its signed inventory resul
 
   await bot.handleUpdate(commandUpdate(530, '/search 312'));
   const searchMessage = calls.find((call) => call.method === 'sendMessage');
-  assert.match(searchMessage.payload.text, /Oakley OO9501 Velo Kato.*SKU 312/);
+  assert.match(
+    searchMessage.payload.text,
+    /Oakley OO9501 Velo Kato.*SKU: \u2068312\u2069/
+  );
   assert.ok(callbacks(searchMessage).includes(RESULT_REF));
 
   await bot.handleUpdate(callbackUpdate(531, RESULT_REF));
@@ -136,7 +140,7 @@ test('/search 312 preserves the numeric SKU and opens its signed inventory resul
       call.method === 'editMessageText' &&
       /Oakley OO9501 Velo Kato/.test(call.payload.text)
   );
-  assert.match(detailMessage.payload.text, /SKU: 312/);
+  assert.match(detailMessage.payload.text, /SKU: \u2068312\u2069/);
   assert.deepEqual(backendCalls, [
     { operation: 'search', input: { query: '312' } },
     { operation: 'select', ref: RESULT_REF },
@@ -160,8 +164,14 @@ test('/report renders separated currencies and unavailable inventory without sch
 
   assert.equal(reportCalls, 1);
   const message = calls.find((call) => call.method === 'sendMessage');
-  assert.match(message.payload.text, /Gross sales \(EUR\): 5.00/);
-  assert.match(message.payload.text, /Gross sales \(USD\): 30.30/);
+  assert.match(
+    message.payload.text,
+    /Gross sales \(\u2068EUR\u2069\): EUR\s?5.00/
+  );
+  assert.match(
+    message.payload.text,
+    /Gross sales \(\u2068USD\u2069\): USD\s?30.30/
+  );
   assert.match(message.payload.text, /Inventory counts unavailable/);
   assert.match(message.payload.text, /not accounting or net revenue/);
 });
@@ -204,8 +214,18 @@ function reportResult() {
     ordersToday: 3,
     statuses: [{ status: 'completed', count: 3 }],
     sales: [
-      { currency: 'EUR', gross: '5.00', averageOrderValue: '5.00', orderCount: 1 },
-      { currency: 'USD', gross: '30.30', averageOrderValue: '15.15', orderCount: 2 },
+      {
+        currency: 'EUR',
+        gross: '5.00',
+        averageOrderValue: '5.00',
+        orderCount: 1,
+      },
+      {
+        currency: 'USD',
+        gross: '30.30',
+        averageOrderValue: '15.15',
+        orderCount: 2,
+      },
     ],
     omittedRevenueOrders: 0,
     inventory: { state: 'UNAVAILABLE', syncState: 'BOOTSTRAPPING' },
