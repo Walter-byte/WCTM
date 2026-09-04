@@ -27,7 +27,7 @@ COPY backend/package.json /app/backend/package.json
 COPY telegram-bot/package.json /app/telegram-bot/package.json
 
 RUN apk add --no-cache --virtual .native-build-deps python3 make g++ \
-  && npm ci --workspace=@wc-telegram/backend \
+  && npm ci --omit=dev --omit=optional --workspace=@wc-telegram/backend \
   && apk del .native-build-deps \
   && npm cache clean --force
 

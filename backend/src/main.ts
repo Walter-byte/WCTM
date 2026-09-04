@@ -14,6 +14,9 @@ interface ExpressApplication {
   set(setting: string, value: unknown): void;
 }
 
+const JSON_BODY_LIMIT = '64kb';
+const WEBHOOK_BODY_LIMIT = '1mb';
+
 async function bootstrap(): Promise<void> {
   const application = await NestFactory.create(AppModule, {
     bodyParser: false,
@@ -32,10 +35,12 @@ async function bootstrap(): Promise<void> {
   httpApplication.set('trust proxy', 1);
   application.use(
     '/api/webhooks/woocommerce/:endpointKey',
-    raw({ type: 'application/json', inflate: false })
+    raw({ type: 'application/json', inflate: false, limit: WEBHOOK_BODY_LIMIT })
   );
-  application.use(json());
-  application.use(urlencoded({ extended: true }));
+  application.use(json({ limit: JSON_BODY_LIMIT }));
+  application.use(
+    urlencoded({ extended: true, limit: JSON_BODY_LIMIT, parameterLimit: 100 })
+  );
   configureApplicationRouting(application);
   application.enableShutdownHooks();
 

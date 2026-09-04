@@ -15,6 +15,24 @@ function configuration(
   } as ApplicationConfigService;
 }
 
+function configurationWithSentinels(): ApplicationConfigService {
+  return {
+    app: { logLevel: 'log' },
+    postgres: {
+      url: 'postgresql://runtime:database-sentinel@postgres:5432/app',
+    },
+    redis: { url: 'redis://:redis-sentinel@redis:6379' },
+    jwt: { secret: 'jwt-secret-sentinel-12345678901234567890' },
+    encryption: {
+      key: 'ZW5jcnlwdGlvbi1rZXktc2VudGluZWwtMzItYnl0ZXM=',
+    },
+    telegram: {
+      internalApiKey: 'bot-internal-sentinel-123456789012345',
+      callbackSigningKey: 'callback-sentinel-12345678901234567890',
+    },
+  } as ApplicationConfigService;
+}
+
 describe('StructuredLoggerService', () => {
   afterEach(() => {
     jest.restoreAllMocks();
@@ -107,16 +125,57 @@ describe('StructuredLoggerService', () => {
     expect(write).toHaveBeenCalledTimes(1);
     expect(String(write.mock.calls[0]?.[0])).toContain('"level":"warn"');
   });
+
+  it('redacts configured sentinel secrets even inside unlabelled text', () => {
+    const configuration = configurationWithSentinels();
+    const logger = new StructuredLoggerService(
+      configuration,
+      new RequestContextService()
+    );
+    const write = jest
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+    const sentinels = [
+      configuration.postgres.url,
+      configuration.redis.url,
+      configuration.jwt.secret,
+      configuration.encryption.key,
+      configuration.telegram.internalApiKey,
+      configuration.telegram.callbackSigningKey,
+    ];
+
+    logger.log(`unlabelled ${sentinels.join(' ')}`, {
+      rawBody: 'raw-webhook-sentinel',
+      searchQuery: 'customer-search-sentinel',
+      noteBody: 'note-body-sentinel',
+      webhookSignature: 'webhook-signature-sentinel',
+    });
+
+    const output = String(write.mock.calls[0]?.[0]);
+    for (const sentinel of [
+      ...sentinels,
+      'raw-webhook-sentinel',
+      'customer-search-sentinel',
+      'note-body-sentinel',
+      'webhook-signature-sentinel',
+    ]) {
+      expect(output).not.toContain(sentinel);
+    }
+    expect(output).toContain('****');
+  });
 });
 
 describe('RequestLoggingInterceptor', () => {
-  it('emits structured request fields', () => {
+  it('emits structured request fields without query or fragment data', () => {
     const logger = { log: jest.fn() } as unknown as StructuredLoggerService;
     const interceptor = new RequestLoggingInterceptor(logger);
     const context = {
       getType: () => 'http',
       switchToHttp: () => ({
-        getRequest: () => ({ method: 'GET', originalUrl: '/api/health' }),
+        getRequest: () => ({
+          method: 'GET',
+          originalUrl: '/api/health?token=query-secret#fragment-secret',
+        }),
       }),
     } as unknown as ExecutionContext;
     const result = of({ status: 'ok' });

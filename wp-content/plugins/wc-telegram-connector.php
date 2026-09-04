@@ -195,7 +195,7 @@ function wc_telegram_connector_handle_connect(): void
     check_admin_referer('wc_telegram_connector_connect');
     $token = isset($_POST['registration_token']) ? trim((string) wp_unslash($_POST['registration_token'])) : '';
 
-    if (strlen($token) < 32 || strlen($token) > 256) {
+    if (preg_match('/\Areg_[A-Za-z0-9_-]{43}\z/D', $token) !== 1) {
         wc_telegram_connector_safe_redirect('registration_error');
     }
 

@@ -175,6 +175,35 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
       /connect-src 'self'/
     );
     assert.match(
+      onboardingResponse.headers.get('content-security-policy'),
+      /default-src 'none'/
+    );
+    assert.match(
+      onboardingResponse.headers.get('content-security-policy'),
+      /base-uri 'none'/
+    );
+    assert.match(
+      onboardingResponse.headers.get('content-security-policy'),
+      /frame-ancestors 'none'/
+    );
+    assert.match(
+      onboardingResponse.headers.get('content-security-policy'),
+      /object-src 'none'/
+    );
+    assert.match(
+      onboardingResponse.headers.get('content-security-policy'),
+      /form-action 'self'/
+    );
+    assert.doesNotMatch(
+      onboardingResponse.headers.get('content-security-policy'),
+      /unsafe-eval/
+    );
+    assert.equal(onboardingResponse.headers.get('x-frame-options'), 'DENY');
+    assert.match(
+      onboardingResponse.headers.get('permissions-policy'),
+      /camera=\(\)/
+    );
+    assert.match(
       await onboardingResponse.text(),
       /Connect WooCommerce to Telegram/
     );
@@ -197,6 +226,14 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
     assert.equal(
       onboardingScriptResponse.headers.get('x-content-type-options'),
       'nosniff'
+    );
+    assert.equal(
+      onboardingScriptResponse.headers.get('x-frame-options'),
+      'DENY'
+    );
+    assert.match(
+      onboardingScriptResponse.headers.get('permissions-policy'),
+      /microphone=\(\)/
     );
     assert.doesNotMatch(
       await onboardingScriptResponse.text(),
@@ -222,6 +259,14 @@ test('global JWT guard protects routes and Public bypasses authentication', asyn
     assert.equal(
       onboardingStylesResponse.headers.get('x-content-type-options'),
       'nosniff'
+    );
+    assert.equal(
+      onboardingStylesResponse.headers.get('x-frame-options'),
+      'DENY'
+    );
+    assert.match(
+      onboardingStylesResponse.headers.get('permissions-policy'),
+      /geolocation=\(\)/
     );
     assert.match(await onboardingStylesResponse.text(), /\[hidden\]/);
 

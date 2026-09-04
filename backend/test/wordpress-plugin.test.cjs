@@ -15,6 +15,22 @@ test('connector accepts only the M7 token and derives identity from its response
   assert.match(plugin, /\$result\['storeId'\]/);
   assert.doesNotMatch(plugin, /name="(?:username|email|tenant_id|store_id)"/i);
   assert.doesNotMatch(plugin, /WCTM.*password[^\n]*<input/i);
+  assert.match(plugin, /preg_match\('\/\\Areg_\[A-Za-z0-9_-\]\{43\}\\z\/D'/);
+});
+
+test('connector admin mutations require WooCommerce capability and WordPress nonces', () => {
+  for (const action of ['connect', 'retry_webhooks']) {
+    assert.match(
+      plugin,
+      new RegExp(
+        `function wc_telegram_connector_handle_${action}\\(\\): void[\\s\\S]*?current_user_can\\('manage_woocommerce'\\)[\\s\\S]*?check_admin_referer\\('wc_telegram_connector_${action}'\\)`
+      )
+    );
+    assert.match(
+      plugin,
+      new RegExp(`wp_nonce_field\\('wc_telegram_connector_${action}'\\)`)
+    );
+  }
 });
 
 test('connector stores sensitive material with autoload disabled and never renders it', () => {

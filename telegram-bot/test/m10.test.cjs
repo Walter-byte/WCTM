@@ -37,6 +37,26 @@ test('bot configuration validates all internal transport values without exposing
   );
 });
 
+test('bot production configuration rejects committed placeholders without exposing values', () => {
+  const placeholder = 'development-only-bot-internal-api-key';
+
+  assert.throws(
+    () =>
+      loadBotConfiguration({
+        NODE_ENV: 'production',
+        TELEGRAM_BOT_TOKEN: '0000000000:development-placeholder-token',
+        BOT_INTERNAL_API_KEY: placeholder,
+        BACKEND_INTERNAL_URL: 'http://backend:3000/api',
+      }),
+    (error) => {
+      assert.match(error.message, /TELEGRAM_BOT_TOKEN/);
+      assert.match(error.message, /BOT_INTERNAL_API_KEY/);
+      assert.doesNotMatch(error.message, new RegExp(placeholder));
+      return true;
+    }
+  );
+});
+
 test('internal client propagates bot key, correlation ID, and Telegram update ID', async () => {
   let observed;
   const request = async (url, init) => {

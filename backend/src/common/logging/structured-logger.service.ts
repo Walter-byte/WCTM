@@ -65,6 +65,7 @@ export class StructuredLoggerService implements LoggerService {
         : params.length === 1
           ? params[0]
           : params;
+    const sensitiveValues = this.configuredSensitiveValues();
     const record = {
       timestamp: new Date().toISOString(),
       level,
@@ -74,10 +75,10 @@ export class StructuredLoggerService implements LoggerService {
       userId: this.requestContext.tenant?.userId ?? null,
       membershipRole: this.requestContext.tenant?.membershipRole ?? null,
       ...(context ? { context } : {}),
-      message: redactSensitiveData(message),
+      message: redactSensitiveData(message, sensitiveValues),
       ...(metadata === undefined
         ? {}
-        : { metadata: redactSensitiveData(metadata) }),
+        : { metadata: redactSensitiveData(metadata, sensitiveValues) }),
     };
     const output = `${JSON.stringify(record)}\n`;
 
@@ -93,5 +94,16 @@ export class StructuredLoggerService implements LoggerService {
       LOG_LEVEL_PRIORITY[level] <=
       LOG_LEVEL_PRIORITY[this.configuration.app.logLevel]
     );
+  }
+
+  private configuredSensitiveValues(): string[] {
+    return [
+      this.configuration.postgres?.url,
+      this.configuration.redis?.url,
+      this.configuration.jwt?.secret,
+      this.configuration.encryption?.key,
+      this.configuration.telegram?.internalApiKey,
+      this.configuration.telegram?.callbackSigningKey,
+    ].filter((value): value is string => typeof value === 'string');
   }
 }

@@ -2,9 +2,9 @@
 
 **Generated:** 2026-07-19
 
-**Updated:** 2026-09-04
+**Updated:** 2026-09-05
 
-**Reason:** Transitioning implementation agent from GapCode to Codex GPT
+**Reason:** Maintaining implementation continuity
 
 **Project:** WC-Telegram-SaaS
 
@@ -43,7 +43,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-028)
+## 3. Architectural Decisions (D-001–D-029)
 
 | ID    | Decision                                                                                                                                                                                                                   | Status   |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -75,8 +75,9 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-026 | Store-scoped projection-only exact/prefix Order/inventory search and on-demand Tenant-local projected operational daily report, with no live Woo reads, analytics platform, or scheduler                                   | Accepted |
 | D-027 | Tenant-authoritative typed Persian/English Telegram presentation, RTL/bidi and Tenant-timezone calendar formatting, and semantic M13/M19 notification rendering without delivery-policy changes                            | Accepted |
 | D-028 | One backend-authoritative Tenant ACTIVE/SUSPENDED lifecycle with derived expiry, operator-only mutation, explicit product gates, continued projections, terminal notification suppression, and no commercial billing scope | Accepted |
+| D-029 | Phase 7 production readiness precedes deferred Phase 6; P7.1 establishes the bounded repository security baseline while host changes, credential rotation, deployment, and P7.2+ remain separately controlled              | Accepted |
 
-Next decision number: **D-029**, if a future task produces a genuine
+Next decision number: **D-030**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -1027,6 +1028,96 @@ Final closure evidence:
 
 ---
 
+### Phase 7 — Production Readiness (current)
+
+#### P7.1 — Production Security Baseline (implemented; awaiting B review and A production validation)
+
+- Production configuration now rejects every committed development/test secret
+  placeholder, short backend-bot service credentials, production pilot mode,
+  debug/verbose production logging, and reuse across unrelated secret
+  boundaries. Errors contain names/rules only.
+- `TELEGRAM_BOT_TOKEN` is injected only into the bot container and validated at
+  bot startup; the backend neither receives nor validates that unrelated secret.
+- `npm run security:config-audit --workspace backend` validates the running
+  environment through the typed boundary and emits only setting names,
+  categories, and PASS/FAIL. `APP_ENCRYPTION_KEY` is shape-checked only and is
+  never rotated or printed.
+- The unused global `WOOCOMMERCE_WEBHOOK_SECRET` setting was removed. M8's
+  per-Store random HMAC secret, encrypted persistence, routing-only endpoint
+  key, exact raw-body authentication, and one-time exposure remain unchanged.
+- Central logs redact configured secret sentinels in arbitrary strings and
+  sensitive body/payload/query/note/customer/update/signature fields. HTTP
+  request logs discard query and fragment content. Existing exceptions return
+  only normalized safe errors.
+- `/onboarding` keeps same-origin external JavaScript and in-memory bearer
+  tokens. Its page/assets now have the approved CSP, no-store, no-referrer,
+  nosniff, DENY frame, and restrictive Permissions Policy headers. There is no
+  wildcard CORS, cookie auth, unsafe-eval, URL credential, or browser storage.
+- Normal JSON and form input is explicitly limited to 64 KiB with 100 form
+  parameters. Exact raw M8 webhook input is limited to 1 MiB with inflation
+  disabled; authentication bytes and behavior are unchanged.
+- Backend and bot runtime images already run as `node`; backend production
+  installation now omits development and optional dependencies, excluding the
+  unused Prisma CLI/tooling peer tree. Native compiler packages remain
+  build-only/temporary. Compose publishes only backend on host loopback;
+  PostgreSQL, Redis, and bot have no host port.
+- Caddy examples set HSTS `max-age=31536000` without subdomains/preload. The
+  runbook preserves automatic HTTP-to-HTTPS, host Caddy to loopback backend,
+  and both browser and restricted-network direct connector origins.
+- Connector input now accepts only the exact M7 `reg_` token shape. Static
+  evidence covers `manage_woocommerce`, WordPress nonce checks, output escaping,
+  autoload-disabled secret storage, no secret rendering/logging/navigation,
+  Retry/reconciliation, and unchanged M8 secret handling.
+- Current registration/login/plugin rate limits remain endpoint-scoped Redis
+  fixed windows and cannot be bypassed through onboarding, which calls the same
+  endpoints. No global, webhook, search, or report throttle was added.
+- The runbook includes safe port/firewall/sshd/Docker/Caddy/header/health,
+  database-role, recent-log, config, and GitHub name-only checks plus a bounded
+  DML-only PostgreSQL runtime-role procedure derived from every M1-M22 table.
+
+Launch blockers and pending operational evidence:
+
+- Node.js 20 reached upstream EOL on 2026-04-30. P7.1 does not perform an
+  unapproved major runtime upgrade; a supported-major migration with full
+  native-addon/application/container validation requires separate A approval.
+  Current base tags are also floating; the approved supported images must be
+  version/digest pinned before a reproducible release.
+- Existing canonical documents and their history contain implementation-agent
+  names. The current HANDOFF wording is neutralized where P7.1 owns the edit,
+  but `MASTER-ROADMAP.md` is A-owned and Git history rewriting is expressly
+  unauthorized. P7.8 must repeat the audit against the exact release candidate.
+- A must prove the production application DB identity has no superuser,
+  CREATEDB, CREATEROLE, or replication privilege. Any positive flag blocks
+  launch until the documented least-privilege correction is applied.
+- Docker image builds/runtime identity and the optional locally present image
+  scanner require a running Docker daemon; final environment evidence is
+  recorded in the P7.1 report.
+
+Dependency and automated evidence:
+
+- The bounded `npm audit --omit=dev --audit-level=high` initially reported five
+  high and five moderate findings. Compatible lockfile/package updates removed
+  the runtime Express/query-parser finding and obsolete Prisma-local Hono/
+  fast-URI findings; Prisma packages are aligned and exact-pinned at 7.10.0.
+- Exact root overrides advance Prisma's tooling-only `deepmerge-ts` to 8.0.0
+  for `GHSA-ggr8-5vv4-36mx` and `mysql2` to 3.23.1 for
+  `GHSA-3f6p-5ww8-9rcr` / `GHSA-rgwj-5xj2-c3m3`. Prisma format, validation,
+  generation, clean install, builds, and the complete suite prove compatibility.
+  The final required production-dependency audit reports zero vulnerabilities.
+- Clean `npm ci`, Prisma format/validate/generate, build, 465 backend Jest tests,
+  28 backend Node/contract tests, 68 bot tests, typecheck, lint, formatting, and
+  `git diff --check` pass. The only test skip is the existing native-PHP
+  connector reconciliation test because PHP is unavailable.
+- Docker backend/bot builds, runtime identity execution, and Docker Scout could
+  not run because no Docker daemon is running. Static gates prove both runtime
+  stages declare `USER node`, backend runtime omits development/optional
+  packages, only the backend is loopback-published, and private service ports
+  are absent.
+
+No VPS, firewall, sshd, host Caddy, credential, PostgreSQL role, Redis password,
+GitHub secret, deployment, restart, schema, migration, product, P7.2+, or Phase
+6 change was performed.
+
 ## 5. Current Repository Structure
 
 Core documents are under `docs/`. The current scaffold uses `backend/` for the
@@ -1034,22 +1125,26 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `main`.
+Current branch: `chore/p7.1-production-security-baseline`.
 
 ---
 
 ## 6. Current Blockers
 
-No open Phase-5 feature blocker remains. DATE-001 and existing technical debt
-remain later Phase 7 production-readiness work.
+No open Phase-5 feature blocker remains. P7.1 public-launch blockers are the
+EOL Node 20 production runtime, pre-existing release-provenance wording/history,
+and any production runtime database privilege failure found by A. DATE-001 and
+AuditLog immutability remain explicitly assigned to P7.5 and P7.7.
 
 ---
 
 ## 7. Current Task
 
-M22 — Basic MVP Entitlements & Phase 5 Closure is fully complete under accepted
-D-028. Implementation commit `35f9e72335c8ed0c6a039497d92bed763dc68fb5`
-was merged through `c231437`.
+P7.1 — Production Security Baseline is implemented under accepted D-029 and
+awaits B review plus A-owned production validation. It is not operationally
+closed. Do not start P7.2 or Phase 6.
+
+### Last completed product milestone: M22
 
 The implementation adds migration
 `20260904120000_m22_basic_mvp_entitlements`, containing only the
@@ -1122,8 +1217,8 @@ readiness investigation and is not an M22 failure.
 M22 final decision: PASS. Phase 5 final decision: COMPLETE. All approved MVP
 Telegram product features are implemented and bounded pilot validation passed.
 Phase 6 commercial SaaS work has not started; Phase 7 remains later and
-unrestricted public launch is not approved. Do not begin Phase 6 without
-approval.
+unrestricted public launch is not approved. D-029 subsequently made Phase 7
+current; do not begin Phase 6 without approval.
 
 ---
 
@@ -1133,7 +1228,7 @@ Roles:
 
 - **A** — Project owner, architect, final decision maker (Walter)
 - **B** — Orchestrator (context, prompts, review, state updates) — currently this document
-- **C** — Implementation agent (you, Codex GPT)
+- **C** — Implementation agent
 
 Process (strictly sequential):
 

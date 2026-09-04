@@ -715,17 +715,58 @@ M22 final decision: PASS. Phase 5 final decision: COMPLETE. M17–M22 and all
 approved MVP Telegram product features are complete, Persian/English manager UX
 and backend-authoritative entitlement enforcement are operational, and no open
 Phase-5 feature blocker remains. Phase 6 commercial SaaS work has not started;
-Phase 7 production-readiness work remains later, and unrestricted public launch
-is not approved.
+Phase 7 production-readiness is now current by D-029, and unrestricted public
+launch is not approved.
 
-## Phase 6 — SaaS Platform ⬜ Planned
+## Phase 7 — Production Readiness 🔵 Current
 
-- Subscriptions, plans, billing, dashboard, tenant administration, and usage limits
+### P7.1 — Production Security Baseline 🟡 Implemented; awaiting review and production validation
 
-## Phase 7 — Production Readiness ⬜ Planned
+- Complete runtime configuration and secret-boundary inventory, with production
+  rejection of committed placeholders, unsafe pilot/log settings, and unrelated
+  secret reuse.
+- Secret-safe `security:config-audit` command using the typed configuration
+  boundary and reporting names/categories plus PASS/FAIL only.
+- Central configured-secret and privacy-field logging redaction, query-free
+  request logging, and sentinel regressions.
+- Same-origin onboarding CSP/security headers, explicit 64 KiB application-body
+  and 1 MiB exact raw-webhook limits, and no wildcard CORS/cookie/browser
+  persistence change.
+- Loopback backend publication; private PostgreSQL, Redis, and bot; exact
+  host-Caddy/HSTS, firewall, sshd, Docker, readiness, DB-role, log, and CI
+  validation runbook.
+- Backend/bot non-root runtime stages, development/optional-package-free backend
+  runtime, current dependency audit, and bounded repository/history/provenance
+  audits.
+- Exact connector token validation plus preserved capability, nonce, escaping,
+  hidden/autoload-disabled material, direct-origin, and M7/M8 reconciliation.
+- DML-only runtime PostgreSQL procedure derived from the current M1-M22 schema;
+  P7.2 retains ownership of the final migration role/path.
 
-- Security, performance, monitoring, backups, documentation, testing, and
-  deployment
+P7.1 remains operationally open until B review and A-owned production checks.
+Node.js 20 passed upstream EOL on 2026-04-30 and is an explicit public-launch
+blocker pending a separately approved supported-major migration and reproducible
+base-image version/digest pinning. The initial
+release-provenance audit found pre-existing implementation-agent naming in
+tracked canonical documents/history; no history rewrite is authorized. P7.2
+through P7.8 are unstarted.
+
+### Approved Phase 7 order
+
+1. P7.1 — Production Security Baseline
+2. P7.2 — Production Migration & Deployment Path
+3. P7.3 — Backup, Restore & Disaster Recovery
+4. P7.4 — Monitoring & Alerting
+5. P7.5 — Data & Time Correctness
+6. P7.6 — Network & Runtime Reliability
+7. P7.7 — Audit & Operational Integrity
+8. P7.8 — Final Launch Readiness Gate
+
+## Phase 6 — SaaS Platform ⬜ Deferred / unstarted
+
+- Subscriptions, plans, billing, dashboard, tenant administration, and usage
+  limits remain deferred until Phase 7 completes and A separately authorizes
+  Phase 6.
 
 ## Phase 8 — Public Launch ⬜ Planned
 

@@ -15,6 +15,9 @@ const { CONFIG_ENV_KEYS } = require('../dist/config/configuration.types');
 const {
   validateEnvironment,
 } = require('../dist/config/environment.validation');
+const {
+  runSecurityConfigAudit,
+} = require('../dist/security/security-config-audit');
 
 const validEnvironment = (overrides = {}) => ({
   NODE_ENV: 'development',
@@ -25,13 +28,10 @@ const validEnvironment = (overrides = {}) => ({
   JWT_SECRET: 'valid-jwt-secret-value-at-least-32-characters',
   JWT_ACCESS_TTL: '15m',
   APP_ENCRYPTION_KEY: 'AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=',
-  TELEGRAM_BOT_TOKEN: '1234567890:valid-test-token-value-12345',
-  BOT_INTERNAL_API_KEY: 'valid-bot-internal-api-key',
+  BOT_INTERNAL_API_KEY: 'valid-bot-internal-api-key-value-32',
   BOT_INTERNAL_URL: 'http://telegram-bot:3001',
   BACKEND_INTERNAL_URL: 'http://backend:3000/api',
   TELEGRAM_CALLBACK_SIGNING_KEY: 'valid-telegram-callback-signing-key-value',
-  WOOCOMMERCE_WEBHOOK_SECRET:
-    'valid-webhook-secret-value-at-least-32-characters',
   ...overrides,
 });
 
@@ -230,12 +230,10 @@ test('missing required variables produce one aggregated safe error', () => {
       assert.match(error.message, /JWT_SECRET is required/);
       assert.match(error.message, /JWT_ACCESS_TTL is required/);
       assert.match(error.message, /APP_ENCRYPTION_KEY is required/);
-      assert.match(error.message, /TELEGRAM_BOT_TOKEN is required/);
       assert.match(error.message, /BOT_INTERNAL_API_KEY is required/);
       assert.match(error.message, /BOT_INTERNAL_URL is required/);
       assert.match(error.message, /BACKEND_INTERNAL_URL is required/);
       assert.match(error.message, /TELEGRAM_CALLBACK_SIGNING_KEY is required/);
-      assert.match(error.message, /WOOCOMMERCE_WEBHOOK_SECRET is required/);
       return true;
     }
   );
@@ -260,12 +258,10 @@ test('invalid production bootstrap exits non-zero with aggregated errors', () =>
   assert.match(output, /JWT_SECRET is required/);
   assert.match(output, /JWT_ACCESS_TTL is required/);
   assert.match(output, /APP_ENCRYPTION_KEY is required/);
-  assert.match(output, /TELEGRAM_BOT_TOKEN is required/);
   assert.match(output, /BOT_INTERNAL_API_KEY is required/);
   assert.match(output, /BOT_INTERNAL_URL is required/);
   assert.match(output, /BACKEND_INTERNAL_URL is required/);
   assert.match(output, /TELEGRAM_CALLBACK_SIGNING_KEY is required/);
-  assert.match(output, /WOOCOMMERCE_WEBHOOK_SECRET is required/);
 });
 
 test('invalid port and encryption key report clear rules together', () => {
@@ -304,22 +300,19 @@ test('production rejects documented development placeholder values', () => {
         JWT_SECRET: developmentOnlyJwtSecret,
         JWT_ACCESS_TTL: '15m',
         APP_ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-        TELEGRAM_BOT_TOKEN: '0000000000:development-placeholder-token',
         BOT_INTERNAL_API_KEY: 'development-only-bot-internal-api-key',
         BOT_INTERNAL_URL: 'http://telegram-bot:3001',
         BACKEND_INTERNAL_URL: 'http://backend:3000/api',
         TELEGRAM_CALLBACK_SIGNING_KEY:
           'development-only-telegram-callback-signing-key',
-        WOOCOMMERCE_WEBHOOK_SECRET: 'development-only-webhook-secret-change-me',
+        PILOT_MODE: 'false',
       }),
     (error) => {
       assert.match(error.message, /DATABASE_URL/);
       assert.match(error.message, /JWT_SECRET/);
       assert.match(error.message, /APP_ENCRYPTION_KEY/);
-      assert.match(error.message, /TELEGRAM_BOT_TOKEN/);
       assert.match(error.message, /BOT_INTERNAL_API_KEY/);
       assert.match(error.message, /TELEGRAM_CALLBACK_SIGNING_KEY/);
-      assert.match(error.message, /WOOCOMMERCE_WEBHOOK_SECRET/);
       assert.doesNotMatch(error.message, new RegExp(developmentOnlyJwtSecret));
       return true;
     }
@@ -342,10 +335,8 @@ test('configuration serialization and inspection redact every secret', () => {
     environment.REDIS_URL,
     environment.JWT_SECRET,
     environment.APP_ENCRYPTION_KEY,
-    environment.TELEGRAM_BOT_TOKEN,
     environment.BOT_INTERNAL_API_KEY,
     environment.TELEGRAM_CALLBACK_SIGNING_KEY,
-    environment.WOOCOMMERCE_WEBHOOK_SECRET,
   ]) {
     assert.doesNotMatch(
       output,
@@ -356,7 +347,105 @@ test('configuration serialization and inspection redact every secret', () => {
   assert.match(output, /\*\*\*\*/);
 });
 
-test('.env.example keys exactly match the validation contract', () => {
+test('production rejects every committed test placeholder without echoing it', () => {
+  const testOnlyJwtSecret = 'test-only-jwt-secret-not-for-production';
+
+  assert.throws(
+    () =>
+      validateEnvironment(
+        validEnvironment({
+          NODE_ENV: 'production',
+          PILOT_MODE: 'false',
+          DATABASE_URL:
+            'postgresql://test:test@localhost:5432/wc_telegram_test',
+          REDIS_URL: 'redis://localhost:6379',
+          JWT_SECRET: testOnlyJwtSecret,
+          APP_ENCRYPTION_KEY: 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
+          BOT_INTERNAL_API_KEY: 'test-only-bot-internal-api-key',
+          TELEGRAM_CALLBACK_SIGNING_KEY:
+            'test-only-telegram-callback-signing-key',
+        })
+      ),
+    (error) => {
+      for (const name of [
+        'DATABASE_URL',
+        'REDIS_URL',
+        'JWT_SECRET',
+        'APP_ENCRYPTION_KEY',
+        'BOT_INTERNAL_API_KEY',
+        'TELEGRAM_CALLBACK_SIGNING_KEY',
+      ]) {
+        assert.match(error.message, new RegExp(name));
+      }
+      assert.doesNotMatch(error.message, new RegExp(testOnlyJwtSecret));
+      return true;
+    }
+  );
+});
+
+test('production rejects secret reuse across unrelated trust boundaries safely', () => {
+  const reusedSecret = 'recognizable-reused-secret-sentinel-123456';
+
+  assert.throws(
+    () =>
+      validateEnvironment(
+        validEnvironment({
+          NODE_ENV: 'production',
+          PILOT_MODE: 'false',
+          JWT_SECRET: reusedSecret,
+          TELEGRAM_CALLBACK_SIGNING_KEY: reusedSecret,
+        })
+      ),
+    (error) => {
+      assert.match(error.message, /JWT_SECRET/);
+      assert.match(error.message, /TELEGRAM_CALLBACK_SIGNING_KEY/);
+      assert.doesNotMatch(error.message, new RegExp(reusedSecret));
+      return true;
+    }
+  );
+});
+
+test('trusted-shell config audit reports names, categories, and PASS or FAIL only', () => {
+  const environment = validEnvironment({
+    NODE_ENV: 'production',
+    PILOT_MODE: 'false',
+  });
+  const passed = runSecurityConfigAudit(environment);
+  const passedOutput = passed.lines.join('\n');
+
+  assert.equal(passed.passed, true);
+  assert.match(passedOutput, /PASS APP_ENCRYPTION_KEY \[secret\]/);
+  assert.match(
+    passedOutput,
+    /PASS SECRET_BOUNDARY_SEPARATION \[security-sensitive non-secret\]/
+  );
+  for (const name of [
+    'DATABASE_URL',
+    'REDIS_URL',
+    'JWT_SECRET',
+    'APP_ENCRYPTION_KEY',
+    'BOT_INTERNAL_API_KEY',
+    'TELEGRAM_CALLBACK_SIGNING_KEY',
+  ]) {
+    const value = environment[name];
+    assert.doesNotMatch(
+      passedOutput,
+      new RegExp(String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    );
+  }
+
+  const failed = runSecurityConfigAudit({
+    ...environment,
+    JWT_SECRET: 'development-only-jwt-secret-change-me',
+  });
+  const failedOutput = failed.lines.join('\n');
+
+  assert.equal(failed.passed, false);
+  assert.match(failedOutput, /FAIL JWT_SECRET \[secret\]/);
+  assert.doesNotMatch(failedOutput, /development-only-jwt-secret-change-me/);
+});
+
+test('.env.example separates the bot-only token from the backend validation contract', () => {
   const template = readFileSync(
     resolve(__dirname, '../../.env.example'),
     'utf8'
@@ -367,5 +456,9 @@ test('.env.example keys exactly match the validation contract', () => {
     .map((line) => line.slice(0, line.indexOf('=')))
     .sort();
 
-  assert.deepEqual(templateKeys, [...CONFIG_ENV_KEYS].sort());
+  assert.equal(templateKeys.includes('TELEGRAM_BOT_TOKEN'), true);
+  assert.deepEqual(
+    templateKeys.filter((key) => key !== 'TELEGRAM_BOT_TOKEN'),
+    [...CONFIG_ENV_KEYS].sort()
+  );
 });

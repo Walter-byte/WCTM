@@ -52,7 +52,6 @@ export class ApplicationConfigService {
       key: this.configService.get('APP_ENCRYPTION_KEY', { infer: true }),
     });
     this.telegram = guardSecretSerialization({
-      botToken: this.configService.get('TELEGRAM_BOT_TOKEN', { infer: true }),
       internalApiKey: this.configService.get('BOT_INTERNAL_API_KEY', {
         infer: true,
       }),
@@ -93,9 +92,6 @@ export class ApplicationConfigService {
       ),
     });
     this.woocommerce = guardSecretSerialization({
-      webhookSecret: this.configService.get('WOOCOMMERCE_WEBHOOK_SECRET', {
-        infer: true,
-      }),
       rest: {
         maxAttempts: this.configService.get('WOOCOMMERCE_REST_MAX_ATTEMPTS', {
           infer: true,
