@@ -966,4 +966,100 @@ Accepted.
 
 ---
 
-Next decision number: D-028.
+## D-028
+
+Date
+
+2026-09-04
+
+Decision
+
+M22 adds one backend-authoritative Tenant service-access lifecycle. Existing
+`Tenant.plan` and the exact `TenantPlan` literals `FREE`, `PRO`, and `AGENCY`
+remain unchanged and informational. Every plan receives the same M1-M21 MVP
+capability bundle while access is active; M22 adds no plan matrix, feature key,
+quota, usage meter, or second plan model.
+
+The only persisted entitlement states are `ACTIVE` and `SUSPENDED`.
+`Tenant.entitlement_expires_at` is a nullable UTC instant. `SUSPENDED` always
+wins; otherwise an ACTIVE Tenant is effectively `EXPIRED` when current time is
+equal to or later than its expiry, and is effectively `ACTIVE` in every other
+case. `EXPIRED` is derived, not persisted. Existing and new Tenants default to
+ACTIVE with no expiry. A time-limited pilot is ACTIVE with a future expiry.
+There is no grace period or expiry scheduler.
+
+Current PostgreSQL Tenant state is the sole entitlement authority. Entitlement
+is never trusted from JWTs, Telegram updates or callbacks, onboarding input,
+WooCommerce payloads, browser requests, or the connector, and is not cached in
+Redis or embedded in access tokens. One backend entitlement service resolves
+the current Tenant and asserts the single ACTIVE bundle at explicit product
+boundaries. Existing signature, purpose, TTL, context, role, and Tenant/Store
+bindings remain authoritative; protected references revalidate current
+entitlement at use time and contain no entitlement claim.
+
+`entitlement:manage` is the only M22 mutation surface. It is an operator-only
+Nest application-context command requiring one explicit non-deleted Tenant. It
+can inspect, set ACTIVE/SUSPENDED, set an explicit ISO-8601 UTC expiry, or clear
+expiry, and rejects malformed or contradictory input. Tenant OWNER, ADMIN, and
+MEMBER roles cannot mutate entitlement. Safe changes use the existing nullable
+system-actor AuditLog representation and emit a structured event containing
+only a Tenant fingerprint, old/new persisted state, expiry-presence flags,
+effective state, and command correlation context.
+
+Inactive access preserves authentication, account/profile and security
+administration, Tenant and Store data, links, Store/connector configuration,
+connection-health reads, `/status`, `/help`, confirmed `/unlink`, read-only
+`/settings`, and entitlement summary. It blocks normal self-service Store
+creation, M7 token issuance/finalization, M10 token issuance/redemption, order
+operations and Woo writes, `/search`, `/report`, `/stock`, and M18 mutations.
+OWNER/ADMIN do not bypass entitlement and MEMBER gains no capability. Existing
+RBAC remains independently enforced.
+
+M8 webhook authentication, persistence, deduplication, and enqueueing remain
+entitlement-independent. M9 Order and M19 Inventory projection/reconciliation
+continue while inactive. Existing plugin credentials, hooks, links, and Store
+status are not removed or rotated. M13 ORDER_CREATED and M19 LOW/OUT delivery
+creation require current ACTIVE access; captured deliveries revalidate before
+preparation and dispatch and become deterministic terminal non-retry outcomes
+with safe `entitlement-inactive` reason if access changed. Reactivation restores
+future eligible operations immediately but never resurrects an event, incident,
+callback, or delivered, terminal, suppressed, or ambiguous delivery.
+
+M21's Tenant-language, Tenant-timezone, Persian-calendar, Gregorian-calendar,
+RTL/bidi, and single bot-owned `fa`/`en` catalog architecture owns entitlement
+status, summary, denial, and recovery presentation. The grammY bot remains
+stateless and database-free; the PHP connector remains free of entitlement
+business policy.
+
+Phase 5 may close only after B review returns MERGE, the migration is applied,
+backend and telegram-bot are deployed, bounded production lifecycle validation
+passes, and final closure documentation is merged. Phase-5 closure means the
+approved MVP product feature scope is complete and operationally validated. It
+does not complete or authorize Phase 6 commercial work or Phase 7 production-
+readiness hardening.
+
+Reason
+
+The MVP needs one enforceable service-access boundary before feature closure,
+but finalized packaging, billing, renewal, and quotas are later commercial
+decisions. A two-state Tenant lifecycle with derived expiry provides the minimum
+safe operator-controlled access model while retaining durable WooCommerce state
+and the existing synchronization, authorization, delivery, and localization
+architecture.
+
+Boundary
+
+M22 adds no billing, payment gateway, checkout, subscription/invoice record,
+renewal, grace period, tax, coupon, customer billing portal, pricing UI, plan
+upgrade/downgrade, usage quota/metering, feature-flag platform, dashboard,
+customer bot, notification category, scheduled report, stock mutation, Store
+switching, new queue/process/service, broad security refactor, Phase 6 work, or
+other M23+ capability.
+
+Status
+
+Accepted.
+
+---
+
+Next decision number: D-029.

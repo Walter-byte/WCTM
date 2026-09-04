@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { AuditService } from '../common/audit/audit.service';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { ApplicationConfigService } from '../config/application-config.service';
+import { EntitlementService } from '../entitlements/entitlement.service';
 import {
   type TenantScopedStore,
   TenantScopedPrismaService,
@@ -25,10 +26,12 @@ export class StoreService {
     private readonly encryption: EncryptionService,
     private readonly audit: AuditService,
     private readonly configuration: ApplicationConfigService,
-    private readonly tenantContext: TenantContextService
+    private readonly tenantContext: TenantContextService,
+    private readonly entitlements: EntitlementService
   ) {}
 
   async create(input: CreateStoreDto): Promise<TenantScopedStore> {
+    await this.entitlements.assertActive(this.tenantContext.active.tenantId);
     await this.createWooCommerceClient({
       storeUrl: input.storeUrl,
       consumerKey: input.consumerKey,

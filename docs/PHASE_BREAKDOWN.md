@@ -630,8 +630,54 @@ notification localization`. Backend and telegram-bot deployed successfully;
   notification coverage is accepted for closure; this is not an M21 defect or
   a failed LOW notification.
 
-M21 final decision: PASS. M22 — Basic MVP Entitlements & Phase 5 Closure is
-next and has not been started.
+M21 final decision: PASS.
+
+### M22 — Basic MVP Entitlements & Phase 5 Closure 🟨 Implemented / Awaiting Review
+
+- D-028 adds one Tenant service-access lifecycle only. Existing plans remain
+  exactly `FREE`, `PRO`, and `AGENCY`, informational and behaviorally identical
+  in M22; no plan matrix, feature keys, commercial quotas, or second plan model
+  exist.
+- Migration `20260904120000_m22_basic_mvp_entitlements` adds persisted
+  `ACTIVE`/`SUSPENDED`, ACTIVE default, and nullable UTC expiry. EXPIRED is
+  derived at the exact expiry instant; SUSPENDED overrides expiry. Existing and
+  new Tenants are ACTIVE with no expiry.
+- Current PostgreSQL state is authoritative through one Nest entitlement
+  service. JWTs, Telegram/callback input, onboarding requests, WooCommerce, the
+  connector, and Redis carry no trusted entitlement state.
+- The operator-only `entitlement:manage` application-context command inspects,
+  activates, suspends, sets an explicit UTC expiry, or clears expiry for one
+  explicit non-deleted Tenant. Safe AuditLog and structured fingerprinted event
+  output use no user, customer, Telegram, credential, or Store-secret data.
+- Normal Store creation, M7 issuance/finalization, M10 issuance/redemption,
+  operational Order reads/actions, `/search`, `/report`, `/stock`, and M18
+  mutations require current ACTIVE access. Signed references first retain their
+  existing signature, TTL, context, and role checks; protected Woo writes check
+  entitlement again immediately before dispatch.
+- `/status`, `/help`, confirmed `/unlink`, and read-only `/settings` remain
+  available. Status/settings expose sanitized plan/effective-state/expiry;
+  inactive settings emit no mutation references. M21's one typed `fa`/`en`
+  catalog owns denial and recovery presentation with Tenant-timezone Persian or
+  Gregorian expiry formatting.
+- M8 webhook authentication, durable ingestion/deduplication, M9 Order
+  projection, and M19 product projection continue while inactive. Credentials,
+  webhooks, Stores, links, settings, projections, incidents, and history remain
+  intact; the connector has no entitlement policy change.
+- M13/M19 schedule no new delivery while inactive and revalidate before
+  preparation and Telegram dispatch. A captured delivery that becomes inactive
+  is terminal/non-retry with safe `entitlement-inactive`; reactivation never
+  resurrects historical suppressed, delivered, terminal, or ambiguous work.
+- Implementation is on `feat/m22-basic-mvp-entitlements`. It awaits B review,
+  merge, production migration/deployment, bounded lifecycle validation, and a
+  final documentation closure commit.
+- Automated implementation gates pass: the full 16-migration chain and current
+  status on isolated PostgreSQL 16, representative existing/new Tenant
+  ACTIVE/null-expiry probes, end-to-end operator lifecycle, backend build, 459
+  Jest tests, 24 backend Node/connector contract passes with one unavailable-PHP
+  skip, 67 bot tests, Prisma format/validate/generate, typecheck, and lint.
+
+Phase 5 remains in progress. M22 implementation does not authorize Phase 6 and
+does not complete Phase 7 production-readiness work.
 
 ## Phase 6 — SaaS Platform ⬜ Planned
 

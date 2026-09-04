@@ -6,6 +6,10 @@ import type { AuditService } from '../common/audit/audit.service';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { RequestContextService } from '../common/request-context/request-context.service';
 import type { ApplicationConfigService } from '../config/application-config.service';
+import {
+  EntitlementInactiveException,
+  type EntitlementService,
+} from '../entitlements/entitlement.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import { TenantContextService } from '../tenant/tenant-context.service';
 import { TenantScopedPrismaService } from '../tenant/tenant-scoped-prisma.service';
@@ -80,6 +84,7 @@ function setup(initialStores: StoredStore[] = []): {
   validateCredentials: jest.SpiedFunction<
     WooCommerceClient['validateCredentials']
   >;
+  assertActive: ReturnType<typeof jest.fn>;
   runAsTenant: <T>(tenantId: string, callback: () => Promise<T>) => Promise<T>;
   service: StoreService;
 } {
@@ -170,12 +175,17 @@ function setup(initialStores: StoredStore[] = []): {
   const validateCredentials = jest
     .spyOn(WooCommerceClient.prototype, 'validateCredentials')
     .mockResolvedValue({});
+  const assertActive = jest.fn().mockResolvedValue(undefined as never);
+  const entitlements = {
+    assertActive,
+  } as unknown as EntitlementService;
   const service = new StoreService(
     tenantPrisma,
     encryption,
     audit,
     configuration,
-    tenantContext
+    tenantContext,
+    entitlements
   );
 
   return {
@@ -183,6 +193,7 @@ function setup(initialStores: StoredStore[] = []): {
     stores,
     encryption,
     validateCredentials,
+    assertActive,
     service,
     runAsTenant: (tenantId, callback) =>
       requestContext.run(`req-${tenantId}`, () => {
@@ -199,6 +210,26 @@ function setup(initialStores: StoredStore[] = []): {
 describe('StoreService', () => {
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  it('blocks inactive self-service Store creation before any WooCommerce call', async () => {
+    const fixture = setup();
+    fixture.assertActive.mockRejectedValueOnce(
+      new EntitlementInactiveException('SUSPENDED')
+    );
+
+    await expect(
+      fixture.runAsTenant('ten_a', () =>
+        fixture.service.create({
+          name: 'Shop',
+          storeUrl: 'https://shop.example',
+          consumerKey: 'ck_plain',
+          consumerSecret: 'cs_plain',
+        })
+      )
+    ).rejects.toBeInstanceOf(EntitlementInactiveException);
+    expect(fixture.validateCredentials).not.toHaveBeenCalled();
+    expect(fixture.stores).toHaveLength(0);
   });
 
   it('stores encrypted credentials and omits all credentials from create responses', async () => {

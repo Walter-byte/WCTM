@@ -6,6 +6,10 @@ import { createHash, createHmac } from 'node:crypto';
 import type { AuditService } from '../common/audit/audit.service';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import type { ApplicationConfigService } from '../config/application-config.service';
+import {
+  EntitlementInactiveException,
+  type EntitlementService,
+} from '../entitlements/entitlement.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { TenantScopedPrismaService } from '../tenant/tenant-scoped-prisma.service';
 import type { TenantContextService } from '../tenant/tenant-context.service';
@@ -222,6 +226,10 @@ function setup(
       'hasRequiredOrderWebhooksForEndpointKey'
     )
     .mockResolvedValue(true);
+  const entitlementAssertActive = jest.fn(async () => undefined);
+  const entitlements = {
+    assertActive: entitlementAssertActive,
+  } as unknown as EntitlementService;
   const service = new StoreRegistrationService(
     prisma,
     tenantPrisma,
@@ -229,11 +237,13 @@ function setup(
     audit,
     configuration,
     rateLimiter,
-    tenantContext
+    tenantContext,
+    entitlements
   );
 
   return {
     auditRecord,
+    entitlementAssertActive,
     assertAllowed,
     createAudit,
     findFirst,
@@ -253,6 +263,31 @@ function setup(
 describe('StoreRegistrationService', () => {
   afterEach(() => {
     jest.restoreAllMocks();
+  });
+
+  it('blocks inactive registration-token issuance before token mutation', async () => {
+    const fixture = setup();
+    fixture.entitlementAssertActive.mockRejectedValueOnce(
+      new EntitlementInactiveException('SUSPENDED')
+    );
+
+    await expect(fixture.service.issueToken('sto_a')).rejects.toBeInstanceOf(
+      EntitlementInactiveException
+    );
+    expect(fixture.issueStoreRegistrationToken).not.toHaveBeenCalled();
+  });
+
+  it('blocks registration finalization after suspension without consuming the token', async () => {
+    const fixture = setup();
+    fixture.entitlementAssertActive.mockRejectedValueOnce(
+      new EntitlementInactiveException('SUSPENDED')
+    );
+
+    await expect(
+      fixture.service.register(fixture.token, '203.0.113.5')
+    ).rejects.toBeInstanceOf(EntitlementInactiveException);
+    expect(fixture.store.registrationTokenConsumedAt).toBeNull();
+    expect(fixture.testConnection).not.toHaveBeenCalled();
   });
 
   it('issues a one-time plaintext token for an existing tenant-scoped Store', async () => {

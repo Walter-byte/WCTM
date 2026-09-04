@@ -15,6 +15,8 @@ interface ErrorResponse {
   error: string;
   message: string | string[];
   requestId: string;
+  code?: 'ENTITLEMENT_INACTIVE';
+  effectiveState?: 'SUSPENDED' | 'EXPIRED';
 }
 
 interface HttpResponseAdapter {
@@ -89,6 +91,15 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       error,
       message,
       requestId,
+      ...(responseObject?.['code'] === 'ENTITLEMENT_INACTIVE'
+        ? {
+            code: 'ENTITLEMENT_INACTIVE',
+            ...(responseObject['effectiveState'] === 'SUSPENDED' ||
+            responseObject['effectiveState'] === 'EXPIRED'
+              ? { effectiveState: responseObject['effectiveState'] }
+              : {}),
+          }
+        : {}),
     };
     const logMetadata = { statusCode, error };
 

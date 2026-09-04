@@ -3,6 +3,7 @@ import { TelegramOrderNotificationState } from '@prisma/client';
 import { type Job, UnrecoverableError } from 'bullmq';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { EntitlementService } from '../entitlements/entitlement.service';
 import { TelegramDeliveryClient } from '../telegram/telegram-delivery.client';
 import {
   DEFAULT_TELEGRAM_PRESENTATION,
@@ -76,6 +77,7 @@ export class OrderNotificationProcessor {
     private readonly prisma: PrismaService,
     private readonly telegramOrders: TelegramOrderService,
     private readonly deliveryClient: TelegramDeliveryClient,
+    private readonly entitlements: EntitlementService,
     private readonly presentation?: TelegramPresentationService
   ) {}
 
@@ -113,6 +115,15 @@ export class OrderNotificationProcessor {
 
     if (claimed.count !== 1) {
       return this.resolveUnclaimed(job.data);
+    }
+
+    if (!(await this.currentlyActive(job.data.tenantId))) {
+      return this.persistFailure(
+        job.data,
+        TelegramOrderNotificationState.TERMINAL_FAILURE,
+        'policy',
+        'entitlement-inactive'
+      );
     }
 
     const delivery =
@@ -189,6 +200,14 @@ export class OrderNotificationProcessor {
           telegramChatId: recipient.telegramChatId,
         })
       : { ...DEFAULT_TELEGRAM_PRESENTATION, language: 'en' as const };
+    if (!(await this.currentlyActive(job.data.tenantId))) {
+      return this.persistFailure(
+        job.data,
+        TelegramOrderNotificationState.TERMINAL_FAILURE,
+        'policy',
+        'entitlement-inactive'
+      );
+    }
     const result = await this.deliveryClient.send({
       chatId: recipient.telegramChatId,
       presentation,
@@ -249,6 +268,10 @@ export class OrderNotificationProcessor {
       result.category,
       result.code
     );
+  }
+
+  private async currentlyActive(tenantId: string): Promise<boolean> {
+    return this.entitlements.isActive(tenantId);
   }
 
   async markFailed(value: unknown): Promise<void> {

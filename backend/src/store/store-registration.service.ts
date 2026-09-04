@@ -15,6 +15,7 @@ import {
 import { AuditService } from '../common/audit/audit.service';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { ApplicationConfigService } from '../config/application-config.service';
+import { EntitlementService } from '../entitlements/entitlement.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantScopedPrismaService } from '../tenant/tenant-scoped-prisma.service';
 import { TenantContextService } from '../tenant/tenant-context.service';
@@ -78,10 +79,12 @@ export class StoreRegistrationService {
     private readonly audit: AuditService,
     private readonly configuration: ApplicationConfigService,
     private readonly rateLimiter: PluginRegistrationRateLimiter,
-    private readonly tenantContext: TenantContextService
+    private readonly tenantContext: TenantContextService,
+    private readonly entitlements: EntitlementService
   ) {}
 
   async issueToken(storeId: string): Promise<RegistrationTokenResult> {
+    await this.entitlements.assertActive(this.tenantContext.active.tenantId);
     const token = `reg_${randomBytes(32).toString('base64url')}`;
     const expiresAt = new Date(
       Date.now() + this.configuration.pluginRegistration.tokenTtlSeconds * 1000
@@ -363,6 +366,11 @@ export class StoreRegistrationService {
     ) {
       throw new BadRequestException(INVALID_REGISTRATION_MESSAGE);
     }
+
+    await this.entitlements.assertActive(store.tenantId, {
+      database: transaction,
+      now,
+    });
 
     const connection = await new WooCommerceClient({
       storeUrl: store.baseUrl,

@@ -3,6 +3,7 @@ import { UnauthorizedException } from '@nestjs/common';
 
 import { IS_PUBLIC_KEY } from '../auth/decorators/public.decorator';
 import { IS_TENANT_OPTIONAL_KEY } from '../tenant/decorators/tenant-optional.decorator';
+import { EntitlementInactiveException } from '../entitlements/entitlement.service';
 import { telegramRedeemSchema } from './dto/telegram-internal.dto';
 import { TelegramInternalController } from './telegram-internal.controller';
 import type { TelegramLinkingService } from './telegram-linking.service';
@@ -173,5 +174,26 @@ describe('TelegramInternalController authentication boundaries', () => {
       )
     ).toThrow(UnauthorizedException);
     expect(summary).not.toHaveBeenCalled();
+  });
+
+  it('normalizes a protected service entitlement denial to one semantic outcome', async () => {
+    const list = jest.fn(async () => {
+      throw new EntitlementInactiveException('SUSPENDED');
+    });
+    const controller = new TelegramInternalController(
+      {} as TelegramLinkingService,
+      { list } as unknown as TelegramOrderService,
+      {} as TelegramSettingsService,
+      {} as never,
+      {} as never
+    );
+
+    await expect(
+      controller.listOrders(
+        { telegram: { userId: '1001', chatId: '2001' } },
+        '5001'
+      )
+    ).resolves.toEqual({ state: 'ENTITLEMENT_INACTIVE' });
+    expect(list).toHaveBeenCalledTimes(1);
   });
 });

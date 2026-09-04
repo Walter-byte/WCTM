@@ -3,6 +3,12 @@ export type TelegramLanguage = 'fa' | 'en';
 export interface PresentationMetadata {
   language: string;
   timezone: string;
+  entitlement?: {
+    plan: 'FREE' | 'PRO' | 'AGENCY';
+    status: 'ACTIVE' | 'SUSPENDED';
+    effectiveState: 'ACTIVE' | 'SUSPENDED' | 'EXPIRED';
+    expiresAt: string | null;
+  } | null;
 }
 
 type InterpolationValues = Readonly<Record<string, string | number>>;
@@ -21,6 +27,16 @@ const en = {
     'This chat is not authorized to view orders. Check Status for recovery details.',
   'general.noActiveStore':
     'No single active store is available for this chat. Check Status before trying again.',
+  'entitlement.requiredSuspended':
+    'Service access is suspended. Operational capabilities are unavailable; Status, Help, Settings, and Unlink remain available.',
+  'entitlement.requiredExpired':
+    'Service access has expired. Operational capabilities are unavailable; Status, Help, Settings, and Unlink remain available.',
+  'entitlement.plan': 'Plan: {value}',
+  'entitlement.access': 'Service access: {value}',
+  'entitlement.expiry': 'Access expiry: {value}',
+  'entitlement.noExpiry': 'No expiry',
+  'entitlement.settingsInactive':
+    'Settings are read-only while service access is inactive.',
   'general.malformedResponse':
     'The service returned an unexpected response. Return Home or try again shortly.',
   'general.unavailable': 'Unavailable',
@@ -285,6 +301,12 @@ const en = {
   'label.healthy': 'Healthy',
   'label.lowStock': 'Low stock',
   'label.outOfStock': 'Out of stock',
+  'label.entitlementActive': 'Active',
+  'label.entitlementSuspended': 'Suspended',
+  'label.entitlementExpired': 'Expired',
+  'label.planFree': 'Free',
+  'label.planPro': 'Pro',
+  'label.planAgency': 'Agency',
   'label.pending': 'Pending payment',
   'label.processing': 'Processing',
   'label.onHold': 'On hold',
@@ -322,6 +344,16 @@ const fa: Record<MessageKey, string> = {
     'این گفت‌وگو اجازهٔ مشاهدهٔ سفارش‌ها را ندارد. برای راهنمای بازیابی، وضعیت را بررسی کنید.',
   'general.noActiveStore':
     'برای این گفت‌وگو یک فروشگاه فعال یکتا در دسترس نیست. ابتدا وضعیت را بررسی کنید.',
+  'entitlement.requiredSuspended':
+    'دسترسی سرویس تعلیق شده است. قابلیت‌های عملیاتی در دسترس نیستند؛ وضعیت، راهنما، تنظیمات و قطع اتصال همچنان در دسترس‌اند.',
+  'entitlement.requiredExpired':
+    'دسترسی سرویس منقضی شده است. قابلیت‌های عملیاتی در دسترس نیستند؛ وضعیت، راهنما، تنظیمات و قطع اتصال همچنان در دسترس‌اند.',
+  'entitlement.plan': 'طرح: {value}',
+  'entitlement.access': 'دسترسی سرویس: {value}',
+  'entitlement.expiry': 'پایان دسترسی: {value}',
+  'entitlement.noExpiry': 'بدون تاریخ انقضا',
+  'entitlement.settingsInactive':
+    'تا زمانی که دسترسی سرویس غیرفعال است، تنظیمات فقط خواندنی هستند.',
   'general.malformedResponse':
     'پاسخ سرویس غیرمنتظره بود. به خانه برگردید یا کمی بعد دوباره تلاش کنید.',
   'general.unavailable': 'در دسترس نیست',
@@ -574,6 +606,12 @@ const fa: Record<MessageKey, string> = {
   'label.healthy': 'سالم',
   'label.lowStock': 'کم‌موجود',
   'label.outOfStock': 'ناموجود',
+  'label.entitlementActive': 'فعال',
+  'label.entitlementSuspended': 'تعلیق‌شده',
+  'label.entitlementExpired': 'منقضی',
+  'label.planFree': 'رایگان',
+  'label.planPro': 'حرفه‌ای',
+  'label.planAgency': 'آژانسی',
   'label.pending': 'در انتظار پرداخت',
   'label.processing': 'در حال انجام',
   'label.onHold': 'در انتظار بررسی',

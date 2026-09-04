@@ -9,6 +9,7 @@ import {
 import { randomUUID } from 'node:crypto';
 
 import type { InventoryAlertSignal } from '../inventory/inventory-projection.service';
+import { EntitlementService } from '../entitlements/entitlement.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramOrderService } from '../telegram/telegram-order.service';
 import { QueueRuntimeService } from './queue-runtime.service';
@@ -19,7 +20,8 @@ export class InventoryNotificationScheduler {
     private readonly prisma: PrismaService,
     private readonly telegramOrders: TelegramOrderService,
     @Inject(forwardRef(() => QueueRuntimeService))
-    private readonly queueRuntime: QueueRuntimeService
+    private readonly queueRuntime: QueueRuntimeService,
+    private readonly entitlements: EntitlementService
   ) {}
 
   async schedule(
@@ -51,6 +53,13 @@ export class InventoryNotificationScheduler {
       signal.alertLevel === InventoryAlertLevel.LOW_STOCK
         ? item.lowAlertRecipientsCapturedAt
         : item.outAlertRecipientsCapturedAt;
+
+    if (!(await this.entitlements.isActive(tenantId))) {
+      if (!capturedAt) {
+        await this.captureRecipients(tenantId, storeId, signal, []);
+      }
+      return;
+    }
 
     if (!capturedAt) {
       const policy = await this.prisma.store.findFirst({

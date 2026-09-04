@@ -269,6 +269,51 @@ npm test
 
 Use `npm run format` to apply Prettier formatting.
 
+## Tenant Entitlement Operations
+
+M22 service access is authoritative only from the current Tenant row in
+PostgreSQL. Existing `Tenant.plan` values (`FREE`, `PRO`, `AGENCY`) are
+informational and receive the same MVP capability bundle. Persisted status is
+only `ACTIVE` or `SUSPENDED`; `EXPIRED` is derived when an ACTIVE Tenant reaches
+its nullable UTC expiry. New and migrated Tenants are ACTIVE with no expiry.
+
+Use the backend application-context operator command from a trusted shell with
+the normal backend environment and database connectivity. It always requires
+one explicit Tenant identifier. Build the current backend first with
+`npm run build` when the compiled `dist/` tree is not already present:
+
+```bash
+# Inspect current plan, persisted status, effective state, and expiry.
+npm run entitlement:manage -- --tenant ten_example
+
+# Suspend or reactivate. ACTIVE does not clear an existing expiry.
+npm run entitlement:manage -- --tenant ten_example --status SUSPENDED
+npm run entitlement:manage -- --tenant ten_example --status ACTIVE
+
+# Set an explicit UTC expiry or restore indefinite access.
+npm run entitlement:manage -- --tenant ten_example --expires-at 2026-10-01T00:00:00Z
+npm run entitlement:manage -- --tenant ten_example --clear-expiry
+
+# Status and expiry may be changed atomically.
+npm run entitlement:manage -- --tenant ten_example --status ACTIVE --expires-at 2026-10-01T00:00:00Z
+```
+
+The command rejects missing/deleted Tenants, invalid status or timestamp input,
+unknown options, and contradictory expiry options. Its output contains only a
+Tenant fingerprint, plan, persisted/effective state, and expiry. Mutations add a
+system/operator AuditLog entry and a structured secret-safe event. Never pass a
+customer name, email, Telegram identity, Store secret, plugin credential, or
+raw payload in place of the Tenant identifier.
+
+Inactive access preserves login, account and recovery/status surfaces,
+read-only settings, existing Store/link/plugin/webhook state, and authenticated
+webhook projection continuity. It blocks operational Telegram capabilities,
+normal Store onboarding, M7/M10 issuance/finalization/redemption, settings
+mutation, and new or pending notification dispatch. Reactivation restores only
+future eligible work; it does not replay historical notification or callback
+state. Entitlement is not a JWT, Redis, Telegram, WooCommerce, or connector
+setting.
+
 ## Queue and Worker Operations
 
 Outside `NODE_ENV=test`, the NestJS backend starts one BullMQ `operations`

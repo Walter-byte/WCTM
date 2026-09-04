@@ -3,6 +3,7 @@ import { TelegramInventoryNotificationState } from '@prisma/client';
 import { type Job, UnrecoverableError } from 'bullmq';
 
 import { TelegramInventoryService } from '../inventory/telegram-inventory.service';
+import { EntitlementService } from '../entitlements/entitlement.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramDeliveryClient } from '../telegram/telegram-delivery.client';
 import {
@@ -75,6 +76,7 @@ export class InventoryNotificationProcessor {
     @Inject(forwardRef(() => TelegramInventoryService))
     private readonly inventory: TelegramInventoryService,
     private readonly deliveryClient: TelegramDeliveryClient,
+    private readonly entitlements: EntitlementService,
     private readonly presentation?: TelegramPresentationService
   ) {}
 
@@ -112,6 +114,15 @@ export class InventoryNotificationProcessor {
 
     if (claimed.count !== 1) {
       return this.resolveUnclaimed(job.data);
+    }
+
+    if (!(await this.currentlyActive(job.data.tenantId))) {
+      return this.persistFailure(
+        job.data,
+        TelegramInventoryNotificationState.TERMINAL_FAILURE,
+        'policy',
+        'entitlement-inactive'
+      );
     }
 
     const delivery =
@@ -196,6 +207,14 @@ export class InventoryNotificationProcessor {
           telegramChatId: recipient.telegramChatId,
         })
       : { ...DEFAULT_TELEGRAM_PRESENTATION, language: 'en' as const };
+    if (!(await this.currentlyActive(job.data.tenantId))) {
+      return this.persistFailure(
+        job.data,
+        TelegramInventoryNotificationState.TERMINAL_FAILURE,
+        'policy',
+        'entitlement-inactive'
+      );
+    }
     const result = await this.deliveryClient.send({
       chatId: recipient.telegramChatId,
       presentation,
@@ -259,6 +278,10 @@ export class InventoryNotificationProcessor {
       result.category,
       result.code
     );
+  }
+
+  private async currentlyActive(tenantId: string): Promise<boolean> {
+    return this.entitlements.isActive(tenantId);
   }
 
   async markFailed(value: unknown): Promise<void> {

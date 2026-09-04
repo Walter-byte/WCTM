@@ -2,12 +2,17 @@ import { Injectable } from '@nestjs/common';
 import { TenantLanguage } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  effectiveTenantEntitlementState,
+  type TenantEntitlementSummary,
+} from '../entitlements/entitlement.service';
 
 export type TelegramPresentationLanguage = 'fa' | 'en';
 
 export interface TelegramPresentation {
   language: TelegramPresentationLanguage;
   timezone: string;
+  entitlement?: TenantEntitlementSummary | null;
 }
 
 export type TelegramPresented<T> = T & {
@@ -59,7 +64,15 @@ export class TelegramPresentationService {
         tenant: { deletedAt: null },
       },
       select: {
-        tenant: { select: { language: true, timezone: true } },
+        tenant: {
+          select: {
+            language: true,
+            timezone: true,
+            plan: true,
+            entitlementStatus: true,
+            entitlementExpiresAt: true,
+          },
+        },
       },
     });
 
@@ -77,6 +90,22 @@ export class TelegramPresentationService {
             ? 'en'
             : 'en',
       timezone: validTimezone(tenant.timezone) ? tenant.timezone : 'UTC',
+      ...(tenant.entitlementStatus
+        ? {
+            entitlement: {
+              plan: tenant.plan,
+              status: tenant.entitlementStatus,
+              effectiveState: effectiveTenantEntitlementState(
+                {
+                  status: tenant.entitlementStatus,
+                  expiresAt: tenant.entitlementExpiresAt,
+                },
+                new Date()
+              ),
+              expiresAt: tenant.entitlementExpiresAt?.toISOString() ?? null,
+            },
+          }
+        : {}),
     };
   }
 

@@ -14,6 +14,7 @@ import {
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 import { ApplicationConfigService } from '../config/application-config.service';
+import { EntitlementService } from '../entitlements/entitlement.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryBootstrapScheduler } from '../queue/inventory-bootstrap.scheduler';
 import type { TelegramOrderIdentityDto } from '../telegram/dto/telegram-internal.dto';
@@ -134,7 +135,8 @@ export class TelegramInventoryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configuration: ApplicationConfigService,
-    private readonly bootstrap: InventoryBootstrapScheduler
+    private readonly bootstrap: InventoryBootstrapScheduler,
+    private readonly entitlements: EntitlementService
   ) {}
 
   async list(input: {
@@ -148,6 +150,27 @@ export class TelegramInventoryService {
     }
 
     const context = resolved.context;
+    let offset = 0;
+
+    if (input.cursor) {
+      const reference = await this.validateReference(
+        input.cursor,
+        'k',
+        TelegramInventoryReferencePurpose.LIST_PAGE,
+        context
+      );
+
+      if (
+        reference?.pageOffset === null ||
+        reference?.pageOffset === undefined
+      ) {
+        return this.emptyList('CONTEXT_CHANGED', null);
+      }
+
+      offset = reference.pageOffset;
+    }
+
+    await this.entitlements.assertActive(context.tenantId);
     const store = await this.loadStore(context);
 
     if (!store) {
@@ -173,26 +196,6 @@ export class TelegramInventoryService {
           : 'SYNCING',
         store.lowStockThreshold
       );
-    }
-
-    let offset = 0;
-
-    if (input.cursor) {
-      const reference = await this.validateReference(
-        input.cursor,
-        'k',
-        TelegramInventoryReferencePurpose.LIST_PAGE,
-        context
-      );
-
-      if (
-        reference?.pageOffset === null ||
-        reference?.pageOffset === undefined
-      ) {
-        return this.emptyList('CONTEXT_CHANGED', store.lowStockThreshold);
-      }
-
-      offset = reference.pageOffset;
     }
 
     const records = await this.prisma.inventoryItem.findMany({
@@ -336,6 +339,8 @@ export class TelegramInventoryService {
       return { state: 'CONTEXT_CHANGED' };
     }
 
+    await this.entitlements.assertActive(context.tenantId);
+
     const item = await this.prisma.inventoryItem.findFirst({
       where: {
         id: reference.inventoryItemId,
@@ -396,6 +401,7 @@ export class TelegramInventoryService {
     }
 
     const context = resolved.context;
+    await this.entitlements.assertActive(context.tenantId);
     const store = await this.loadStore(context);
 
     if (!store) {
@@ -474,6 +480,7 @@ export class TelegramInventoryService {
     }
 
     const context = resolved.context;
+    await this.entitlements.assertActive(context.tenantId);
     const policy = await this.prisma.store.findFirst({
       where: {
         id: storeId,
