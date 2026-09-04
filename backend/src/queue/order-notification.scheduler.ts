@@ -6,6 +6,7 @@ import {
 import { randomUUID } from 'node:crypto';
 
 import { readWooCommerceOrderId } from '../orders/order-payload.mapper';
+import { EntitlementService } from '../entitlements/entitlement.service';
 import type { ProjectableWebhookEvent } from '../orders/order-projection.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TelegramOrderService } from '../telegram/telegram-order.service';
@@ -19,11 +20,16 @@ export class OrderNotificationScheduler {
     private readonly prisma: PrismaService,
     private readonly telegramOrders: TelegramOrderService,
     @Inject(forwardRef(() => QueueRuntimeService))
-    private readonly queueRuntime: QueueRuntimeService
+    private readonly queueRuntime: QueueRuntimeService,
+    private readonly entitlements: EntitlementService
   ) {}
 
   async schedule(event: ProjectableWebhookEvent): Promise<void> {
     if (event.topic !== ORDER_CREATED_TOPIC) {
+      return;
+    }
+
+    if (!(await this.entitlements.isActive(event.store.tenantId))) {
       return;
     }
 

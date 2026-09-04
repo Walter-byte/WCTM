@@ -5,6 +5,15 @@ interface PresentedResult {
   presentation?: PresentationMetadata;
 }
 
+export type EntitlementState = 'ACTIVE' | 'SUSPENDED' | 'EXPIRED';
+
+export interface EntitlementSummary {
+  plan: 'FREE' | 'PRO' | 'AGENCY';
+  status: 'ACTIVE' | 'SUSPENDED';
+  effectiveState: EntitlementState;
+  expiresAt: string | null;
+}
+
 export interface TelegramIdentity {
   telegramUserId: string;
   telegramChatId: string;
@@ -20,10 +29,12 @@ export interface TelegramAuthorizationStatus extends PresentedResult {
   tenantSelectionRequired: boolean;
   storeSelectionRequired: boolean;
   selectionRequired: boolean;
+  entitlement: EntitlementSummary | null;
 }
 
 export type TelegramRedeemResult = (
   | { status: 'invalid_or_expired' }
+  | { status: 'entitlement_inactive'; entitlement: EntitlementSummary }
   | ({ status: 'linked' } & TelegramAuthorizationStatus)
 ) &
   PresentedResult;
@@ -52,7 +63,12 @@ export interface OrderSummary {
 }
 
 export interface OrderListResult extends PresentedResult {
-  state: 'OK' | 'NO_ACTIVE_STORE' | 'UNAUTHORIZED' | 'CONTEXT_CHANGED';
+  state:
+    | 'OK'
+    | 'NO_ACTIVE_STORE'
+    | 'UNAUTHORIZED'
+    | 'CONTEXT_CHANGED'
+    | 'ENTITLEMENT_INACTIVE';
   orders: OrderSummary[];
   nextCursor: string | null;
   previousCursor: string | null;
@@ -86,7 +102,8 @@ export interface OrderDetailResult extends PresentedResult {
     | 'DELETED'
     | 'CONTEXT_CHANGED'
     | 'NO_ACTIVE_STORE'
-    | 'UNAUTHORIZED';
+    | 'UNAUTHORIZED'
+    | 'ENTITLEMENT_INACTIVE';
   order?: OrderDetailPayload;
   backCursor?: string;
   transitionsRef?: string;
@@ -117,7 +134,8 @@ export type OrderNoteState =
   | 'UNAUTHORIZED'
   | 'CONTEXT_CHANGED'
   | 'FORBIDDEN_ROLE'
-  | 'EXPIRED_REF';
+  | 'EXPIRED_REF'
+  | 'ENTITLEMENT_INACTIVE';
 
 export type OrderNoteVisibility = 'INTERNAL' | 'CUSTOMER';
 
@@ -158,7 +176,8 @@ export interface OrderTransitionsResult extends PresentedResult {
     | 'NO_ACTIVE_STORE'
     | 'UNAUTHORIZED'
     | 'CONTEXT_CHANGED'
-    | 'FORBIDDEN_ROLE';
+    | 'FORBIDDEN_ROLE'
+    | 'ENTITLEMENT_INACTIVE';
   ref?: string;
   currentStatus?: string;
   targets?: string[];
@@ -177,7 +196,8 @@ export interface OrderStatusUpdateResult extends PresentedResult {
     | 'CONTEXT_CHANGED'
     | 'FORBIDDEN_ROLE'
     | 'INVALID_TARGET'
-    | 'EXPIRED_REF';
+    | 'EXPIRED_REF'
+    | 'ENTITLEMENT_INACTIVE';
   order?: OrderDetailPayload;
   backCursor?: string;
   freshness?: OrderFreshness;
@@ -190,7 +210,8 @@ export type SettingsState =
   | 'CONTEXT_CHANGED'
   | 'FORBIDDEN_ROLE'
   | 'INVALID_VALUE'
-  | 'EXPIRED_REF';
+  | 'EXPIRED_REF'
+  | 'ENTITLEMENT_INACTIVE';
 
 export interface SettingsRecipient {
   displayName: string;
@@ -201,6 +222,7 @@ export interface SettingsRecipient {
 }
 
 export interface SettingsSummary {
+  entitlement: EntitlementSummary;
   language: 'FA' | 'EN';
   timezone: string;
   lowStockThreshold: number | null;
@@ -256,7 +278,8 @@ export interface StockListResult extends PresentedResult {
     | 'SYNC_FAILED'
     | 'NO_ACTIVE_STORE'
     | 'UNAUTHORIZED'
-    | 'CONTEXT_CHANGED';
+    | 'CONTEXT_CHANGED'
+    | 'ENTITLEMENT_INACTIVE';
   items: StockSummary[];
   nextCursor: string | null;
   previousCursor: string | null;
@@ -271,7 +294,12 @@ export interface StockDetailPayload extends Omit<StockSummary, 'ref'> {
 
 export interface StockDetailResult extends PresentedResult {
   state:
-    'OK' | 'NOT_FOUND' | 'NO_ACTIVE_STORE' | 'UNAUTHORIZED' | 'CONTEXT_CHANGED';
+    | 'OK'
+    | 'NOT_FOUND'
+    | 'NO_ACTIVE_STORE'
+    | 'UNAUTHORIZED'
+    | 'CONTEXT_CHANGED'
+    | 'ENTITLEMENT_INACTIVE';
   item?: StockDetailPayload;
   backCursor?: string;
 }
@@ -297,7 +325,8 @@ export type SearchResult = (
         | 'QUERY_TOO_SHORT'
         | 'UNAUTHORIZED'
         | 'NO_ACTIVE_STORE'
-        | 'CONTEXT_CHANGED';
+        | 'CONTEXT_CHANGED'
+        | 'ENTITLEMENT_INACTIVE';
     }
   | { state: 'ORDER_DETAIL'; detail: OrderDetailResult }
   | {
@@ -317,7 +346,8 @@ export type SearchSelectionResult = (
         | 'NO_ACTIVE_STORE'
         | 'CONTEXT_CHANGED'
         | 'NOT_FOUND'
-        | 'SYNCING';
+        | 'SYNCING'
+        | 'ENTITLEMENT_INACTIVE';
     }
   | { state: 'ORDER'; detail: OrderDetailResult; backCursor: string }
   | {
@@ -329,7 +359,7 @@ export type SearchSelectionResult = (
   PresentedResult;
 
 export type DailyReportResult = (
-  | { state: 'UNAUTHORIZED' | 'NO_ACTIVE_STORE' }
+  | { state: 'UNAUTHORIZED' | 'NO_ACTIVE_STORE' | 'ENTITLEMENT_INACTIVE' }
   | {
       state: 'OK';
       localDate: string;
@@ -775,7 +805,18 @@ function parseOrderListResult(value: unknown): OrderListResult {
     'NO_ACTIVE_STORE',
     'UNAUTHORIZED',
     'CONTEXT_CHANGED',
+    'ENTITLEMENT_INACTIVE',
   ]);
+
+  if (record['state'] === 'ENTITLEMENT_INACTIVE') {
+    return {
+      state: 'ENTITLEMENT_INACTIVE',
+      orders: [],
+      nextCursor: null,
+      previousCursor: null,
+      freshness: { asOf: new Date(0).toISOString(), delayed: true },
+    };
+  }
 
   if (
     !allowedStates.has(String(record['state'])) ||
@@ -808,6 +849,7 @@ function parseSettingsResult(value: unknown): SettingsResult {
     'FORBIDDEN_ROLE',
     'INVALID_VALUE',
     'EXPIRED_REF',
+    'ENTITLEMENT_INACTIVE',
   ]);
   const state = String(record['state']) as SettingsState;
 
@@ -832,8 +874,19 @@ function parseStockListResult(value: unknown): StockListResult {
     'NO_ACTIVE_STORE',
     'UNAUTHORIZED',
     'CONTEXT_CHANGED',
+    'ENTITLEMENT_INACTIVE',
   ]);
   const state = String(record['state']) as StockListResult['state'];
+
+  if (state === 'ENTITLEMENT_INACTIVE') {
+    return {
+      state,
+      items: [],
+      nextCursor: null,
+      previousCursor: null,
+      threshold: null,
+    };
+  }
 
   if (
     !states.has(state) ||
@@ -868,6 +921,7 @@ function parseStockDetailResult(value: unknown): StockDetailResult {
     'NO_ACTIVE_STORE',
     'UNAUTHORIZED',
     'CONTEXT_CHANGED',
+    'ENTITLEMENT_INACTIVE',
   ]);
   const state = String(record['state']) as StockDetailResult['state'];
 
@@ -970,6 +1024,7 @@ function parseSearchResult(value: unknown): SearchResult {
     'UNAUTHORIZED',
     'NO_ACTIVE_STORE',
     'CONTEXT_CHANGED',
+    'ENTITLEMENT_INACTIVE',
   ]);
 
   if (simpleStates.has(state)) {
@@ -1046,6 +1101,7 @@ function parseSearchSelectionResult(value: unknown): SearchSelectionResult {
       'CONTEXT_CHANGED',
       'NOT_FOUND',
       'SYNCING',
+      'ENTITLEMENT_INACTIVE',
     ].includes(state)
   ) {
     return { state } as SearchSelectionResult;
@@ -1103,7 +1159,11 @@ function parseDailyReportResult(value: unknown): DailyReportResult {
   const record = requireRecord(value);
   const state = String(record['state']);
 
-  if (state === 'UNAUTHORIZED' || state === 'NO_ACTIVE_STORE') {
+  if (
+    state === 'UNAUTHORIZED' ||
+    state === 'NO_ACTIVE_STORE' ||
+    state === 'ENTITLEMENT_INACTIVE'
+  ) {
     return { state };
   }
 
@@ -1161,6 +1221,7 @@ function parseSettingsResultState(value: unknown): { state: SettingsState } {
     'FORBIDDEN_ROLE',
     'INVALID_VALUE',
     'EXPIRED_REF',
+    'ENTITLEMENT_INACTIVE',
   ]);
   const state = String(record['state']) as SettingsState;
 
@@ -1175,6 +1236,14 @@ function parseSettingsSummary(value: unknown): SettingsSummary {
   const record = requireRecord(value);
   const categories = record['enabledNotificationCategories'];
   const recipients = record['recipients'];
+  const entitlement = isEntitlementSummary(record['entitlement'])
+    ? record['entitlement']
+    : {
+        plan: 'FREE' as const,
+        status: 'ACTIVE' as const,
+        effectiveState: 'ACTIVE' as const,
+        expiresAt: null,
+      };
 
   if (
     (record['language'] !== 'FA' && record['language'] !== 'EN') ||
@@ -1208,6 +1277,7 @@ function parseSettingsSummary(value: unknown): SettingsSummary {
   }
 
   return {
+    entitlement,
     language: record['language'],
     timezone: record['timezone'],
     lowStockThreshold: record['lowStockThreshold'],
@@ -1310,6 +1380,7 @@ function parseOrderDetailResult(value: unknown): OrderDetailResult {
     'CONTEXT_CHANGED',
     'NO_ACTIVE_STORE',
     'UNAUTHORIZED',
+    'ENTITLEMENT_INACTIVE',
   ]) as OrderDetailResult;
 }
 
@@ -1321,6 +1392,7 @@ function parseOrderLookupResult(value: unknown): OrderLookupResult {
     'CONTEXT_CHANGED',
     'NO_ACTIVE_STORE',
     'UNAUTHORIZED',
+    'ENTITLEMENT_INACTIVE',
     'MALFORMED_ORDER_NUMBER',
     'AMBIGUOUS',
   ]) as OrderLookupResult;
@@ -1334,6 +1406,7 @@ function parseOrderRefreshResult(value: unknown): OrderRefreshResult {
     'CONTEXT_CHANGED',
     'NO_ACTIVE_STORE',
     'UNAUTHORIZED',
+    'ENTITLEMENT_INACTIVE',
     'RETRYABLE',
     'FAILED',
   ]) as OrderRefreshResult;
@@ -1345,6 +1418,16 @@ function parseOrderDetailLike(
 ): OrderDetailResult | OrderLookupResult | OrderRefreshResult {
   const record = requireRecord(value);
   const allowedStates = new Set(states);
+
+  if (
+    record['state'] === 'ENTITLEMENT_INACTIVE' &&
+    allowedStates.has('ENTITLEMENT_INACTIVE')
+  ) {
+    return {
+      state: 'ENTITLEMENT_INACTIVE',
+      freshness: { asOf: new Date(0).toISOString(), delayed: true },
+    };
+  }
 
   if (
     !allowedStates.has(String(record['state'])) ||
@@ -1475,6 +1558,7 @@ function parseOrderNoteBase(value: unknown): Record<string, unknown> {
     'CONTEXT_CHANGED',
     'FORBIDDEN_ROLE',
     'EXPIRED_REF',
+    'ENTITLEMENT_INACTIVE',
   ]);
 
   if (!states.has(String(record['state']))) {
@@ -1494,6 +1578,7 @@ function parseOrderTransitionsResult(value: unknown): OrderTransitionsResult {
     'UNAUTHORIZED',
     'CONTEXT_CHANGED',
     'FORBIDDEN_ROLE',
+    'ENTITLEMENT_INACTIVE',
   ]);
 
   if (!allowedStates.has(String(record['state']))) {
@@ -1528,6 +1613,7 @@ function parseOrderStatusUpdateResult(value: unknown): OrderStatusUpdateResult {
     'FORBIDDEN_ROLE',
     'INVALID_TARGET',
     'EXPIRED_REF',
+    'ENTITLEMENT_INACTIVE',
   ]);
 
   if (
@@ -1722,14 +1808,42 @@ function attachPresentation<T extends object>(
     typeof presentation?.['timezone'] === 'string'
       ? presentation['timezone'].slice(0, 64)
       : 'UTC';
+  const entitlement = parseOptionalEntitlementSummary(
+    presentation?.['entitlement']
+  );
 
   return {
     ...result,
     presentation: {
       language: language || 'en',
       timezone: timezone || 'UTC',
+      entitlement,
     },
   };
+}
+
+function parseOptionalEntitlementSummary(
+  value: unknown
+): EntitlementSummary | null {
+  return value === null || value === undefined
+    ? null
+    : isEntitlementSummary(value)
+      ? value
+      : null;
+}
+
+function isEntitlementSummary(value: unknown): value is EntitlementSummary {
+  const record = asRecord(value);
+
+  return Boolean(
+    record &&
+    ['FREE', 'PRO', 'AGENCY'].includes(String(record['plan'])) &&
+    ['ACTIVE', 'SUSPENDED'].includes(String(record['status'])) &&
+    ['ACTIVE', 'SUSPENDED', 'EXPIRED'].includes(
+      String(record['effectiveState'])
+    ) &&
+    (record['expiresAt'] === null || isIsoDate(record['expiresAt']))
+  );
 }
 
 function requireRecord(value: unknown): Record<string, unknown> {

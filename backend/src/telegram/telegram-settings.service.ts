@@ -17,6 +17,10 @@ import {
 } from 'node:crypto';
 
 import { ApplicationConfigService } from '../config/application-config.service';
+import {
+  EntitlementService,
+  type TenantEntitlementSummary,
+} from '../entitlements/entitlement.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InventoryBootstrapScheduler } from '../queue/inventory-bootstrap.scheduler';
 import {
@@ -58,7 +62,8 @@ export type TelegramSettingsState =
   | 'CONTEXT_CHANGED'
   | 'FORBIDDEN_ROLE'
   | 'INVALID_VALUE'
-  | 'EXPIRED_REF';
+  | 'EXPIRED_REF'
+  | 'ENTITLEMENT_INACTIVE';
 
 export interface TelegramSettingsRecipient {
   displayName: string;
@@ -69,6 +74,7 @@ export interface TelegramSettingsRecipient {
 }
 
 export interface TelegramSettingsSummary {
+  entitlement: TenantEntitlementSummary;
   language: TenantLanguage;
   timezone: string;
   lowStockThreshold: number | null;
@@ -136,6 +142,7 @@ export class TelegramSettingsService {
     private readonly prisma: PrismaService,
     private readonly configuration: ApplicationConfigService,
     private readonly telegramOrders: TelegramOrderService,
+    private readonly entitlements: EntitlementService,
     @Optional()
     private readonly inventoryBootstrap?: InventoryBootstrapScheduler
   ) {}
@@ -149,8 +156,13 @@ export class TelegramSettingsService {
       return { state: resolved.state };
     }
 
-    await this.ensureInventoryIfRelevant(resolved.context);
-    return this.ok(resolved.context);
+    const entitlement = await this.entitlements.resolveTenant(
+      resolved.context.tenantId
+    );
+    if (entitlement.effectiveState === 'ACTIVE') {
+      await this.ensureInventoryIfRelevant(resolved.context);
+    }
+    return this.ok(resolved.context, entitlement);
   }
 
   async startInput(
@@ -182,6 +194,8 @@ export class TelegramSettingsService {
     ) {
       return { state: 'CONTEXT_CHANGED' };
     }
+
+    await this.entitlements.assertActive(resolved.context.tenantId);
 
     return {
       state: 'OK',
@@ -226,6 +240,9 @@ export class TelegramSettingsService {
       }
 
       const changed = await this.withMutation(async (transaction) => {
+        await this.entitlements.assertActive(context.tenantId, {
+          database: transaction,
+        });
         if (!(await this.consumeReference(transaction, reference, context))) {
           return undefined;
         }
@@ -268,6 +285,9 @@ export class TelegramSettingsService {
       }
 
       const changed = await this.withMutation(async (transaction) => {
+        await this.entitlements.assertActive(context.tenantId, {
+          database: transaction,
+        });
         if (!(await this.consumeReference(transaction, reference, context))) {
           return undefined;
         }
@@ -344,6 +364,9 @@ export class TelegramSettingsService {
     reference: SettingsReference
   ): Promise<boolean> {
     return this.withMutation(async (transaction) => {
+      await this.entitlements.assertActive(context.tenantId, {
+        database: transaction,
+      });
       const store = await this.loadStore(transaction, context);
 
       if (!store) {
@@ -545,14 +568,21 @@ export class TelegramSettingsService {
     });
   }
 
-  private async ok(context: SettingsContext): Promise<TelegramSettingsResult> {
-    const settings = await this.buildSummary(context);
+  private async ok(
+    context: SettingsContext,
+    entitlement?: TenantEntitlementSummary
+  ): Promise<TelegramSettingsResult> {
+    const settings = await this.buildSummary(
+      context,
+      entitlement ?? (await this.entitlements.resolveTenant(context.tenantId))
+    );
 
     return settings ? { state: 'OK', settings } : { state: 'CONTEXT_CHANGED' };
   }
 
   private async buildSummary(
-    context: SettingsContext
+    context: SettingsContext,
+    entitlement: TenantEntitlementSummary
   ): Promise<TelegramSettingsSummary | undefined> {
     const store = await this.prisma.store.findFirst({
       where: {
@@ -624,7 +654,9 @@ export class TelegramSettingsService {
         )
       ).map((recipient) => recipient.membershipId)
     );
-    const editable = context.role !== MembershipRole.MEMBER;
+    const editable =
+      context.role !== MembershipRole.MEMBER &&
+      entitlement.effectiveState === 'ACTIVE';
     const expiresAt = this.referenceExpiry();
     const references: Prisma.TelegramSettingsReferenceCreateManyInput[] = [];
     const recipientRows: TelegramSettingsRecipient[] = [];
@@ -662,6 +694,7 @@ export class TelegramSettingsService {
     }
 
     const summary: TelegramSettingsSummary = {
+      entitlement,
       language: store.tenant.language,
       timezone: store.tenant.timezone,
       lowStockThreshold: store.lowStockThreshold,

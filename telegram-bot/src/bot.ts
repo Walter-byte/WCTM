@@ -25,6 +25,7 @@ import type {
   SearchSelectionResult,
   TelegramAuthorizationStatus,
   TelegramIdentity,
+  EntitlementSummary,
 } from './internal-backend.client';
 import { UpdateDeduplicator } from './update-deduplicator';
 import {
@@ -115,10 +116,12 @@ export function createBot(
                 'help',
                 languageOf(result, 'fa')
               )
-            : renderLanding(
-                result,
-                translate(languageOf(result), 'home.linked')
-              );
+            : result.status === 'entitlement_inactive'
+              ? renderEntitlementInactive(result)
+              : renderLanding(
+                  result,
+                  translate(languageOf(result), 'home.linked')
+                );
 
         await configureChatCommandMenu(context, languageOf(result), log);
         await replyView(context, rendered);
@@ -1002,6 +1005,8 @@ function renderStatusView(status: TelegramAuthorizationStatus): RenderedView {
       .row();
   } else {
     keyboard
+      .text(translate(language, 'nav.settings'), NAVIGATION_CALLBACKS.settings)
+      .row()
       .text(translate(language, 'nav.help'), NAVIGATION_CALLBACKS.help)
       .row();
   }
@@ -1038,6 +1043,9 @@ function renderHelp(language: TelegramLanguage = 'en'): RenderedView {
 
 export function renderSettings(result: SettingsResult): RenderedView {
   const language = languageOf(result);
+  if (result.state === 'ENTITLEMENT_INACTIVE') {
+    return renderEntitlementInactive(result);
+  }
   if (result.state !== 'OK' || !result.settings) {
     return renderRecoveryView(
       settingsStateMessage(result.state, language),
@@ -1049,6 +1057,13 @@ export function renderSettings(result: SettingsResult): RenderedView {
   }
 
   const settings = result.settings;
+  const entitlement = settings.entitlement ?? {
+    plan: 'FREE' as const,
+    status: 'ACTIVE' as const,
+    effectiveState: 'ACTIVE' as const,
+    expiresAt: null,
+  };
+  const inactive = entitlement.effectiveState !== 'ACTIVE';
   const categories = settings.enabledNotificationCategories.map((category) =>
     notificationCategoryLabel(category, language)
   );
@@ -1135,10 +1150,18 @@ export function renderSettings(result: SettingsResult): RenderedView {
   keyboard
     .row()
     .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home);
+  if (inactive) {
+    keyboard
+      .row()
+      .text(translate(language, 'nav.status'), NAVIGATION_CALLBACKS.status)
+      .text(translate(language, 'nav.help'), NAVIGATION_CALLBACKS.help);
+  }
 
   return {
     text: [
       translate(language, 'settings.title'),
+      '',
+      ...entitlementLines(entitlement, language, timezoneOf(result)),
       '',
       translate(language, 'settings.language', {
         value: translate(
@@ -1173,6 +1196,9 @@ export function renderSettings(result: SettingsResult): RenderedView {
         : []),
       ...(!settings.editable
         ? ['', translate(language, 'settings.readOnly')]
+        : []),
+      ...(inactive
+        ? ['', translate(language, 'entitlement.settingsInactive')]
         : []),
     ].join('\n'),
     keyboard,
@@ -1277,6 +1303,80 @@ function renderRecoveryView(
   };
 }
 
+function renderEntitlementInactive(result: {
+  presentation?: {
+    language?: string;
+    timezone?: string;
+    entitlement?: EntitlementSummary | null;
+  };
+  entitlement?: EntitlementSummary | null;
+}): RenderedView {
+  const language = languageOf(result);
+  const entitlement =
+    result.entitlement ?? result.presentation?.entitlement ?? null;
+  const text = entitlementRequiredMessage(entitlement, language);
+
+  return {
+    text: entitlement
+      ? [
+          text,
+          '',
+          ...entitlementLines(entitlement, language, timezoneOf(result)),
+        ].join('\n')
+      : text,
+    keyboard: new InlineKeyboard()
+      .text(translate(language, 'nav.status'), NAVIGATION_CALLBACKS.status)
+      .text(translate(language, 'nav.help'), NAVIGATION_CALLBACKS.help)
+      .row()
+      .text(translate(language, 'nav.home'), NAVIGATION_CALLBACKS.home),
+  };
+}
+
+function entitlementRequiredMessage(
+  entitlement: EntitlementSummary | null | undefined,
+  language: TelegramLanguage
+): string {
+  return translate(
+    language,
+    entitlement?.effectiveState === 'EXPIRED'
+      ? 'entitlement.requiredExpired'
+      : 'entitlement.requiredSuspended'
+  );
+}
+
+function entitlementLines(
+  entitlement: EntitlementSummary,
+  language: TelegramLanguage,
+  timezone: string
+): string[] {
+  const planKey =
+    entitlement.plan === 'FREE'
+      ? 'label.planFree'
+      : entitlement.plan === 'PRO'
+        ? 'label.planPro'
+        : 'label.planAgency';
+  const accessKey =
+    entitlement.effectiveState === 'ACTIVE'
+      ? 'label.entitlementActive'
+      : entitlement.effectiveState === 'EXPIRED'
+        ? 'label.entitlementExpired'
+        : 'label.entitlementSuspended';
+
+  return [
+    translate(language, 'entitlement.plan', {
+      value: translate(language, planKey),
+    }),
+    translate(language, 'entitlement.access', {
+      value: translate(language, accessKey),
+    }),
+    translate(language, 'entitlement.expiry', {
+      value: entitlement.expiresAt
+        ? formatDateTime(entitlement.expiresAt, language, timezone)
+        : translate(language, 'entitlement.noExpiry'),
+    }),
+  ];
+}
+
 function renderTransportFailure(
   error: unknown,
   primary:
@@ -1316,7 +1416,8 @@ function isReadyStatus(status: TelegramAuthorizationStatus): boolean {
     status.authorized &&
     !status.selectionRequired &&
     status.activeTenantId &&
-    status.activeStoreId
+    status.activeStoreId &&
+    (!status.entitlement || status.entitlement.effectiveState === 'ACTIVE')
   );
 }
 
@@ -1326,30 +1427,37 @@ export function renderStatus(status: {
   selectionRequired: boolean;
   activeTenantId: string | null;
   activeStoreId: string | null;
+  entitlement?: EntitlementSummary | null;
   presentation?: { language?: string; timezone?: string };
 }): string {
   const language = languageOf(status);
-  if (!status.linked) {
-    return translate(language, 'status.unlinked');
-  }
+  const state = !status.linked
+    ? translate(language, 'status.unlinked')
+    : !status.authorized
+      ? translate(language, 'status.noMembership')
+      : status.selectionRequired
+        ? translate(language, 'status.selectionRequired')
+        : status.activeTenantId && status.activeStoreId
+          ? !status.entitlement ||
+            status.entitlement.effectiveState === 'ACTIVE'
+            ? translate(language, 'status.ready')
+            : entitlementRequiredMessage(status.entitlement, language)
+          : translate(language, 'status.noStore');
 
-  if (!status.authorized) {
-    return translate(language, 'status.noMembership');
-  }
-
-  if (status.selectionRequired) {
-    return translate(language, 'status.selectionRequired');
-  }
-
-  if (status.activeTenantId && status.activeStoreId) {
-    return translate(language, 'status.ready');
-  }
-
-  return translate(language, 'status.noStore');
+  return status.entitlement
+    ? [
+        state,
+        '',
+        ...entitlementLines(status.entitlement, language, timezoneOf(status)),
+      ].join('\n')
+    : state;
 }
 
 export function renderStockList(result: StockListResult): RenderedView {
   const language = languageOf(result);
+  if (result.state === 'ENTITLEMENT_INACTIVE') {
+    return renderEntitlementInactive(result);
+  }
   if (result.state === 'SYNCING') {
     return renderRecoveryView(
       translate(language, 'stock.syncing'),
@@ -1446,6 +1554,9 @@ export function renderStockList(result: StockListResult): RenderedView {
 export function renderStockDetail(result: StockDetailResult): RenderedView {
   const language = languageOf(result);
   const timezone = timezoneOf(result);
+  if (result.state === 'ENTITLEMENT_INACTIVE') {
+    return renderEntitlementInactive(result);
+  }
   if (result.state === 'CONTEXT_CHANGED') {
     return renderRecoveryView(
       translate(language, 'stock.itemExpired'),
@@ -1541,6 +1652,9 @@ function renderSearchUsage(language: TelegramLanguage = 'en'): RenderedView {
 
 export function renderSearch(result: SearchResult): RenderedView {
   const language = languageOf(result);
+  if (result.state === 'ENTITLEMENT_INACTIVE') {
+    return renderEntitlementInactive(result);
+  }
   if (result.state === 'ORDER_DETAIL') {
     return renderOrderDetail({
       ...result.detail,
@@ -1643,6 +1757,9 @@ export function renderSearchSelection(
 ): RenderedView {
   const language = languageOf(result);
   const timezone = timezoneOf(result);
+  if (result.state === 'ENTITLEMENT_INACTIVE') {
+    return renderEntitlementInactive(result);
+  }
   if (result.state === 'ORDER') {
     const rendered = renderOrderDetail({
       ...result.detail,
@@ -1737,6 +1854,9 @@ export function renderSearchSelection(
 export function renderDailyReport(result: DailyReportResult): RenderedView {
   const language = languageOf(result);
   const timezone = timezoneOf(result);
+  if (result.state === 'ENTITLEMENT_INACTIVE') {
+    return renderEntitlementInactive(result);
+  }
   if (result.state === 'UNAUTHORIZED') {
     return renderRecoveryView(
       translate(language, 'report.unauthorized'),
@@ -1851,6 +1971,9 @@ export function renderOrderList(result: OrderListResult): {
 } {
   const language = languageOf(result);
   const timezone = timezoneOf(result);
+  if (result.state === 'ENTITLEMENT_INACTIVE') {
+    return renderEntitlementInactive(result);
+  }
   if (result.state === 'CONTEXT_CHANGED') {
     return renderRecoveryView(
       translate(language, 'general.expiredList'),
@@ -1931,6 +2054,9 @@ export function renderOrderDetail(result: OrderDetailResult): {
 } {
   const language = languageOf(result);
   const timezone = timezoneOf(result);
+  if (result.state === 'ENTITLEMENT_INACTIVE') {
+    return renderEntitlementInactive(result);
+  }
   if (result.state === 'CONTEXT_CHANGED') {
     return renderRecoveryView(
       translate(language, 'general.expiredList'),
@@ -2056,6 +2182,9 @@ export function renderOrderNoteOptions(
   detailRef: string
 ): RenderedView {
   const language = languageOf(result);
+  if (result.state === 'ENTITLEMENT_INACTIVE') {
+    return renderEntitlementInactive(result);
+  }
   if (result.state !== 'OK' || !result.ref || !result.visibilities) {
     return renderOrderNoteFailure(result.state, detailRef, language);
   }
@@ -2093,6 +2222,9 @@ export function renderOrderNoteStart(
   result: OrderNoteStartResult
 ): RenderedView {
   const language = languageOf(result);
+  if (result.state === 'ENTITLEMENT_INACTIVE') {
+    return renderEntitlementInactive(result);
+  }
   if (
     result.state !== 'OK' ||
     !result.inputRef ||
@@ -2125,6 +2257,9 @@ export function renderOrderNotePrepare(
   inputRef: string
 ): RenderedView {
   const language = languageOf(result);
+  if (result.state === 'ENTITLEMENT_INACTIVE') {
+    return renderEntitlementInactive(result);
+  }
   if (
     result.state !== 'OK' ||
     !result.confirmRef ||
@@ -2170,6 +2305,9 @@ export function renderOrderNoteMutation(
   result: OrderNoteMutationResult
 ): RenderedView {
   const language = languageOf(result);
+  if (result.state === 'ENTITLEMENT_INACTIVE') {
+    return renderEntitlementInactive(result);
+  }
   const keyboard = new InlineKeyboard();
 
   if (result.detailRef) {
@@ -2193,6 +2331,9 @@ export function renderOrderTransitions(
   detailRef: string
 ): { text: string; keyboard: InlineKeyboard } {
   const language = languageOf(result);
+  if (result.state === 'ENTITLEMENT_INACTIVE') {
+    return renderEntitlementInactive(result);
+  }
   if (result.state !== 'OK' || !result.ref || !result.targets) {
     if (result.state === 'CONTEXT_CHANGED') {
       return renderRecoveryView(
@@ -2275,6 +2416,9 @@ export function renderOrderStatusUpdate(result: OrderStatusUpdateResult): {
   keyboard: InlineKeyboard;
 } {
   const language = languageOf(result);
+  if (result.state === 'ENTITLEMENT_INACTIVE') {
+    return renderEntitlementInactive(result);
+  }
   if (result.order && result.freshness) {
     const completed = result.state === 'OK' || result.state === 'NO_OP';
     const rendered = renderOrderDetail({
@@ -2349,6 +2493,11 @@ function renderOrderNoteFailure(
   detailRef: string | undefined,
   language: TelegramLanguage
 ): RenderedView {
+  if (state === 'ENTITLEMENT_INACTIVE') {
+    return renderEntitlementInactive({
+      presentation: { language, timezone: 'UTC' },
+    });
+  }
   const keyboard = new InlineKeyboard();
 
   if (detailRef) {

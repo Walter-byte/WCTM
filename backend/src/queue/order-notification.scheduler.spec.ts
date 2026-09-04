@@ -5,6 +5,7 @@ import {
 } from '@prisma/client';
 
 import type { ProjectableWebhookEvent } from '../orders/order-projection.service';
+import type { EntitlementService } from '../entitlements/entitlement.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { TelegramOrderService } from '../telegram/telegram-order.service';
 import type { QueueRuntimeService } from './queue-runtime.service';
@@ -59,6 +60,7 @@ function setup(recipientCount: number) {
       NotificationRecipientMode.ALL_ELIGIBLE as NotificationRecipientMode,
     selectedNotificationRecipients: [] as Array<{ membershipId: string }>,
   }));
+  const isActive = jest.fn(async () => true);
   const scheduler = new OrderNotificationScheduler(
     {
       store: {
@@ -70,7 +72,8 @@ function setup(recipientCount: number) {
     {
       eligibleNotificationRecipients: jest.fn(async () => recipients),
     } as unknown as TelegramOrderService,
-    { addOrderNotificationJob } as unknown as QueueRuntimeService
+    { addOrderNotificationJob } as unknown as QueueRuntimeService,
+    { isActive } as unknown as EntitlementService
   );
 
   return {
@@ -79,6 +82,7 @@ function setup(recipientCount: number) {
     upsert,
     addOrderNotificationJob,
     findStoreSettings,
+    isActive,
   };
 }
 
@@ -126,6 +130,16 @@ describe('M13 order notification scheduling', () => {
 
   it('creates no delivery when current M11 context yields no recipient', async () => {
     const fixture = setup(0);
+
+    await fixture.scheduler.schedule(event());
+
+    expect(fixture.upsert).not.toHaveBeenCalled();
+    expect(fixture.addOrderNotificationJob).not.toHaveBeenCalled();
+  });
+
+  it('creates no delivery for an inactive Tenant event', async () => {
+    const fixture = setup(1);
+    fixture.isActive.mockResolvedValue(false);
 
     await fixture.scheduler.schedule(event());
 

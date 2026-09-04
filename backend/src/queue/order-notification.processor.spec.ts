@@ -3,6 +3,7 @@ import { TelegramOrderNotificationState } from '@prisma/client';
 import type { Job } from 'bullmq';
 
 import type { PrismaService } from '../prisma/prisma.service';
+import type { EntitlementService } from '../entitlements/entitlement.service';
 import type { TelegramDeliveryClient } from '../telegram/telegram-delivery.client';
 import type { TelegramOrderService } from '../telegram/telegram-order.service';
 import { ORDER_NOTIFICATION_JOB_NAME } from './queue.constants';
@@ -130,12 +131,14 @@ function setup(
     outcome: 'delivered',
     messageId: '501',
   }));
+  const isActive = jest.fn(async () => true);
   const processor = new OrderNotificationProcessor(
     {
       telegramOrderNotificationDelivery: { updateMany, findFirst },
     } as unknown as PrismaService,
     { prepareOrderNotification } as unknown as TelegramOrderService,
-    { send } as unknown as TelegramDeliveryClient
+    { send } as unknown as TelegramDeliveryClient,
+    { isActive } as unknown as EntitlementService
   );
 
   return {
@@ -144,10 +147,43 @@ function setup(
     prepareOrderNotification,
     send,
     updateMany,
+    isActive,
   };
 }
 
 describe('M13 durable notification delivery', () => {
+  it('terminally suppresses before Telegram dispatch when entitlement becomes inactive', async () => {
+    const fixture = setup();
+    fixture.isActive.mockResolvedValue(false);
+
+    await expect(fixture.processor.process(job())).resolves.toMatchObject({
+      outcome: 'terminal_failure',
+    });
+    expect(fixture.send).not.toHaveBeenCalled();
+    expect(fixture.delivery).toMatchObject({
+      state: TelegramOrderNotificationState.TERMINAL_FAILURE,
+      failureCode: 'entitlement-inactive',
+    });
+
+    fixture.isActive.mockResolvedValue(true);
+    await expect(fixture.processor.process(job())).resolves.toMatchObject({
+      outcome: 'already_final',
+    });
+    expect(fixture.send).not.toHaveBeenCalled();
+  });
+
+  it('revalidates after preparation and suppresses a last-moment suspension', async () => {
+    const fixture = setup();
+    fixture.isActive.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+    await expect(fixture.processor.process(job())).resolves.toMatchObject({
+      outcome: 'terminal_failure',
+    });
+    expect(fixture.prepareOrderNotification).toHaveBeenCalledTimes(1);
+    expect(fixture.send).not.toHaveBeenCalled();
+    expect(fixture.delivery.failureCode).toBe('entitlement-inactive');
+  });
+
   it('resumes a pending delivery, revalidates context, and persists success', async () => {
     const fixture = setup();
 

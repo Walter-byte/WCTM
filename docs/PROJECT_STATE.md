@@ -18,13 +18,18 @@ canonical WooCommerce webhooks, health/readiness, bootstrap, projection,
 integration, and durable delivery all passed. M18 and M17 remain fully closed.
 Phase 4 and M1–M16 remain complete and unchanged.
 
+M22 — Basic MVP Entitlements & Phase 5 Closure is implemented on
+`feat/m22-basic-mvp-entitlements` under accepted D-028 and awaits B review,
+merge, production migration/deployment, bounded production validation, and a
+separate final closure documentation commit. Phase 5 is not yet operationally
+closed.
+
 ---
 
 Current Task
 
-M21 — Notification / Localization Completion is operationally closed under
-accepted D-027. M22 — Basic MVP Entitlements & Phase 5 Closure is next and has
-not been started.
+M22 — Basic MVP Entitlements & Phase 5 Closure is implemented under accepted
+D-028 and awaiting B review. Do not begin Phase 6.
 
 ---
 
@@ -36,7 +41,10 @@ Project Version
 
 Repository
 
-Current branch: `main`.
+Current branch: `feat/m22-basic-mvp-entitlements`.
+
+M22 implementation commit: `feat(entitlements): add MVP tenant entitlement
+gate` on the feature branch; record the resulting hash in the review handoff.
 
 M21 implementation commit: `a1554a7 feat(localization): complete MVP Telegram
 localization`, merged through `7e3ad24 merge: complete M21 notification
@@ -802,21 +810,24 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No M21 blocker remains. Existing known issues and technical debt remain
+No known M22 implementation blocker remains. B review, merge, production
+migration/deployment, bounded lifecycle validation, and final documentation
+closure remain required. Existing known issues and technical debt remain
 unchanged.
 
 ---
 
 Next Milestone
 
-M22 — Basic MVP Entitlements & Phase 5 Closure. M22 has not been started.
+B review of M22 — Basic MVP Entitlements & Phase 5 Closure. Do not start Phase 6.
 
 ---
 
 Last Completed
 
-M21 Notification / Localization Completion is fully complete, merged, deployed,
-and operationally validated. Final decision: PASS.
+M21 Notification / Localization Completion remains the last operationally
+closed milestone. M22 is implemented but not yet reviewed, merged, deployed, or
+operationally validated.
 
 ---
 
@@ -828,7 +839,60 @@ Excellent
 
 Last Updated
 
-2026-09-03
+2026-09-04
+
+---
+
+M22 Implementation State
+
+- D-028 is Accepted. Existing `TenantPlan` values remain exactly `FREE`, `PRO`,
+  and `AGENCY`, informational only, with one common ACTIVE M1-M21 capability
+  bundle and no feature matrix or quotas.
+- Migration `20260904120000_m22_basic_mvp_entitlements` adds only persisted
+  `ACTIVE`/`SUSPENDED`, ACTIVE default, and nullable UTC expiry. Existing and
+  new Tenants become ACTIVE with no expiry; EXPIRED is derived at `now >=
+expiry` and SUSPENDED overrides expiry.
+- One global Nest entitlement service reads current non-deleted Tenant state
+  from PostgreSQL, exposes plan/persisted/effective/expiry summary, and provides
+  typed ACTIVE enforcement. No JWT, Redis, Telegram, callback, WooCommerce, web,
+  or connector entitlement claim is trusted.
+- `entitlement:manage` is the sole operator mutation surface. It requires one
+  explicit Tenant, supports inspect/status/expiry/clear, uses a serializable
+  exact-row update, and writes a safe system-actor AuditLog plus a structured
+  fingerprinted event.
+- M7/M10 and normal self-service Store onboarding require current ACTIVE
+  access. Token finalization/redemption revalidate inside their transaction and
+  do not consume or rotate secrets when inactive. Existing Store/plugin health,
+  links, configuration, and confirmed unlink remain intact.
+- Backend Telegram Order, Inventory, Search/Report, and M18 mutation services
+  resolve existing current authorization and signed-reference bindings before
+  asserting current ACTIVE access. Status and settings summary remain readable;
+  inactive settings are read-only and create no mutation references. Order
+  status/note writes recheck immediately before WooCommerce dispatch.
+- M8 authentication/ingestion/deduplication and M9/M19 projection continuity
+  are unchanged. M13 and M19 schedulers create no delivery while inactive;
+  claimed deliveries revalidate before preparation and dispatch and terminate
+  safely with `entitlement-inactive` without calling Telegram.
+- Reactivation retains all data, Stores, links, projections, settings,
+  incidents, and delivery history. Captured inactive incidents and existing
+  terminal/delivered/ambiguous outcomes are not replayed; only future eligible
+  events/transitions may schedule work.
+- M21's single bot-owned `fa`/`en` catalog renders plan/access/expiry, ACTIVE,
+  SUSPENDED, EXPIRED, read-only settings, denial, and Status/Help/Home recovery.
+  Persian expiry uses the Tenant timezone and Persian calendar; English uses
+  the same timezone and Gregorian calendar. The bot remains database-free and
+  the connector is unchanged.
+- Full gates pass: Prisma format/validate/generate; all 16 migrations deploy to
+  isolated PostgreSQL 16 and Prisma status is current; a representative
+  pre-M22 Tenant and a new post-M22 Tenant both probe ACTIVE/null expiry; the
+  operator CLI inspect, suspend, past-expiry/EXPIRED, and clear/ACTIVE lifecycle
+  passes; backend build and 459 Jest tests pass; backend Node/connector contracts
+  pass 24 with one native-PHP-only skip because PHP is unavailable; all 67 bot
+  tests pass; typecheck and lint pass. Final format and diff checks are part of
+  the clean handoff.
+- M22 is implemented/awaiting review only. Phase 5 is not marked complete until
+  B review, merge, production migration/deployment, bounded validation, and the
+  final closure documentation commit pass.
 
 ---
 
@@ -882,7 +946,7 @@ M21 Closure State
   Therefore no new LOW delivery row was expected. Automated localized LOW/OUT
   prepared-notification coverage is accepted for closure; no M21 defect or LOW
   notification failure is recorded.
-- M21 final decision: PASS. M22 is next and was not started.
+- M21 final decision: PASS. M22 is now implemented and awaiting review.
 
 ---
 

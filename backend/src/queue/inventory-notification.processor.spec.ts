@@ -6,6 +6,7 @@ import {
 import type { Job } from 'bullmq';
 
 import type { TelegramInventoryService } from '../inventory/telegram-inventory.service';
+import type { EntitlementService } from '../entitlements/entitlement.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { TelegramDeliveryClient } from '../telegram/telegram-delivery.client';
 import {
@@ -137,18 +138,52 @@ function setup(
     outcome: 'delivered',
     messageId: '501',
   }));
+  const isActive = jest.fn(async () => true);
   const processor = new InventoryNotificationProcessor(
     {
       telegramInventoryNotificationDelivery: { updateMany, findFirst },
     } as unknown as PrismaService,
     { prepareNotification } as unknown as TelegramInventoryService,
-    { send } as unknown as TelegramDeliveryClient
+    { send } as unknown as TelegramDeliveryClient,
+    { isActive } as unknown as EntitlementService
   );
 
-  return { delivery, prepareNotification, processor, send };
+  return { delivery, prepareNotification, processor, send, isActive };
 }
 
 describe('M19 durable Telegram inventory delivery', () => {
+  it('terminally suppresses before Telegram dispatch when entitlement becomes inactive', async () => {
+    const fixture = setup();
+    fixture.isActive.mockResolvedValue(false);
+
+    await expect(fixture.processor.process(job())).resolves.toMatchObject({
+      outcome: 'terminal_failure',
+    });
+    expect(fixture.send).not.toHaveBeenCalled();
+    expect(fixture.delivery).toMatchObject({
+      state: TelegramInventoryNotificationState.TERMINAL_FAILURE,
+      failureCode: 'entitlement-inactive',
+    });
+
+    fixture.isActive.mockResolvedValue(true);
+    await expect(fixture.processor.process(job())).resolves.toMatchObject({
+      outcome: 'already_final',
+    });
+    expect(fixture.send).not.toHaveBeenCalled();
+  });
+
+  it('revalidates after preparation and suppresses a last-moment suspension', async () => {
+    const fixture = setup();
+    fixture.isActive.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+    await expect(fixture.processor.process(job())).resolves.toMatchObject({
+      outcome: 'terminal_failure',
+    });
+    expect(fixture.prepareNotification).toHaveBeenCalledTimes(1);
+    expect(fixture.send).not.toHaveBeenCalled();
+    expect(fixture.delivery.failureCode).toBe('entitlement-inactive');
+  });
+
   it('revalidates the current recipient and persists one confirmed send', async () => {
     const fixture = setup();
 

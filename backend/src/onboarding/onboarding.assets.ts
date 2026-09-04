@@ -145,6 +145,11 @@ export const ONBOARDING_JAVASCRIPT = `'use strict';
     });
     const data = response.status === 204 ? null : await response.json().catch(() => null);
     if (!response.ok) {
+      if (response.status === 403 && data?.code === 'ENTITLEMENT_INACTIVE') {
+        const error = new Error('Service access is inactive. Store registration and Telegram linking are unavailable; account and connection status remain available.');
+        error.status = response.status;
+        throw error;
+      }
       const detail = Array.isArray(data?.message) ? data.message.join(' ') : data?.message;
       const error = new Error(typeof detail === 'string' ? detail : 'The request could not be completed.');
       error.status = response.status;

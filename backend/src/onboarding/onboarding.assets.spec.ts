@@ -46,4 +46,13 @@ describe('M16 onboarding surface', () => {
       ONBOARDING_JAVASCRIPT.indexOf("show('telegram-step', usable)")
     );
   });
+
+  it('renders a safe inactive-entitlement onboarding boundary', () => {
+    expect(ONBOARDING_JAVASCRIPT).toContain(
+      "data?.code === 'ENTITLEMENT_INACTIVE'"
+    );
+    expect(ONBOARDING_JAVASCRIPT).toContain(
+      'Service access is inactive. Store registration and Telegram linking are unavailable'
+    );
+  });
 });

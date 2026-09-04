@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 
 import type { InventoryAlertSignal } from '../inventory/inventory-projection.service';
+import type { EntitlementService } from '../entitlements/entitlement.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { TelegramOrderService } from '../telegram/telegram-order.service';
 import {
@@ -97,6 +98,7 @@ function setup(recipientCount: number) {
   };
   const addInventoryNotificationJob = jest.fn(async () => ({ id: 'job' }));
   const eligibleNotificationRecipients = jest.fn(async () => recipients);
+  const isActive = jest.fn(async () => true);
   const scheduler = new InventoryNotificationScheduler(
     {
       inventoryItem: { findFirst: jest.fn(async () => ({ ...item })) },
@@ -120,7 +122,8 @@ function setup(recipientCount: number) {
       ),
     } as unknown as PrismaService,
     { eligibleNotificationRecipients } as unknown as TelegramOrderService,
-    { addInventoryNotificationJob } as unknown as QueueRuntimeService
+    { addInventoryNotificationJob } as unknown as QueueRuntimeService,
+    { isActive } as unknown as EntitlementService
   );
 
   return {
@@ -130,10 +133,27 @@ function setup(recipientCount: number) {
     item,
     policy,
     scheduler,
+    isActive,
   };
 }
 
 describe('M19 durable inventory notification scheduling', () => {
+  it('captures no recipients while inactive so reactivation cannot revive the incident', async () => {
+    const fixture = setup(2);
+    fixture.isActive.mockResolvedValue(false);
+
+    await fixture.scheduler.schedule('ten_a', 'sto_a', signal());
+
+    expect(fixture.deliveries).toHaveLength(0);
+    expect(fixture.item.lowAlertRecipientsCapturedAt).toBeInstanceOf(Date);
+    expect(fixture.addInventoryNotificationJob).not.toHaveBeenCalled();
+
+    fixture.isActive.mockResolvedValue(true);
+    await fixture.scheduler.schedule('ten_a', 'sto_a', signal());
+    expect(fixture.deliveries).toHaveLength(0);
+    expect(fixture.addInventoryNotificationJob).not.toHaveBeenCalled();
+  });
+
   it('captures ALL_ELIGIBLE recipients once and enqueues deterministic deliveries', async () => {
     const fixture = setup(2);
 

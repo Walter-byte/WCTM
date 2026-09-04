@@ -10,6 +10,10 @@ import {
 } from '@prisma/client';
 
 import type { ApplicationConfigService } from '../config/application-config.service';
+import {
+  EntitlementInactiveException,
+  type EntitlementService,
+} from '../entitlements/entitlement.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { InventoryBootstrapScheduler } from '../queue/inventory-bootstrap.scheduler';
 import { TelegramInventoryService } from './telegram-inventory.service';
@@ -112,6 +116,7 @@ function setup(
     },
   } as unknown as PrismaService;
   const ensureInitialized = jest.fn(async () => initialization);
+  const assertActive = jest.fn(async () => undefined);
   const service = new TelegramInventoryService(
     prisma,
     {
@@ -120,12 +125,14 @@ function setup(
         callbackRefTtlSeconds: 900,
       },
     } as ApplicationConfigService,
-    { ensureInitialized } as unknown as InventoryBootstrapScheduler
+    { ensureInitialized } as unknown as InventoryBootstrapScheduler,
+    { assertActive } as unknown as EntitlementService
   );
   const telegram = { userId: '1001', chatId: '2001' };
 
   return {
     createManyReferences,
+    assertActive,
     ensureInitialized,
     findItem,
     findManyItems,
@@ -136,6 +143,19 @@ function setup(
 }
 
 describe('M19 /stock backend contract', () => {
+  it('blocks inactive stock access before bootstrap or projection reads', async () => {
+    const fixture = setup();
+    fixture.assertActive.mockRejectedValueOnce(
+      new EntitlementInactiveException('SUSPENDED')
+    );
+
+    await expect(
+      fixture.service.list({ telegram: fixture.telegram })
+    ).rejects.toBeInstanceOf(EntitlementInactiveException);
+    expect(fixture.ensureInitialized).not.toHaveBeenCalled();
+    expect(fixture.findManyItems).not.toHaveBeenCalled();
+  });
+
   it.each([MembershipRole.OWNER, MembershipRole.ADMIN, MembershipRole.MEMBER])(
     'allows %s read access with Store-scoped eight-row pagination',
     async (role) => {

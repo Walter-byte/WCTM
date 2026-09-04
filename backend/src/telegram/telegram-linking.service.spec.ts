@@ -3,6 +3,7 @@ import { StoreStatus } from '@prisma/client';
 import { createHash } from 'node:crypto';
 
 import type { ApplicationConfigService } from '../config/application-config.service';
+import type { EntitlementService } from '../entitlements/entitlement.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import { TelegramInternalController } from './telegram-internal.controller';
 import { TelegramLinkingService } from './telegram-linking.service';
@@ -272,7 +273,20 @@ function setup() {
   const configuration = {
     telegram: { linkTokenTtlSeconds: 900 },
   } as ApplicationConfigService;
-  const service = new TelegramLinkingService(prisma, configuration);
+  const resolveTenant = jest.fn(async () => ({
+    plan: 'FREE',
+    status: 'ACTIVE',
+    effectiveState: 'ACTIVE',
+    expiresAt: null,
+  }));
+  const entitlements = {
+    resolveTenant,
+  } as unknown as EntitlementService;
+  const service = new TelegramLinkingService(
+    prisma,
+    configuration,
+    entitlements
+  );
 
   function addToken(
     raw: string,
@@ -311,6 +325,7 @@ function setup() {
     chats,
     memberships,
     redeemInput,
+    resolveTenant,
     service,
     storeFindMany,
     stores,
@@ -319,6 +334,50 @@ function setup() {
 }
 
 describe('TelegramLinkingService', () => {
+  it('blocks inactive link-token issuance before persisting a token', async () => {
+    const fixture = setup();
+    fixture.memberships.set('usr_m16', ['ten_m16']);
+    fixture.stores.set('ten_m16', [
+      { id: 'sto_m16', status: StoreStatus.ACTIVE, deletedAt: null },
+    ]);
+    fixture.resolveTenant.mockResolvedValue({
+      plan: 'FREE',
+      status: 'SUSPENDED',
+      effectiveState: 'SUSPENDED',
+      expiresAt: null,
+    });
+
+    await expect(
+      fixture.service.issueToken({ sub: 'usr_m16' })
+    ).rejects.toMatchObject({
+      response: { code: 'ENTITLEMENT_INACTIVE', effectiveState: 'SUSPENDED' },
+    });
+    expect(fixture.tokens).toHaveLength(0);
+  });
+
+  it('rejects redemption after suspension without consuming the issued token', async () => {
+    const fixture = setup();
+    fixture.memberships.set('usr_m16', ['ten_m16']);
+    fixture.stores.set('ten_m16', [
+      { id: 'sto_m16', status: StoreStatus.ACTIVE, deletedAt: null },
+    ]);
+    const issued = await fixture.service.issueToken({ sub: 'usr_m16' });
+    fixture.resolveTenant.mockResolvedValue({
+      plan: 'FREE',
+      status: 'SUSPENDED',
+      effectiveState: 'SUSPENDED',
+      expiresAt: null,
+    });
+
+    await expect(
+      fixture.service.redeem(fixture.redeemInput(issued.token))
+    ).resolves.toMatchObject({
+      status: 'entitlement_inactive',
+      entitlement: { effectiveState: 'SUSPENDED' },
+    });
+    expect(fixture.tokens[0]?.consumedAt).toBeNull();
+  });
+
   it('completes the M16 onboarding issuance-to-Telegram redemption path', async () => {
     const fixture = setup();
     fixture.memberships.set('usr_m16', ['ten_m16']);

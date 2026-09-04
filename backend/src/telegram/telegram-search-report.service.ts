@@ -13,6 +13,7 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { ApplicationConfigService } from '../config/application-config.service';
+import { EntitlementService } from '../entitlements/entitlement.service';
 import {
   type TelegramProjectedStockDetailResult,
   TelegramInventoryService,
@@ -177,7 +178,8 @@ export class TelegramSearchReportService {
     private readonly configuration: ApplicationConfigService,
     private readonly encryption: EncryptionService,
     private readonly orders: TelegramOrderService,
-    private readonly inventory: TelegramInventoryService
+    private readonly inventory: TelegramInventoryService,
+    private readonly entitlements: EntitlementService
   ) {}
 
   async search(input: TelegramSearchDto): Promise<TelegramSearchResult> {
@@ -209,6 +211,8 @@ export class TelegramSearchReportService {
         return { state: 'CONTEXT_CHANGED' };
       }
 
+      await this.entitlements.assertActive(context.tenantId);
+
       try {
         normalized = this.encryption.decrypt(pageReference.queryEncrypted);
       } catch {
@@ -216,6 +220,7 @@ export class TelegramSearchReportService {
       }
       offset = pageReference.pageOffset;
     } else {
+      await this.entitlements.assertActive(context.tenantId);
       const query = input.query?.trim() ?? '';
 
       if (!query || query.length > MAX_QUERY_LENGTH) {
@@ -369,6 +374,8 @@ export class TelegramSearchReportService {
       return { state: 'CONTEXT_CHANGED' };
     }
 
+    await this.entitlements.assertActive(context.tenantId);
+
     const backCursor = this.tokenForReferenceId('q', back.id);
 
     if (
@@ -410,6 +417,7 @@ export class TelegramSearchReportService {
     }
 
     const context = resolved.context;
+    await this.entitlements.assertActive(context.tenantId);
     const bounds = tenantDayBounds(new Date(), context.timezone);
     const orders = await this.prisma.order.findMany({
       where: {

@@ -14,6 +14,7 @@ import { CorrelationIdMiddleware } from './common/request-context/correlation-id
 import { RequestContextModule } from './common/request-context/request-context.module';
 import { ApplicationConfigModule } from './config/application-config.module';
 import { HealthModule } from './health/health.module';
+import { EntitlementsModule } from './entitlements/entitlements.module';
 import { MembershipsModule } from './memberships/memberships.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { PilotModule } from './pilot/pilot.module';
@@ -31,6 +32,7 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     ApplicationConfigModule,
     RequestContextModule,
     StructuredLoggingModule,
+    EntitlementsModule,
     AuthModule,
     PrismaModule,
     HealthModule,

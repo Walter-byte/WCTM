@@ -14,6 +14,13 @@ enum TenantPlan {
   @@map("tenant_plan")
 }
 
+enum TenantEntitlementStatus {
+  ACTIVE
+  SUSPENDED
+
+  @@map("tenant_entitlement_status")
+}
+
 enum StoreStatus {
   PENDING
   ACTIVE
@@ -198,6 +205,8 @@ model Tenant {
   id                          String                                  @id @map("id") @db.VarChar(64)
   name                        String                                  @map("name") @db.VarChar(255)
   plan                        TenantPlan                              @default(FREE) @map("plan")
+  entitlementStatus           TenantEntitlementStatus                 @default(ACTIVE) @map("entitlement_status")
+  entitlementExpiresAt        DateTime?                               @map("entitlement_expires_at") @db.Timestamptz(3)
   timezone                    String                                  @default("UTC") @map("timezone") @db.VarChar(64)
   language                    TenantLanguage                          @default(FA) @map("language")
   createdAt                   DateTime                                @default(now()) @map("created_at") @db.Timestamptz(3)

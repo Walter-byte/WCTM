@@ -16,6 +16,10 @@ import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import { ApplicationConfigService } from '../config/application-config.service';
 import {
+  EntitlementInactiveException,
+  EntitlementService,
+} from '../entitlements/entitlement.service';
+import {
   OrderProjectionService,
   type ProjectableStore,
 } from '../orders/order-projection.service';
@@ -346,7 +350,8 @@ export class TelegramOrderService {
     private readonly prisma: PrismaService,
     private readonly configuration: ApplicationConfigService,
     private readonly encryption: EncryptionService,
-    private readonly orderProjection: OrderProjectionService
+    private readonly orderProjection: OrderProjectionService,
+    private readonly entitlements: EntitlementService
   ) {}
 
   async eligibleNotificationRecipients(
@@ -427,6 +432,7 @@ export class TelegramOrderService {
     }
 
     const context = resolution.context;
+    await this.entitlements.assertActive(context.tenantId);
     const policy = await this.prisma.store.findFirst({
       where: {
         id: storeId,
@@ -542,6 +548,8 @@ export class TelegramOrderService {
         return this.emptyList('CONTEXT_CHANGED');
       }
     }
+
+    await this.entitlements.assertActive(context.tenantId);
 
     const direction =
       pageReference?.direction ?? TelegramCallbackDirection.CURRENT;
@@ -671,6 +679,9 @@ export class TelegramOrderService {
       return this.emptyDetail(resolution.state);
     }
 
+    const context = resolution.context;
+    await this.entitlements.assertActive(context.tenantId);
+
     if (!ORDER_NUMBER_PATTERN.test(input.orderNumber)) {
       return {
         state: 'MALFORMED_ORDER_NUMBER',
@@ -678,7 +689,6 @@ export class TelegramOrderService {
       };
     }
 
-    const context = resolution.context;
     const matches = await this.prisma.order.findMany({
       where: {
         tenantId: context.tenantId,
@@ -744,6 +754,7 @@ export class TelegramOrderService {
     }
 
     const context = resolution.context;
+    await this.entitlements.assertActive(context.tenantId);
     const order = await this.prisma.order.findFirst({
       where: {
         tenantId: context.tenantId,
@@ -814,6 +825,8 @@ export class TelegramOrderService {
       return this.emptyDetail('CONTEXT_CHANGED');
     }
 
+    await this.entitlements.assertActive(context.tenantId);
+
     const order = await this.prisma.order.findFirst({
       where: {
         tenantId: context.tenantId,
@@ -840,6 +853,7 @@ export class TelegramOrderService {
     }
 
     try {
+      await this.entitlements.assertActive(context.tenantId);
       const payload = await this.createWooCommerceClient(store).fetchOrder(
         reference.targetWcOrderId
       );
@@ -878,6 +892,8 @@ export class TelegramOrderService {
     if (!reference?.targetWcOrderId || !reference.backReferenceId) {
       return this.emptyDetail('CONTEXT_CHANGED');
     }
+
+    await this.entitlements.assertActive(context.tenantId);
 
     const order = await this.prisma.order.findFirst({
       where: {
@@ -943,6 +959,8 @@ export class TelegramOrderService {
       return { state: resolved.state };
     }
 
+    await this.entitlements.assertActive(resolved.context.tenantId);
+
     return {
       state: 'OK',
       ref: input.ref,
@@ -961,6 +979,8 @@ export class TelegramOrderService {
     if (resolved.state !== 'OK') {
       return { state: resolved.state };
     }
+
+    await this.entitlements.assertActive(resolved.context.tenantId);
 
     const visibility = input.visibility as TelegramOrderNoteVisibility;
     const inputReference = this.newReference(
@@ -1034,6 +1054,8 @@ export class TelegramOrderService {
     ) {
       return { state: 'CONTEXT_CHANGED' };
     }
+
+    await this.entitlements.assertActive(context.tenantId);
 
     const note = normalizeOrderNote(input.note);
 
@@ -1140,6 +1162,12 @@ export class TelegramOrderService {
       return { state: 'CONTEXT_CHANGED' };
     }
 
+    if (reference.expiresAt <= new Date()) {
+      return { state: 'EXPIRED_REF' };
+    }
+
+    await this.entitlements.assertActive(resolution.context.tenantId);
+
     const replay = await this.noteActionReplay(reference.id);
 
     if (replay) {
@@ -1231,6 +1259,8 @@ export class TelegramOrderService {
       return { state: 'CONTEXT_CHANGED' };
     }
 
+    await this.entitlements.assertActive(context.tenantId);
+
     const order = await this.prisma.order.findFirst({
       where: {
         tenantId: context.tenantId,
@@ -1269,6 +1299,7 @@ export class TelegramOrderService {
     }
 
     try {
+      await this.entitlements.assertActive(context.tenantId);
       const authoritative = await this.createWooCommerceClient(
         store
       ).fetchOrder(reference.targetWcOrderId);
@@ -1343,6 +1374,7 @@ export class TelegramOrderService {
       reference.noteVisibility === TelegramOrderNoteVisibility.CUSTOMER;
 
     try {
+      await this.entitlements.assertActive(context.tenantId);
       const response = await this.createWooCommerceClient(
         store
       ).createOrderNote(reference.targetWcOrderId, note, customerNote);
@@ -1448,6 +1480,8 @@ export class TelegramOrderService {
       return { state: 'FORBIDDEN_ROLE' };
     }
 
+    await this.entitlements.assertActive(context.tenantId);
+
     const order = await this.prisma.order.findFirst({
       where: {
         tenantId: context.tenantId,
@@ -1544,6 +1578,8 @@ export class TelegramOrderService {
       return { state: 'INVALID_TARGET' };
     }
 
+    await this.entitlements.assertActive(context.tenantId);
+
     const order = await this.prisma.order.findFirst({
       where: {
         tenantId: context.tenantId,
@@ -1590,6 +1626,7 @@ export class TelegramOrderService {
     let livePayload: unknown;
 
     try {
+      await this.entitlements.assertActive(context.tenantId);
       livePayload = await this.createWooCommerceClient(store).fetchOrder(
         reference.targetWcOrderId
       );
@@ -1681,6 +1718,7 @@ export class TelegramOrderService {
     }
 
     try {
+      await this.entitlements.assertActive(context.tenantId);
       const updatedPayload = await this.createWooCommerceClient(
         store
       ).updateOrderStatus(reference.targetWcOrderId, input.target);
@@ -1708,6 +1746,10 @@ export class TelegramOrderService {
         reference.backReferenceId
       );
     } catch (error: unknown) {
+      if (error instanceof EntitlementInactiveException) {
+        return this.completeFailure(writeId, 'FAILED');
+      }
+
       return this.reconcileLostWrite(
         writeId,
         error,

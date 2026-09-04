@@ -43,39 +43,40 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-027)
+## 3. Architectural Decisions (D-001–D-028)
 
-| ID    | Decision                                                                                                                                                                                             | Status   |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| D-001 | Develop as production SaaS                                                                                                                                                                           | Accepted |
-| D-002 | NestJS for backend (alt: Fastify standalone)                                                                                                                                                         | Accepted |
-| D-003 | PostgreSQL as database                                                                                                                                                                               | Accepted |
-| D-004 | Redis mandatory (cache, queues, sessions, rate-limiting)                                                                                                                                             | Accepted |
-| D-005 | BullMQ for async jobs                                                                                                                                                                                | Accepted |
-| D-006 | WooCommerce via REST API + Webhooks                                                                                                                                                                  | Accepted |
-| D-007 | Telegram is primary management UI                                                                                                                                                                    | Accepted |
-| D-008 | n8n excluded from production                                                                                                                                                                         | Accepted |
-| D-009 | WordPress plugin stays lightweight                                                                                                                                                                   | Accepted |
-| D-010 | Simplicity-first; no overengineering, no premature optimization                                                                                                                                      | Accepted |
-| D-011 | Prisma ORM + Prisma Migrate; `schema.prisma` is single source of truth; all models have `created_at`/`updated_at`; soft-delete on Tenant, Store, Membership                                          | Accepted |
-| D-012 | PrismaService uses Prisma's official PostgreSQL driver adapter                                                                                                                                       | Accepted |
-| D-013 | Global typed configuration uses `@nestjs/config` with Joi validation                                                                                                                                 | Accepted |
-| D-014 | One in-process BullMQ operations worker with three exponential-backoff attempts                                                                                                                      | Accepted |
-| D-015 | Fail-closed WooCommerce credential validation with bounded REST retries, timeouts, and secret-safe normalized errors                                                                                 | Accepted |
-| D-016 | WooCommerce-REST-only plugin registration verification, reissue-and-rotate recovery, and endpoint-scoped Redis limiting                                                                              | Accepted |
-| D-017 | Dedicated encrypted webhook secrets, routing-only endpoint keys, raw-body HMAC authentication, recoverable idempotent persist/enqueue, and OWNER/ADMIN rotation                                      | Accepted |
-| D-018 | Store-scoped Order projection with timestamp/fingerprint ordering, processing-lease recovery, bounded single-order reconciliation, and verified delete/restore handling                              | Accepted |
-| D-019 | Backend-owned one-time Telegram linking, bot-key internal API, private-chat-only authorization, update idempotency, exact-one context resolution, and soft unlinking                                 | Accepted |
-| D-020 | Read-only M9 Order access with bounded keyset pagination, `lastSyncedAt` freshness, and expiring HMAC-authenticated callback references bound to current Telegram context                            | Accepted |
-| D-021 | OWNER/ADMIN Telegram order-status writes using server-derived targets, single-effect HMAC references, durable idempotency, one WooCommerce dispatch, and authoritative/lost-response reconciliation  | Accepted |
-| D-022 | Private-pilot setup/readiness tooling with no reset or force path, hidden JWT internals, a public Caddy HTTPS gate, manual synthetic-order creation, and no public onboarding claim                  | Accepted |
-| D-023 | Backend-owned durable new-order notification delivery with existing M10/M11 authorization, M11/M12 actions, deterministic M5 jobs, conservative ambiguous outcomes, and stateless bot-only transport | Accepted |
-| D-024 | Tenant-owned timezone/language, Store-owned threshold/category/recipient policy, Membership-selected recipients under M10 authority, M13-only filtering, and stateless bot settings references       | Accepted |
-| D-025 | WooCommerce-authoritative narrow inventory projection, core product-webhook updates, Store threshold policy, stock-owning item semantics, incident delivery, M18/M10 recipients, and no stock writes | Accepted |
-| D-026 | Store-scoped projection-only exact/prefix Order/inventory search and on-demand Tenant-local projected operational daily report, with no live Woo reads, analytics platform, or scheduler             | Accepted |
-| D-027 | Tenant-authoritative typed Persian/English Telegram presentation, RTL/bidi and Tenant-timezone calendar formatting, and semantic M13/M19 notification rendering without delivery-policy changes      | Accepted |
+| ID    | Decision                                                                                                                                                                                                                   | Status   |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| D-001 | Develop as production SaaS                                                                                                                                                                                                 | Accepted |
+| D-002 | NestJS for backend (alt: Fastify standalone)                                                                                                                                                                               | Accepted |
+| D-003 | PostgreSQL as database                                                                                                                                                                                                     | Accepted |
+| D-004 | Redis mandatory (cache, queues, sessions, rate-limiting)                                                                                                                                                                   | Accepted |
+| D-005 | BullMQ for async jobs                                                                                                                                                                                                      | Accepted |
+| D-006 | WooCommerce via REST API + Webhooks                                                                                                                                                                                        | Accepted |
+| D-007 | Telegram is primary management UI                                                                                                                                                                                          | Accepted |
+| D-008 | n8n excluded from production                                                                                                                                                                                               | Accepted |
+| D-009 | WordPress plugin stays lightweight                                                                                                                                                                                         | Accepted |
+| D-010 | Simplicity-first; no overengineering, no premature optimization                                                                                                                                                            | Accepted |
+| D-011 | Prisma ORM + Prisma Migrate; `schema.prisma` is single source of truth; all models have `created_at`/`updated_at`; soft-delete on Tenant, Store, Membership                                                                | Accepted |
+| D-012 | PrismaService uses Prisma's official PostgreSQL driver adapter                                                                                                                                                             | Accepted |
+| D-013 | Global typed configuration uses `@nestjs/config` with Joi validation                                                                                                                                                       | Accepted |
+| D-014 | One in-process BullMQ operations worker with three exponential-backoff attempts                                                                                                                                            | Accepted |
+| D-015 | Fail-closed WooCommerce credential validation with bounded REST retries, timeouts, and secret-safe normalized errors                                                                                                       | Accepted |
+| D-016 | WooCommerce-REST-only plugin registration verification, reissue-and-rotate recovery, and endpoint-scoped Redis limiting                                                                                                    | Accepted |
+| D-017 | Dedicated encrypted webhook secrets, routing-only endpoint keys, raw-body HMAC authentication, recoverable idempotent persist/enqueue, and OWNER/ADMIN rotation                                                            | Accepted |
+| D-018 | Store-scoped Order projection with timestamp/fingerprint ordering, processing-lease recovery, bounded single-order reconciliation, and verified delete/restore handling                                                    | Accepted |
+| D-019 | Backend-owned one-time Telegram linking, bot-key internal API, private-chat-only authorization, update idempotency, exact-one context resolution, and soft unlinking                                                       | Accepted |
+| D-020 | Read-only M9 Order access with bounded keyset pagination, `lastSyncedAt` freshness, and expiring HMAC-authenticated callback references bound to current Telegram context                                                  | Accepted |
+| D-021 | OWNER/ADMIN Telegram order-status writes using server-derived targets, single-effect HMAC references, durable idempotency, one WooCommerce dispatch, and authoritative/lost-response reconciliation                        | Accepted |
+| D-022 | Private-pilot setup/readiness tooling with no reset or force path, hidden JWT internals, a public Caddy HTTPS gate, manual synthetic-order creation, and no public onboarding claim                                        | Accepted |
+| D-023 | Backend-owned durable new-order notification delivery with existing M10/M11 authorization, M11/M12 actions, deterministic M5 jobs, conservative ambiguous outcomes, and stateless bot-only transport                       | Accepted |
+| D-024 | Tenant-owned timezone/language, Store-owned threshold/category/recipient policy, Membership-selected recipients under M10 authority, M13-only filtering, and stateless bot settings references                             | Accepted |
+| D-025 | WooCommerce-authoritative narrow inventory projection, core product-webhook updates, Store threshold policy, stock-owning item semantics, incident delivery, M18/M10 recipients, and no stock writes                       | Accepted |
+| D-026 | Store-scoped projection-only exact/prefix Order/inventory search and on-demand Tenant-local projected operational daily report, with no live Woo reads, analytics platform, or scheduler                                   | Accepted |
+| D-027 | Tenant-authoritative typed Persian/English Telegram presentation, RTL/bidi and Tenant-timezone calendar formatting, and semantic M13/M19 notification rendering without delivery-policy changes                            | Accepted |
+| D-028 | One backend-authoritative Tenant ACTIVE/SUSPENDED lifecycle with derived expiry, operator-only mutation, explicit product gates, continued projections, terminal notification suppression, and no commercial billing scope | Accepted |
 
-Next decision number: **D-028**, if a future task produces a genuine
+Next decision number: **D-029**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -1033,56 +1034,73 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `main`.
+Current branch: `feat/m22-basic-mvp-entitlements`.
 
 ---
 
 ## 6. Current Blockers
 
-No M21 blocker remains. Existing known issues and technical debt remain
-unchanged.
+No known M22 implementation blocker remains. B review, merge, production
+migration/deployment, bounded validation, and final closure documentation are
+still required. Existing known issues and technical debt remain unchanged.
 
 ---
 
 ## 7. Current Task
 
-M21 — Notification / Localization Completion is fully complete, merged,
-deployed, and operationally validated under accepted D-027. Implementation
-`a1554a7` was merged through `7e3ad24`. The bot owns one typed
-`fa`/`en` catalog across all M10–M20 manager surfaces and renders M13
-ORDER_CREATED plus M19 LOW/OUT prepared notifications from semantic backend
-data. Tenant language/timezone remain authoritative; Persian uses bidi
-isolation and Persian-calendar `Intl`, English uses Gregorian `Intl`, and
-unknown runtime language falls back to English. No schema, migration,
-dependency, queue/process topology, delivery identity/retry/recipient policy,
-onboarding/connector surface, or M22 capability changed.
+M22 — Basic MVP Entitlements & Phase 5 Closure is implemented on
+`feat/m22-basic-mvp-entitlements` under accepted D-028 and awaits B review.
 
-Backend and telegram-bot deployment passed with no migration; the connector was
-unchanged. Backend startup was clean, bot polling started normally, and
-`/api/health` plus `/api/health/readiness` passed. Production Persian validation
-broadly passed Home, order surfaces/actions, `/search`, `/report`, `/stock`,
-`/settings`, `/status`, `/help`, native command descriptions, and Back/Home
-navigation. Language changes applied immediately; Persian-calendar date/time
-used the configured Tenant timezone, and LTR identifiers remained exact and
-readable under RTL. Switching back to English immediately restored Home and
-representative operational surfaces.
+The implementation adds migration
+`20260904120000_m22_basic_mvp_entitlements`, containing only the
+`TenantEntitlementStatus` ACTIVE/SUSPENDED enum, ACTIVE Tenant default, and
+nullable UTC expiry. Existing plans remain exactly `FREE`, `PRO`, and `AGENCY`,
+informational only. EXPIRED is derived at `now >= expiry`, SUSPENDED overrides
+expiry, and current PostgreSQL Tenant state is the only authority.
 
-A Persian `ORDER_CREATED` notification delivered successfully, with some live-
-environment delay, and its View Order/action behavior remained functional. No
-historical order or inventory deliveries were resent solely because language
-changed.
+One Nest entitlement service gates normal Store creation, M7 registration token
+issuance/finalization, M10 link issuance/redemption, all operational Order,
+Inventory, Search/Report surfaces, signed operational references, and M18
+mutations. Existing RBAC still applies. `/status`, `/help`, confirmed `/unlink`,
+and read-only `/settings` remain available; inactive settings issue no mutation
+references. Status/settings present safe plan/effective-state/expiry metadata.
+Order status and note operations recheck entitlement immediately before the Woo
+write.
 
-The bounded LOW live attempt remained `OUT_OF_STOCK`: `stock_quantity = 1`, Woo
-`stock_status = outofstock`, WCTM `alert_classification = OUT_OF_STOCK`, incident
-generation 5. M19 correctly makes explicit Woo `outofstock` authoritative
-regardless of numeric quantity. The accepted `product.updated` WebhookEvent was
-`COMPLETED` and the projection updated, so the attempt did not create a genuine
-HEALTHY to LOW_STOCK transition and no new LOW delivery row was expected.
-Automated localized LOW/OUT prepared-notification coverage is accepted for M21
-closure; this is not an M21 defect or a failed LOW notification.
+M8 authenticated webhook ingestion/deduplication and M9/M19 projection remain
+unchanged and continue while inactive. M13/M19 schedule no new delivery while
+inactive and revalidate before preparation and dispatch; captured work becomes
+terminal/non-retry with safe `entitlement-inactive` without a Telegram call.
+Inventory incident recipient capture prevents reactivation from reviving an
+inactive-period LOW/OUT incident. Existing links, Store/plugin/webhook
+configuration, projections, settings, delivery rows, and history are retained.
 
-M21 final decision: PASS. M22 — Basic MVP Entitlements & Phase 5 Closure is
-next and has not been started.
+The sole mutation path is the application-context `entitlement:manage` command
+for one explicit non-deleted Tenant. It supports inspect, ACTIVE/SUSPENDED,
+explicit ISO-8601 UTC expiry, and clear-expiry, and records a nullable-system-
+actor AuditLog plus safe fingerprinted structured event. There is no public,
+Tenant-member, Telegram, onboarding, or connector mutation surface.
+
+M21's single `fa`/`en` bot catalog now owns ACTIVE/SUSPENDED/EXPIRED, plan,
+expiry, denial, read-only settings, and recovery presentation. Persian uses the
+Tenant timezone and Persian calendar; English uses the same timezone and
+Gregorian calendar. The bot remains stateless/database-free and the connector
+is unchanged.
+
+Implementation gates pass. Prisma format/validate/generate passed. Prisma
+deployed all 16 migrations to isolated PostgreSQL 16 and reported the schema up
+to date. A separate representative pre-M22 chain proved an existing Tenant and
+a newly created Tenant both become ACTIVE with null expiry. The supported
+operator command passed inspect, suspend, ACTIVE plus past expiry producing
+effective EXPIRED, and clear-expiry restoring indefinite ACTIVE. Backend build
+passed; backend Node/connector contracts passed 24 with one native-PHP-only skip
+because PHP is unavailable; all 459 backend Jest tests and all 67 bot tests
+passed; typecheck and lint passed. Final format/diff checks and clean commit
+state are recorded at implementation handoff.
+
+Do not mark M22 or Phase 5 closed before B returns MERGE, main is deployed,
+production migration and bounded ACTIVE/SUSPENDED/reactivation validation pass,
+and a final documentation closure commit is merged. Do not begin Phase 6.
 
 ---
 

@@ -1,5 +1,7 @@
 import { InventorySyncState, Prisma } from '@prisma/client';
 
+import { EntitlementInactiveException } from '../entitlements/entitlement.service';
+
 import {
   TelegramSearchReportService,
   tenantDayBounds,
@@ -75,6 +77,7 @@ function fixture(options?: {
     }),
   };
   const inventory = { openProjectedDetail: jest.fn() };
+  const assertActive = jest.fn(async () => undefined);
   const service = new TelegramSearchReportService(
     prisma as never,
     {
@@ -89,13 +92,30 @@ function fixture(options?: {
       decrypt: (value: string) => value.replace(/^encrypted:/, ''),
     } as never,
     orders as never,
-    inventory as never
+    inventory as never,
+    { assertActive } as never
   );
 
-  return { service, prisma, orders, inventory };
+  return { service, prisma, orders, inventory, assertActive };
 }
 
 describe('TelegramSearchReportService', () => {
+  it('blocks inactive search and report access before projection reads', async () => {
+    const search = fixture();
+    search.assertActive.mockRejectedValue(
+      new EntitlementInactiveException('EXPIRED')
+    );
+
+    await expect(
+      search.service.search({ telegram: identity, query: '1001' })
+    ).rejects.toBeInstanceOf(EntitlementInactiveException);
+    await expect(
+      search.service.report({ telegram: identity })
+    ).rejects.toBeInstanceOf(EntitlementInactiveException);
+    expect(search.prisma.$queryRaw).not.toHaveBeenCalled();
+    expect(search.prisma.order.findMany).not.toHaveBeenCalled();
+  });
+
   it('keeps native Order detail ahead of an equal numeric SKU', async () => {
     const { service, prisma, orders } = fixture({
       exactOrders: [{ wcOrderId: '77' }],

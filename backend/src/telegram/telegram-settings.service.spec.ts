@@ -10,6 +10,10 @@ import {
 } from '@prisma/client';
 
 import type { ApplicationConfigService } from '../config/application-config.service';
+import {
+  EntitlementInactiveException,
+  type EntitlementService,
+} from '../entitlements/entitlement.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { TelegramOrderService } from './telegram-order.service';
 import {
@@ -308,6 +312,13 @@ function fixture() {
       [...state.eligible].map((membershipId) => ({ membershipId }))
     ),
   };
+  const resolveTenant = jest.fn(async () => ({
+    plan: 'FREE',
+    status: 'ACTIVE',
+    effectiveState: 'ACTIVE',
+    expiresAt: null,
+  }));
+  const assertActive = jest.fn(async () => resolveTenant());
   const service = new TelegramSettingsService(
     prisma as unknown as PrismaService,
     {
@@ -316,16 +327,66 @@ function fixture() {
         callbackRefTtlSeconds: 900,
       },
     } as ApplicationConfigService,
-    telegramOrders as unknown as TelegramOrderService
+    telegramOrders as unknown as TelegramOrderService,
+    {
+      resolveTenant,
+      assertActive,
+    } as unknown as EntitlementService
   );
   const input = {
     telegram: { userId: '1001', chatId: '2001' },
   };
 
-  return { state, references, auditLogs, rawQueries, service, input };
+  return {
+    state,
+    references,
+    auditLogs,
+    rawQueries,
+    service,
+    input,
+    resolveTenant,
+    assertActive,
+  };
 }
 
 describe('M18 Telegram settings service', () => {
+  it('keeps settings readable but emits no mutation references while inactive', async () => {
+    const test = fixture();
+    test.resolveTenant.mockResolvedValue({
+      plan: 'PRO',
+      status: 'SUSPENDED',
+      effectiveState: 'SUSPENDED',
+      expiresAt: null,
+    });
+
+    const result = await test.service.summary(test.input);
+
+    expect(result).toMatchObject({
+      state: 'OK',
+      settings: {
+        entitlement: { plan: 'PRO', effectiveState: 'SUSPENDED' },
+        editable: false,
+      },
+    });
+    expect(result.settings?.actions).toBeUndefined();
+    expect(test.references.size).toBe(0);
+  });
+
+  it('revalidates a previously issued mutation reference before writing', async () => {
+    const test = fixture();
+    const summary = await test.service.summary(test.input);
+    const ref = summary.settings!.actions!.languages[0]!.ref;
+    test.assertActive.mockRejectedValueOnce(
+      new EntitlementInactiveException('SUSPENDED')
+    );
+
+    await expect(
+      test.service.applyAction({ ...test.input, ref })
+    ).rejects.toBeInstanceOf(EntitlementInactiveException);
+    expect(test.state.tenant.language).toBe(TenantLanguage.EN);
+    expect(test.auditLogs).toHaveLength(0);
+  });
+
   it.each([MembershipRole.OWNER, MembershipRole.ADMIN, MembershipRole.MEMBER])(
     'allows %s to read current settings',
     async (role) => {

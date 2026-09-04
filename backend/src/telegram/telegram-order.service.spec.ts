@@ -9,6 +9,10 @@ import {
 } from '@prisma/client';
 
 import type { ApplicationConfigService } from '../config/application-config.service';
+import {
+  EntitlementInactiveException,
+  type EntitlementService,
+} from '../entitlements/entitlement.service';
 import type { EncryptionService } from '../common/encryption/encryption.service';
 import type { OrderProjectionService } from '../orders/order-projection.service';
 import {
@@ -560,6 +564,7 @@ function createFixture(orderCount = 18) {
       }
     ),
   };
+  const assertActive = jest.fn(async () => undefined);
   const service = new TelegramOrderService(
     prisma as unknown as PrismaService,
     configuration,
@@ -567,7 +572,8 @@ function createFixture(orderCount = 18) {
       encrypt: (value: string) => `encrypted:${value}`,
       decrypt: (value: string) => value.replace(/^encrypted:/, ''),
     } as EncryptionService,
-    projection as unknown as OrderProjectionService
+    projection as unknown as OrderProjectionService,
+    { assertActive } as unknown as EntitlementService
   );
   const identity = { userId: '1001', chatId: '1001' };
 
@@ -582,6 +588,7 @@ function createFixture(orderCount = 18) {
     noteActions,
     auditLogs,
     projection,
+    assertActive,
     identity,
   };
 }
@@ -1069,6 +1076,27 @@ describe('TelegramOrderService status writes', () => {
     expect(update).toHaveBeenCalledTimes(1);
     expect(fixture.orders[0]!.status).toBe('completed');
     expect(fixture.auditLogs).toHaveLength(1);
+  });
+
+  it('revalidates entitlement immediately before a claimed status write', async () => {
+    const fixture = createFixture(1);
+    const ref = await writeReference(fixture);
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValue(wooPayload('processing'));
+    const update = jest.spyOn(WooCommerceClient.prototype, 'updateOrderStatus');
+    fixture.assertActive
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new EntitlementInactiveException('SUSPENDED'));
+
+    await expect(
+      fixture.service.updateStatus({
+        telegram: fixture.identity,
+        ref,
+        target: 'completed',
+      })
+    ).resolves.toMatchObject({ state: 'FAILED' });
+    expect(update).not.toHaveBeenCalled();
   });
 
   it('denies MEMBER writes and revalidates authorization and active context', async () => {
@@ -1577,6 +1605,33 @@ describe('M17 order lookup, refresh, context, and notes', () => {
       );
     }
   );
+
+  it('revalidates entitlement immediately before a claimed note write', async () => {
+    const fixture = createFixture(1);
+    fixture.state.membershipRole = MembershipRole.OWNER;
+    jest
+      .spyOn(WooCommerceClient.prototype, 'fetchOrder')
+      .mockResolvedValue(wooPayload('processing'));
+    const createNote = jest.spyOn(
+      WooCommerceClient.prototype,
+      'createOrderNote'
+    );
+    const confirmRef = await preparedNote(
+      fixture,
+      TelegramOrderNoteVisibility.INTERNAL
+    );
+    fixture.assertActive
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new EntitlementInactiveException('EXPIRED'));
+
+    await expect(
+      fixture.service.confirmNote({
+        telegram: fixture.identity,
+        ref: confirmRef,
+      })
+    ).resolves.toMatchObject({ state: 'FAILED' });
+    expect(createNote).not.toHaveBeenCalled();
+  });
 
   it('never exposes or allows a MEMBER note mutation path', async () => {
     const fixture = createFixture(1);

@@ -9,6 +9,11 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
 import type { JwtPayload } from '../auth/auth.service';
 import { ApplicationConfigService } from '../config/application-config.service';
+import {
+  EntitlementInactiveException,
+  EntitlementService,
+  type TenantEntitlementSummary,
+} from '../entitlements/entitlement.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   TelegramRedeemDto,
@@ -32,10 +37,12 @@ export interface TelegramAuthorizationStatus {
   tenantSelectionRequired: boolean;
   storeSelectionRequired: boolean;
   selectionRequired: boolean;
+  entitlement: TenantEntitlementSummary | null;
 }
 
 export type TelegramRedeemResult =
   | typeof INVALID_TOKEN_RESULT
+  | { status: 'entitlement_inactive'; entitlement: TenantEntitlementSummary }
   | ({ status: 'linked' } & TelegramAuthorizationStatus);
 
 export type TelegramUnlinkResult =
@@ -47,7 +54,8 @@ export type TelegramUnlinkResult =
 export class TelegramLinkingService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly configuration: ApplicationConfigService
+    private readonly configuration: ApplicationConfigService,
+    private readonly entitlements: EntitlementService
   ) {}
 
   async issueToken(
@@ -289,6 +297,12 @@ export class TelegramLinkingService {
 
     const context = await this.resolveContext(transaction, token.userId);
 
+    if (context.entitlement?.effectiveState !== 'ACTIVE') {
+      return context.entitlement
+        ? { status: 'entitlement_inactive', entitlement: context.entitlement }
+        : INVALID_TOKEN_RESULT;
+    }
+
     if (!context.activeTenantId || !context.activeStoreId) {
       return INVALID_TOKEN_RESULT;
     }
@@ -383,6 +397,11 @@ export class TelegramLinkingService {
     });
     const hasOneTenant = memberships.length === 1;
     const activeTenantId = hasOneTenant ? memberships[0]!.tenantId : null;
+    const entitlement = activeTenantId
+      ? await this.entitlements.resolveTenant(activeTenantId, {
+          database: transaction,
+        })
+      : null;
     const stores = activeTenantId
       ? await transaction.store.findMany({
           where: {
@@ -418,6 +437,7 @@ export class TelegramLinkingService {
       tenantSelectionRequired,
       storeSelectionRequired,
       selectionRequired: tenantSelectionRequired || storeSelectionRequired,
+      entitlement,
     };
   }
 
@@ -430,6 +450,15 @@ export class TelegramLinkingService {
     if (context.tenantSelectionRequired) {
       throw new ForbiddenException(
         'Exactly one active Tenant membership is required for Telegram linking'
+      );
+    }
+
+    if (
+      context.entitlement &&
+      context.entitlement.effectiveState !== 'ACTIVE'
+    ) {
+      throw new EntitlementInactiveException(
+        context.entitlement.effectiveState
       );
     }
 
@@ -450,6 +479,7 @@ export class TelegramLinkingService {
       tenantSelectionRequired: false,
       storeSelectionRequired: false,
       selectionRequired: false,
+      entitlement: null,
     };
   }
 
