@@ -281,10 +281,35 @@ readiness work, or authorize unrestricted public launch.
 
 ---
 
+## Phase 7 — Production Readiness
+
+Status:
+🔵 Current phase — next after Phase 5, by explicit A decision D-029
+
+Phase 7 executes before Phase 6. It is production hardening and readiness only;
+it does not include pricing, billing, subscriptions, plan differentiation,
+usage limits, advanced WooCommerce features, dashboard expansion, or other
+commercial/product expansion.
+
+Milestones, in order:
+
+- P7.1 — Production Security Baseline
+- P7.2 — Production Migration & Deployment Path
+- P7.3 — Backup, Restore & Disaster Recovery
+- P7.4 — Monitoring & Alerting
+- P7.5 — Data & Time Correctness
+- P7.6 — Network & Runtime Reliability
+- P7.7 — Audit & Operational Integrity
+- P7.8 — Final Launch Readiness Gate
+
+No Phase 7 milestone has started. P7.1 is the next implementation milestone.
+
+---
+
 ## Phase 6 — SaaS Platform
 
 Status:
-⬜ Pending
+⬜ Deferred / unstarted until Phase 7 completes and A separately authorizes it
 
 Deliverables
 
@@ -299,29 +324,6 @@ Dashboard
 Tenant administration
 
 Usage limits
-
----
-
-## Phase 7 — Production Readiness
-
-Status:
-⬜ Pending
-
-Deliverables
-
-Security audit
-
-Performance
-
-Monitoring
-
-Backups
-
-Documentation
-
-Testing
-
-Deployment
 
 ---
 
