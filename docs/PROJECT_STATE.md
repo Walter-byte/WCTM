@@ -11,16 +11,21 @@ Phase 5 Closure is fully implemented, reviewed, merged, migrated, deployed, and
 operationally validated under accepted D-028. M17–M22 and all approved MVP
 Telegram product features are complete; Persian/English manager UX and backend-
 authoritative basic entitlement enforcement are operational. Phase 4 and
-M1–M16 remain complete and unchanged. Phase 6 commercial SaaS work has not
-started, Phase 7 production-readiness work remains later, and unrestricted
-public launch is not approved.
+M1–M16 remain complete and unchanged. By explicit A decision D-029, the current
+phase is Phase 7 — Production Readiness, which executes before Phase 6. P7.1 —
+Production Security Baseline is the next milestone and has not begun
+implementation. Phase 6 commercial SaaS work remains deferred and unstarted
+until Phase 7 completes and A separately authorizes it. Unrestricted public
+launch is not approved.
 
 ---
 
 Current Task
 
-No implementation task is active. M22 and Phase 5 are closed. Do not begin
-Phase 6 without approval.
+No implementation task is active. M22 and Phase 5 are closed. No product
+feature work is active. Do not begin P7.1 until the implementation task is
+authorized, and do not begin Phase 6 until Phase 7 completes and A separately
+authorizes it.
 
 ---
 
@@ -809,7 +814,7 @@ technical debt remain recorded.
 
 Next Milestone
 
-Phase 6 — SaaS Platform remains not started and requires separate approval.
+P7.1 — Production Security Baseline. It has not begun implementation.
 
 ---
 
