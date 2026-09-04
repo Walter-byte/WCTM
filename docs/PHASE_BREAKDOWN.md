@@ -398,7 +398,7 @@ M16 was merged to `main` in `9e831a9`, deployed to the VPS, and smoke-tested
 through `/api/health`. The previously pending M13 deployed synthetic-
 notification check later passed through the combined M18 live validation.
 
-## Phase 5 — Core Store Management (MVP) 🟨 In Progress
+## Phase 5 — Core Store Management (MVP) ✅ Complete
 
 - Orders, inventory, customers, payments, reports, and notifications
 - The original full MVP scope remains unchanged; Phase 4 closure does not mark
@@ -632,7 +632,7 @@ notification localization`. Backend and telegram-bot deployed successfully;
 
 M21 final decision: PASS.
 
-### M22 — Basic MVP Entitlements & Phase 5 Closure 🟨 Implemented / Awaiting Review
+### M22 — Basic MVP Entitlements & Phase 5 Closure ✅ Complete / Merged / Operationally Validated
 
 - D-028 adds one Tenant service-access lifecycle only. Existing plans remain
   exactly `FREE`, `PRO`, and `AGENCY`, informational and behaviorally identical
@@ -667,17 +667,56 @@ M21 final decision: PASS.
   preparation and Telegram dispatch. A captured delivery that becomes inactive
   is terminal/non-retry with safe `entitlement-inactive`; reactivation never
   resurrects historical suppressed, delivered, terminal, or ambiguous work.
-- Implementation is on `feat/m22-basic-mvp-entitlements`. It awaits B review,
-  merge, production migration/deployment, bounded lifecycle validation, and a
-  final documentation closure commit.
+- Implementation commit `35f9e72335c8ed0c6a039497d92bed763dc68fb5`
+  (`feat(entitlements): add MVP tenant entitlement gate`) was merged to `main`
+  in `c231437` (`merge: complete M22 basic MVP entitlements`).
 - Automated implementation gates pass: the full 16-migration chain and current
   status on isolated PostgreSQL 16, representative existing/new Tenant
   ACTIVE/null-expiry probes, end-to-end operator lifecycle, backend build, 459
   Jest tests, 24 backend Node/connector contract passes with one unavailable-PHP
   skip, 67 bot tests, Prisma format/validate/generate, typecheck, and lint.
 
-Phase 5 remains in progress. M22 implementation does not authorize Phase 6 and
-does not complete Phase 7 production-readiness work.
+Production closure evidence:
+
+- Migration `20260904120000_m22_basic_mvp_entitlements` applied successfully;
+  the complete production chain passed with all 16 migrations current, and the
+  existing Tenant backfilled to ACTIVE with no expiry.
+- Backend and telegram-bot deployed with clean startup, EntitlementsModule
+  initialization, normal bot polling, and passing `/api/health` and
+  `/api/health/readiness`; the connector required no deployment.
+- The production Tenant began as FREE/ACTIVE with no expiry. Operator inspect,
+  ACTIVE `/status` and `/orders`, and issuance of a signed operational reference
+  passed.
+- The operator changed ACTIVE to SUSPENDED, emitted the safe bounded Tenant-
+  fingerprint event, and inspect confirmed persisted/effective SUSPENDED with
+  no expiry. `/status` and read-only `/settings` remained available; mutation
+  controls were absent; `/orders`, `/search`, `/report`, `/stock`, and the
+  previously issued operational callback were denied with correct localized
+  Persian UX and no protected WooCommerce operation.
+- Synthetic WooCommerce order `17870` was created while suspended. Its
+  authenticated `order.created` WebhookEvent completed, M9 projection
+  succeeded, and the Order appeared in the projection. No M13 delivery row was
+  created, attempted, or sent, proving inactive scheduling suppression while
+  webhook authentication and projection continuity remained operational.
+- Reactivation restored FREE/ACTIVE with no expiry without rebuilding the
+  Store, webhook, link, projection, or settings. The existing Telegram link and
+  suspended-period Order remained visible; `/orders` and representative
+  `/search`, `/report`, and `/stock` behavior resumed. No historical
+  notification for Order `17870` replayed.
+- Final health and readiness passed with PostgreSQL and Redis up and no
+  entitlement/runtime error. One isolated webhook `401 Unauthorized` occurred
+  during validation, but independently successful authenticated processing and
+  projection proved the accepted path.
+- Order `17870` projected an abnormal `wc_created_at` year `2647`. This remains
+  DATE-001 for later Phase 7 production-readiness investigation and is not an
+  M22 failure.
+
+M22 final decision: PASS. Phase 5 final decision: COMPLETE. M17–M22 and all
+approved MVP Telegram product features are complete, Persian/English manager UX
+and backend-authoritative entitlement enforcement are operational, and no open
+Phase-5 feature blocker remains. Phase 6 commercial SaaS work has not started;
+Phase 7 production-readiness work remains later, and unrestricted public launch
+is not approved.
 
 ## Phase 6 — SaaS Platform ⬜ Planned
 

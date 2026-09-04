@@ -6,30 +6,21 @@ Version: 1.0
 
 Current Phase
 
-Phase 5 — Core Store Management (MVP) is in progress. M21 Notification /
-Localization Completion is fully complete, merged, deployed, and operationally
-validated. M20 Search & Daily Report is fully complete, merged, deployed,
-hotfixed, and operationally validated.
-M19 Inventory & Low-Stock MVP is implemented, merged, deployed, and fully
-operationally validated. Its production migrations, backend, telegram-bot,
-updated connector, eight
-canonical WooCommerce webhooks, health/readiness, bootstrap, projection,
-`/stock`, threshold behavior, LOW/OUT incident lifecycle, M18/M10 recipient
-integration, and durable delivery all passed. M18 and M17 remain fully closed.
-Phase 4 and M1–M16 remain complete and unchanged.
-
-M22 — Basic MVP Entitlements & Phase 5 Closure is implemented on
-`feat/m22-basic-mvp-entitlements` under accepted D-028 and awaits B review,
-merge, production migration/deployment, bounded production validation, and a
-separate final closure documentation commit. Phase 5 is not yet operationally
-closed.
+Phase 5 — Core Store Management (MVP) is complete. M22 Basic MVP Entitlements &
+Phase 5 Closure is fully implemented, reviewed, merged, migrated, deployed, and
+operationally validated under accepted D-028. M17–M22 and all approved MVP
+Telegram product features are complete; Persian/English manager UX and backend-
+authoritative basic entitlement enforcement are operational. Phase 4 and
+M1–M16 remain complete and unchanged. Phase 6 commercial SaaS work has not
+started, Phase 7 production-readiness work remains later, and unrestricted
+public launch is not approved.
 
 ---
 
 Current Task
 
-M22 — Basic MVP Entitlements & Phase 5 Closure is implemented under accepted
-D-028 and awaiting B review. Do not begin Phase 6.
+No implementation task is active. M22 and Phase 5 are closed. Do not begin
+Phase 6 without approval.
 
 ---
 
@@ -41,10 +32,12 @@ Project Version
 
 Repository
 
-Current branch: `feat/m22-basic-mvp-entitlements`.
+Current branch: `main`.
 
-M22 implementation commit: `feat(entitlements): add MVP tenant entitlement
-gate` on the feature branch; record the resulting hash in the review handoff.
+M22 implementation commit:
+`35f9e72335c8ed0c6a039497d92bed763dc68fb5 feat(entitlements): add MVP tenant
+entitlement gate`, merged through
+`c231437 merge: complete M22 basic MVP entitlements`.
 
 M21 implementation commit: `a1554a7 feat(localization): complete MVP Telegram
 localization`, merged through `7e3ad24 merge: complete M21 notification
@@ -784,13 +777,12 @@ main
 
 Known Issues
 
-DATE-001 — WooCommerce admin mixed/invalid calendar display: some orders show
-Gregorian dates, some show Persian/Jalali dates, and one synthetic order showed
-the impossible date `دی 17, 2647`. Current evidence shows valid WCTM PostgreSQL
-Order, webhook, sync, and M13 notification timestamps, with no demonstrated
-impact on M13 or current WCTM processing. This is not an M13 blocker; investigate
-it before wider MVP pilot usage because date-dependent sorting or reporting may
-eventually be affected.
+DATE-001 — WooCommerce/admin and projected date anomaly: some orders show
+mixed Gregorian/Persian dates, and suspended-period synthetic order `17870`
+projected with abnormal `wc_created_at` year `2647`. This did not block its
+authenticated WebhookEvent completion, M9 projection, or M22 acceptance.
+Investigate during later Phase 7 production-readiness work because date-
+dependent sorting or reporting may be affected.
 
 AuditLog structural immutability is not yet enforced; the schema includes an
 updatable timestamp. A future approved decision must define enforcement.
@@ -810,24 +802,21 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No known M22 implementation blocker remains. B review, merge, production
-migration/deployment, bounded lifecycle validation, and final documentation
-closure remain required. Existing known issues and technical debt remain
-unchanged.
+No open Phase-5 feature blocker remains. Existing later-phase known issues and
+technical debt remain recorded.
 
 ---
 
 Next Milestone
 
-B review of M22 — Basic MVP Entitlements & Phase 5 Closure. Do not start Phase 6.
+Phase 6 — SaaS Platform remains not started and requires separate approval.
 
 ---
 
 Last Completed
 
-M21 Notification / Localization Completion remains the last operationally
-closed milestone. M22 is implemented but not yet reviewed, merged, deployed, or
-operationally validated.
+M22 — Basic MVP Entitlements & Phase 5 Closure is the last operationally closed
+milestone. Final decision: PASS. Phase 5 final decision: COMPLETE.
 
 ---
 
@@ -843,7 +832,7 @@ Last Updated
 
 ---
 
-M22 Implementation State
+M22 Closure State
 
 - D-028 is Accepted. Existing `TenantPlan` values remain exactly `FREE`, `PRO`,
   and `AGENCY`, informational only, with one common ACTIVE M1-M21 capability
@@ -890,9 +879,32 @@ expiry` and SUSPENDED overrides expiry.
   pass 24 with one native-PHP-only skip because PHP is unavailable; all 67 bot
   tests pass; typecheck and lint pass. Final format and diff checks are part of
   the clean handoff.
-- M22 is implemented/awaiting review only. Phase 5 is not marked complete until
-  B review, merge, production migration/deployment, bounded validation, and the
-  final closure documentation commit pass.
+- Implementation commit `35f9e72335c8ed0c6a039497d92bed763dc68fb5`
+  was merged through `c231437`. Production migration
+  `20260904120000_m22_basic_mvp_entitlements` applied successfully; the complete
+  production chain passed with 16 migrations current and the existing Tenant
+  backfilled ACTIVE with no expiry.
+- Backend and telegram-bot deployed with clean startup, EntitlementsModule
+  initialized, bot polling normal, and health/readiness passing with PostgreSQL
+  and Redis up. No connector deployment was required.
+- Production lifecycle passed ACTIVE → SUSPENDED → projection with no
+  notification → ACTIVE. While suspended, `/status` and read-only
+  `/settings` remained available, mutation controls were absent, protected
+  operational commands and an earlier signed callback were denied in localized
+  Persian UX, and no protected WooCommerce operation executed.
+- Synthetic order `17870` was authenticated, completed as a WebhookEvent, and
+  projected by M9 while suspended. No order-notification delivery row was
+  created, attempted, or sent. Reactivation restored operations and retained
+  the link, Store, webhooks, projection, and settings without rebuild; the
+  suspended-period Order remained visible and no historical notification was
+  replayed.
+- The production Tenant was restored to plan FREE, persisted/effective ACTIVE,
+  with no expiry. One isolated webhook 401 during the validation window was
+  non-blocking because successful authenticated processing/projection was
+  independently proven. Order `17870`'s abnormal year `2647` remains DATE-001
+  for later Phase 7 investigation.
+- M22 final decision: PASS. Phase 5 final decision: COMPLETE. Phase 6 was not
+  started.
 
 ---
 
@@ -946,7 +958,7 @@ M21 Closure State
   Therefore no new LOW delivery row was expected. Automated localized LOW/OUT
   prepared-notification coverage is accepted for closure; no M21 defect or LOW
   notification failure is recorded.
-- M21 final decision: PASS. M22 is now implemented and awaiting review.
+- M21 final decision: PASS. M22 is now fully closed.
 
 ---
 

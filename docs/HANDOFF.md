@@ -2,7 +2,7 @@
 
 **Generated:** 2026-07-19
 
-**Updated:** 2026-09-03
+**Updated:** 2026-09-04
 
 **Reason:** Transitioning implementation agent from GapCode to Codex GPT
 
@@ -775,7 +775,7 @@ Final closure evidence:
 Phase 4 is complete. Its exit criterion is met through the implemented MVP
 order-management path. This does not complete or narrow the full MVP.
 
-### Phase 5 — Core Store Management (MVP) (in progress)
+### Phase 5 — Core Store Management (MVP) (complete)
 
 #### M17 — Order Workflow Completion (complete; fully closed)
 
@@ -1034,22 +1034,22 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `feat/m22-basic-mvp-entitlements`.
+Current branch: `main`.
 
 ---
 
 ## 6. Current Blockers
 
-No known M22 implementation blocker remains. B review, merge, production
-migration/deployment, bounded validation, and final closure documentation are
-still required. Existing known issues and technical debt remain unchanged.
+No open Phase-5 feature blocker remains. DATE-001 and existing technical debt
+remain later Phase 7 production-readiness work.
 
 ---
 
 ## 7. Current Task
 
-M22 — Basic MVP Entitlements & Phase 5 Closure is implemented on
-`feat/m22-basic-mvp-entitlements` under accepted D-028 and awaits B review.
+M22 — Basic MVP Entitlements & Phase 5 Closure is fully complete under accepted
+D-028. Implementation commit `35f9e72335c8ed0c6a039497d92bed763dc68fb5`
+was merged through `c231437`.
 
 The implementation adds migration
 `20260904120000_m22_basic_mvp_entitlements`, containing only the
@@ -1098,9 +1098,32 @@ because PHP is unavailable; all 459 backend Jest tests and all 67 bot tests
 passed; typecheck and lint passed. Final format/diff checks and clean commit
 state are recorded at implementation handoff.
 
-Do not mark M22 or Phase 5 closed before B returns MERGE, main is deployed,
-production migration and bounded ACTIVE/SUSPENDED/reactivation validation pass,
-and a final documentation closure commit is merged. Do not begin Phase 6.
+Production migration `20260904120000_m22_basic_mvp_entitlements` applied with
+the complete 16-migration chain current and the existing Tenant backfilled
+ACTIVE/no expiry. Backend and telegram-bot deployment, clean startup,
+EntitlementsModule initialization, normal bot polling, health, and readiness
+passed; no connector deployment was required.
+
+The production lifecycle passed ACTIVE → SUSPENDED → projection/no-
+notification → ACTIVE. Suspended access retained `/status` and read-only
+`/settings`, denied protected commands and a previously issued signed callback
+with localized Persian UX, and executed no protected Woo operation. Synthetic
+order `17870` authenticated and projected while suspended, with no M13 delivery
+row, attempt, send, or later historical replay. Reactivation retained the
+Telegram link, Store, webhooks, projection, and settings and restored
+representative `/orders`, `/search`, `/report`, and `/stock` behavior. The
+production Tenant finished FREE/ACTIVE with no expiry.
+
+One isolated webhook 401 was non-blocking because successful authenticated
+processing/projection was independently proven. Order `17870`'s abnormal
+`wc_created_at` year `2647` remains DATE-001 for later Phase 7 production-
+readiness investigation and is not an M22 failure.
+
+M22 final decision: PASS. Phase 5 final decision: COMPLETE. All approved MVP
+Telegram product features are implemented and bounded pilot validation passed.
+Phase 6 commercial SaaS work has not started; Phase 7 remains later and
+unrestricted public launch is not approved. Do not begin Phase 6 without
+approval.
 
 ---
 

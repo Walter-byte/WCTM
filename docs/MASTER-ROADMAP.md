@@ -244,7 +244,7 @@ the implemented MVP order-management path.
 ## Phase 5 — Core Store Management (MVP)
 
 Status:
-🟨 In Progress
+✅ Complete
 
 Completed milestones:
 
@@ -255,10 +255,8 @@ Completed milestones:
   operationally validated
 - M21 — Notification / Localization Completion, fully complete, merged,
   deployed, and operationally validated
-
-Next milestone:
-
-- M22 — Basic MVP Entitlements & Phase 5 Closure; not started
+- M22 — Basic MVP Entitlements & Phase 5 Closure, fully complete, merged,
+  migrated, deployed, and operationally validated
 
 Modules
 
@@ -276,7 +274,10 @@ Notifications
 
 Exit Criteria
 
-MVP is production-ready.
+✅ Met on 2026-09-04: all approved MVP Telegram product features are
+implemented and bounded production pilot validation has passed. This phase
+closure does not complete Phase 6 commercial SaaS work, Phase 7 production-
+readiness work, or authorize unrestricted public launch.
 
 ---
 
