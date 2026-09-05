@@ -1030,7 +1030,7 @@ Final closure evidence:
 
 ### Phase 7 — Production Readiness (current)
 
-#### P7.1 — Production Security Baseline (follow-up implemented; image scan and A production validation outstanding)
+#### P7.1 — Production Security Baseline (follow-up verified; A production validation outstanding)
 
 - Production configuration now rejects every committed development/test secret
   placeholder, short backend-bot service credentials, production pilot mode,
@@ -1084,9 +1084,13 @@ Launch blockers and pending operational evidence:
 - The current tracked tree contains no avoidable implementation-tool/agent
   provenance. Four historical tracked-content findings remain unchanged for A's
   separate history-remediation decision and the P7.8 release audit.
-- Docker Scout 1.23.1 is present but refuses local image scans without a Docker
-  ID login. No other bounded scanner is installed, so final Critical/High image
-  scan evidence remains environment-blocked.
+- Authenticated Docker Scout initially traced Alpine OpenSSL 3.5.7-r0 to the
+  base minirootfs and `brace-expansion` 5.0.7, `ip-address` 10.2.0, and `tar`
+  7.5.19 to the official image's global npm 11.19.0 layer, not WCTM production
+  dependencies. The final stages exact-pin Alpine 3.24 `libcrypto3`/`libssl3`
+  3.5.8-r0 and npm 11.19.1, which contains patched versions 5.0.9, 10.5.0, and
+  7.5.22 respectively. Both clean rebuilt final images now pass authenticated
+  Critical/High scans with zero findings.
 
 Dependency and automated evidence:
 
@@ -1113,8 +1117,9 @@ Dependency and automated evidence:
   report zero vulnerabilities.
 - Isolated PostgreSQL 16.15 received all 16 migrations. The reviewed runtime
   role has all elevated/bypass-RLS flags false, no TEMP/schema CREATE/migration
-  DML/ownership, and exactly the M1-M22 table grants. Docker Scout remains
-  blocked only by required Docker login; no alternative scanner is installed.
+  DML/ownership, and exactly the M1-M22 table grants. Re-review confirmed zero
+  missing or excessive privileges across all 20 application tables, while the
+  existing privileged owner remains available for Prisma migration execution.
 
 No production/VPS, firewall, sshd, host Caddy, credential, PostgreSQL role,
 Redis password, GitHub secret, deployment, production restart/schema/migration,
@@ -1134,19 +1139,19 @@ Current branch: `chore/p7.1-production-security-baseline`.
 ## 6. Current Blockers
 
 No open Phase-5 feature blocker remains. P7.1 public-launch blockers are the
-confirmed overprivileged production database identity, missing authenticated
-Critical/High final-image scan evidence, and four historical provenance findings
-awaiting A's separate history decision. DATE-001 and AuditLog immutability remain
-explicitly assigned to P7.5 and P7.7.
+confirmed overprivileged production database identity and four historical
+provenance findings awaiting A's separate history decision. Authenticated final-
+image scans now pass. DATE-001 and AuditLog immutability remain explicitly
+assigned to P7.5 and P7.7.
 
 ---
 
 ## 7. Current Task
 
 P7.1 — Production Security Baseline follow-up is implemented under accepted
-D-029. B re-review remains blocked on the final-image scan, and A-owned
-production validation remains outstanding. P7.1 is not operationally closed.
-Do not start P7.2 or Phase 6.
+D-029. B re-review may continue with final-image scan evidence complete;
+A-owned production database-role remediation and validation remain outstanding.
+P7.1 is not operationally closed. Do not start P7.2 or Phase 6.
 
 ### Last completed product milestone: M22
 

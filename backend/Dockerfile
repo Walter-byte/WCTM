@@ -19,6 +19,9 @@ RUN npm run build --workspace=@wc-telegram/backend
 
 FROM node:24.20.0-alpine3.24@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS production
 
+ARG ALPINE_OPENSSL_VERSION=3.5.8-r0
+ARG NPM_VERSION=11.19.1
+
 ENV NODE_ENV=production
 WORKDIR /app/backend
 
@@ -26,7 +29,11 @@ COPY package.json package-lock.json /app/
 COPY backend/package.json /app/backend/package.json
 COPY telegram-bot/package.json /app/telegram-bot/package.json
 
-RUN apk add --no-cache --virtual .native-build-deps python3 make g++ \
+RUN apk add --no-cache \
+    "libcrypto3=${ALPINE_OPENSSL_VERSION}" \
+    "libssl3=${ALPINE_OPENSSL_VERSION}" \
+  && npm install --global "npm@${NPM_VERSION}" --ignore-scripts --no-audit --no-fund \
+  && apk add --no-cache --virtual .native-build-deps python3 make g++ \
   && npm ci --omit=dev --omit=optional --workspace=@wc-telegram/backend \
   && apk del .native-build-deps \
   && npm cache clean --force

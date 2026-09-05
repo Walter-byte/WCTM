@@ -813,19 +813,19 @@ No open Phase-5 feature blocker remains. Public launch is blocked because A's
 read-only production audit confirmed that the application database identity is
 superuser and has CREATEDB, CREATEROLE, and replication privileges. A must apply
 the reviewed least-privilege procedure and validate the resulting runtime before
-P7.1 operational closure. Docker Scout is installed but requires a Docker login,
-and no other bounded image scanner is available, so final Critical/High image
-scan evidence also remains blocked. Four historical implementation-provenance
-findings remain for A's separate history-remediation decision and the P7.8
-release audit; current tracked content is clean and Git history was not rewritten.
+P7.1 operational closure. Authenticated Docker Scout scans of the patched final
+backend and bot images now report zero Critical and zero High findings. Four
+historical implementation-provenance findings remain for A's separate history-
+remediation decision and the P7.8 release audit; current tracked content is clean
+and Git history was not rewritten.
 
 ---
 
 Next Milestone
 
 P7.1 — Production Security Baseline follow-up is implemented. B re-review
-remains blocked on the final-image scan, and A-owned production validation
-remains outstanding. Do not start P7.2.
+may continue with final-image scan evidence complete; A-owned production
+database-role remediation and validation remain outstanding. Do not start P7.2.
 
 ---
 
@@ -913,10 +913,13 @@ P7.1 Implementation State
   hash/verify, bot configuration bootstrap, backend startup/readiness, and
   final-image config-audit valid/invalid paths pass. Both final production
   dependency audits report zero vulnerabilities.
-- Docker Scout 1.23.1 is installed but refuses both local image scans until a
-  Docker ID login is supplied. No other bounded scanner is installed; therefore
-  Critical/High image vulnerability evidence remains an exact environment
-  blocker and P7.1 is not ready for operational closure.
+- Authenticated Docker Scout initially found Alpine OpenSSL 3.5.7-r0 and three
+  packages bundled only under the official image's global npm 11.19.0 tooling.
+  The final stages now exact-pin Alpine 3.24 `libcrypto3`/`libssl3` 3.5.8-r0 and
+  npm 11.19.1, which bundles `brace-expansion` 5.0.9, `ip-address` 10.5.0, and
+  `tar` 7.5.22. Clean rebuilt backend and bot images both report zero Critical
+  and zero High findings. The bot build also installs only root tooling and its
+  own workspace and no longer installs an unnecessary native toolchain.
 - No production/VPS, firewall, sshd, host Caddy, credential, PostgreSQL role,
   Redis auth, GitHub secret, deployment, production restart/schema/migration,
   product, P7.2+, or Phase 6 change was performed.

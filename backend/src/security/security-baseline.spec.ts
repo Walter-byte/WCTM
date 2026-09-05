@@ -178,7 +178,17 @@ describe('P7.1 production security baseline', () => {
     expect(botDockerfile).toContain(
       'npm ci --omit=dev --omit=optional --workspace=@wc-telegram/telegram-bot'
     );
+    for (const dockerfile of [backendDockerfile, botDockerfile]) {
+      expect(dockerfile).toContain('ARG ALPINE_OPENSSL_VERSION=3.5.8-r0');
+      expect(dockerfile).toContain('"libcrypto3=${ALPINE_OPENSSL_VERSION}"');
+      expect(dockerfile).toContain('"libssl3=${ALPINE_OPENSSL_VERSION}"');
+      expect(dockerfile).toContain('ARG NPM_VERSION=11.19.1');
+      expect(dockerfile).toContain(
+        'npm install --global "npm@${NPM_VERSION}" --ignore-scripts --no-audit --no-fund'
+      );
+    }
     expect(botDockerfile).toContain("rmSync('/app/node_modules/typescript'");
+    expect(botDockerfile).not.toContain('.native-build-deps');
     expect(compose).toMatch(
       /image: postgres:16\.15-alpine3\.24@sha256:[a-f0-9]{64}/
     );
