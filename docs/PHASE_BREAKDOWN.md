@@ -744,12 +744,12 @@ launch is not approved.
   P7.2 retains ownership of the final migration role/path.
 
 P7.1 remains operationally open until B review and A-owned production checks.
-Node.js 20 passed upstream EOL on 2026-04-30 and is an explicit public-launch
-blocker pending a separately approved supported-major migration and reproducible
-base-image version/digest pinning. The initial
-release-provenance audit found pre-existing implementation-agent naming in
-tracked canonical documents/history; no history rewrite is authorized. P7.2
-through P7.8 are unstarted.
+Node 24.20.0 now backs both application images; Node, PostgreSQL 16, and Redis 7
+use exact patch/distro tags plus immutable digests. A's production runtime-role
+audit confirmed superuser, CREATEDB, CREATEROLE, and replication privileges, so
+launch remains blocked until A applies the reviewed least-privilege procedure
+and validates the resulting runtime. Historical release-provenance findings
+remain without history rewrite. P7.2 through P7.8 are unstarted.
 
 ### Approved Phase 7 order
 

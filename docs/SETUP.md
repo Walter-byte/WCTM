@@ -7,7 +7,7 @@ The complete WC-Telegram-SaaS scaffold can run locally in under five minutes.
 - Docker Desktop, Docker Engine, or an equivalent container runtime
 - Docker Compose v2 (`docker compose version`)
 - Git
-- Optional for host-based TypeScript development: Node.js 20+ and npm 10+
+- Optional for host-based TypeScript development: Node.js 24.20.0 and npm 11+
 
 No local PostgreSQL, Redis, Caddy, WordPress core, or global NestJS CLI is
 required.
@@ -541,12 +541,18 @@ For all other boundaries, take action only from concrete evidence:
 No current-repository evidence requires rotation of a production credential.
 That statement does not replace A's name-only production secret inventory.
 
-The current `node:20-alpine` production base reached upstream end of life on
-2026-04-30, and the Node/PostgreSQL/Redis base tags are not digest-pinned. Public
-launch is blocked until A approves a supported Node major, compatible builds and
-regressions pass, and the reviewed release candidate pins reproducible base
-versions/digests. Do not work around this by pinning an unsupported Node 20 image
-or silently changing the runtime major in P7.1.
+The reviewed production images are exact patch/distro tags pinned to immutable
+official-registry manifest digests. Do not replace them with `latest`, a
+major/minor-only tag, or a tag without its digest:
+
+| Service     | Selected official image                                                                             |
+| ----------- | --------------------------------------------------------------------------------------------------- |
+| Backend/bot | `node:24.20.0-alpine3.24@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf`   |
+| PostgreSQL  | `postgres:16.15-alpine3.24@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685` |
+| Redis       | `redis:7.4.11-alpine3.21@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf`   |
+
+Node 24.20.0 replaces the EOL Node 20 runtime for both application images.
+PostgreSQL remains on major 16 and Redis remains on major 7.
 
 ### Host Caddy and HTTPS
 
@@ -617,40 +623,102 @@ URL or password:
 docker compose exec -T backend node -e 'const {Client}=require("pg");const c=new Client({connectionString:process.env.DATABASE_URL});(async()=>{await c.connect();const r=await c.query("select rolsuper, rolcreatedb, rolcreaterole, rolreplication from pg_roles where rolname=current_user");const v=r.rows[0];console.log(JSON.stringify({superuser:v.rolsuper,createDb:v.rolcreatedb,createRole:v.rolcreaterole,replication:v.rolreplication}));await c.end()})().catch(()=>{console.error("database privilege audit failed");process.exitCode=1})'
 ```
 
-All four values must be `false`. If any value is true, public launch is blocked
-until A changes the application runtime identity. P7.2 will define the final
-migration-role execution path; do not give the runtime role DDL or migration
-ownership.
+All four values must be `false`. A's approved read-only audit returned
+`true` for all four values, so the production runtime role is a confirmed P7.1
+launch blocker. The following procedure is reviewed for A to execute in a
+controlled production window; it was validated against an isolated PostgreSQL
+16 instance containing the complete 16-migration M1-M22 schema. P7.2 will
+define the supported privileged migration identity/path. The runtime role must
+not own the schema, any relation, or `_prisma_migrations` and receives no DDL or
+migration privilege.
 
-If correction is required, A may create a dedicated role through a hidden
-password prompt, grant only connection/schema usage and M1-M22 table DML, then
-update `DATABASE_URL` and restart the backend in a controlled window:
+Create the new role through a hidden password prompt. If `createuser` reports
+that `wctm_runtime` already exists, stop and review that role rather than
+silently reusing it:
 
 ```bash
-docker compose exec postgres sh -c 'createuser -U "$POSTGRES_USER" --login --no-superuser --no-createdb --no-createrole --no-replication wctm_runtime'
+docker compose exec -T postgres sh -c 'createuser -U "$POSTGRES_USER" --login --no-superuser --no-createdb --no-createrole --no-inherit --no-replication --no-bypassrls wctm_runtime'
 docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\\password wctm_runtime"'
-docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
-GRANT CONNECT ON DATABASE wc_telegram TO wctm_runtime;
+```
+
+Apply the reviewed grants as the current privileged database owner. The
+database is dedicated to WCTM, so revoking public schema creation and temporary
+table creation does not affect another application:
+
+```bash
+docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -v database_name="$POSTGRES_DB" -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+BEGIN;
+ALTER ROLE wctm_runtime NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+REVOKE TEMPORARY ON DATABASE :"database_name" FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON DATABASE :"database_name" FROM wctm_runtime;
+REVOKE ALL PRIVILEGES ON SCHEMA public FROM wctm_runtime;
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM wctm_runtime;
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM wctm_runtime;
+GRANT CONNECT ON DATABASE :"database_name" TO wctm_runtime;
 GRANT USAGE ON SCHEMA public TO wctm_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
-  tenants, users, memberships, stores, webhook_events, orders, audit_logs,
-  telegram_accounts, store_notification_recipients,
+GRANT SELECT, INSERT, UPDATE ON TABLE
+  tenants, users, memberships, stores, webhook_events, orders,
+  telegram_accounts,
   telegram_settings_references, telegram_chat_authorizations,
   telegram_link_tokens, telegram_callback_references,
   telegram_order_note_actions, telegram_order_status_writes,
   telegram_order_notification_deliveries, inventory_items,
-  telegram_inventory_references, telegram_search_references,
   telegram_inventory_notification_deliveries
 TO wctm_runtime;
+GRANT SELECT, INSERT ON TABLE
+  audit_logs, telegram_inventory_references, telegram_search_references
+TO wctm_runtime;
+GRANT SELECT, INSERT, DELETE ON TABLE store_notification_recipients
+TO wctm_runtime;
+COMMIT;
 SQL
 ```
 
-If the production database name is not `wc_telegram`, A must replace only that
-identifier after confirming it by name; do not print or reconstruct the URL.
-The procedure intentionally grants no superuser, database/schema creation,
-role creation, replication, object ownership, DDL, or `_prisma_migrations`
-write. PostgreSQL remains unpublished. Same-host private Docker traffic does
-not require a new database TLS topology in P7.1.
+The DML matrix is derived from actual M1-M22 Prisma operations: application
+state tables receive `SELECT`/`INSERT`/`UPDATE`; append-only audit and read-only
+reference tables receive `SELECT`/`INSERT`; only selected-recipient mappings
+receive `DELETE`. The procedure intentionally grants no sequence privilege,
+superuser, database/schema creation, temporary-table creation, role creation,
+replication, bypass-RLS, object ownership, DDL, or `_prisma_migrations` access.
+
+Before switching the application, A must verify the role and grants from the
+owner connection, still without printing a URL or password:
+
+```bash
+docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+SELECT json_build_object(
+  'superuser', rolsuper,
+  'createDb', rolcreatedb,
+  'createRole', rolcreaterole,
+  'replication', rolreplication,
+  'bypassRls', rolbypassrls
+)
+FROM pg_roles
+WHERE rolname = 'wctm_runtime';
+SELECT
+  has_schema_privilege('wctm_runtime', 'public', 'USAGE') AS schema_usage,
+  has_schema_privilege('wctm_runtime', 'public', 'CREATE') AS schema_create,
+  has_database_privilege('wctm_runtime', current_database(), 'TEMP') AS database_temp,
+  has_table_privilege('wctm_runtime', 'public._prisma_migrations', 'SELECT') OR
+  has_table_privilege('wctm_runtime', 'public._prisma_migrations', 'INSERT') OR
+  has_table_privilege('wctm_runtime', 'public._prisma_migrations', 'UPDATE') OR
+  has_table_privilege('wctm_runtime', 'public._prisma_migrations', 'DELETE')
+    AS migration_table_dml;
+SELECT count(*) AS runtime_owned_objects
+FROM pg_class
+WHERE relowner = (SELECT oid FROM pg_roles WHERE rolname = 'wctm_runtime');
+SQL
+```
+
+Expected: the four required role flags plus `bypassRls` are false,
+`schema_usage` is true, `schema_create`, `database_temp`, and
+`migration_table_dml` are false, and `runtime_owned_objects` is zero. A then
+updates only the backend runtime `DATABASE_URL`, performs the controlled
+backend restart, and verifies `security:config-audit`, health/readiness, and a
+bounded representative M1-M22 application smoke. Do not run Prisma Migrate as
+`wctm_runtime`. PostgreSQL remains unpublished; same-host private Docker traffic
+does not require a new database TLS topology in P7.1.
 
 ### Redis, logs, and CI secret inventory
 

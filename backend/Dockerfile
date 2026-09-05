@@ -1,4 +1,4 @@
-FROM node:20-alpine AS dependencies
+FROM node:24.20.0-alpine3.24@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS dependencies
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ COPY backend ./backend
 
 RUN npm run build --workspace=@wc-telegram/backend
 
-FROM node:20-alpine AS production
+FROM node:24.20.0-alpine3.24@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS production
 
 ENV NODE_ENV=production
 WORKDIR /app/backend

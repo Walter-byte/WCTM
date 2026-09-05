@@ -198,7 +198,7 @@ runtime migration execution path requires a future approved infrastructure fix.
 - Telegram bot offline scaffold started safely
 - Graceful shutdown and full `docker compose down -v` teardown passed
 - Fixed Compose network isolation and standardized `APP_ENCRYPTION_KEY`
-- Added one offline NestJS boot smoke test and a basic Node 20 CI workflow
+- Added one offline NestJS boot smoke test and a basic Node CI workflow
 - Generated repository trees are intentionally excluded via `.gitignore`
 
 ### Phase 2 — Backend Core (complete)
@@ -1030,7 +1030,7 @@ Final closure evidence:
 
 ### Phase 7 — Production Readiness (current)
 
-#### P7.1 — Production Security Baseline (implemented; awaiting B review and A production validation)
+#### P7.1 — Production Security Baseline (follow-up implemented; image scan and A production validation outstanding)
 
 - Production configuration now rejects every committed development/test secret
   placeholder, short backend-bot service credentials, production pilot mode,
@@ -1077,21 +1077,16 @@ Final closure evidence:
 
 Launch blockers and pending operational evidence:
 
-- Node.js 20 reached upstream EOL on 2026-04-30. P7.1 does not perform an
-  unapproved major runtime upgrade; a supported-major migration with full
-  native-addon/application/container validation requires separate A approval.
-  Current base tags are also floating; the approved supported images must be
-  version/digest pinned before a reproducible release.
-- Existing canonical documents and their history contain implementation-agent
-  names. The current HANDOFF wording is neutralized where P7.1 owns the edit,
-  but `MASTER-ROADMAP.md` is A-owned and Git history rewriting is expressly
-  unauthorized. P7.8 must repeat the audit against the exact release candidate.
-- A must prove the production application DB identity has no superuser,
-  CREATEDB, CREATEROLE, or replication privilege. Any positive flag blocks
-  launch until the documented least-privilege correction is applied.
-- Docker image builds/runtime identity and the optional locally present image
-  scanner require a running Docker daemon; final environment evidence is
-  recorded in the P7.1 report.
+- A's approved read-only production audit returned `true` for superuser,
+  CREATEDB, CREATEROLE, and replication. Production launch remains blocked until
+  A applies the reviewed least-privilege procedure and validates the resulting
+  runtime. No production database role or service was changed here.
+- The current tracked tree contains no avoidable implementation-tool/agent
+  provenance. Four historical tracked-content findings remain unchanged for A's
+  separate history-remediation decision and the P7.8 release audit.
+- Docker Scout 1.23.1 is present but refuses local image scans without a Docker
+  ID login. No other bounded scanner is installed, so final Critical/High image
+  scan evidence remains environment-blocked.
 
 Dependency and automated evidence:
 
@@ -1104,19 +1099,26 @@ Dependency and automated evidence:
   `GHSA-3f6p-5ww8-9rcr` / `GHSA-rgwj-5xj2-c3m3`. Prisma format, validation,
   generation, clean install, builds, and the complete suite prove compatibility.
   The final required production-dependency audit reports zero vulnerabilities.
-- Clean `npm ci`, Prisma format/validate/generate, build, 465 backend Jest tests,
-  28 backend Node/contract tests, 68 bot tests, typecheck, lint, formatting, and
-  `git diff --check` pass. The only test skip is the existing native-PHP
-  connector reconciliation test because PHP is unavailable.
-- Docker backend/bot builds, runtime identity execution, and Docker Scout could
-  not run because no Docker daemon is running. Static gates prove both runtime
-  stages declare `USER node`, backend runtime omits development/optional
-  packages, only the backend is loopback-published, and private service ports
-  are absent.
+- Clean Node 24.20.0 `npm ci`, Prisma format/validate/generate, build, 465
+  backend Jest tests, 32 backend Node/contract tests, 68 bot tests, typecheck,
+  lint, formatting, and `git diff --check` pass. PHP 8.4 lint and the existing
+  native connector reconciliation test pass.
+- Final backend and bot images build on exact
+  `node:24.20.0-alpine3.24` plus immutable digest and execute as UID 1000 with
+  Node v24.20.0. Runtime compiler tools are absent. Backend Argon2id hash/verify,
+  valid and deliberately invalid secret-safe config audits, bot config
+  bootstrap, and backend startup/readiness against the isolated runtime role
+  pass. A synthetic register, Tenant create/context/read/update application flow
+  also passes with that restricted role. Both final production dependency audits
+  report zero vulnerabilities.
+- Isolated PostgreSQL 16.15 received all 16 migrations. The reviewed runtime
+  role has all elevated/bypass-RLS flags false, no TEMP/schema CREATE/migration
+  DML/ownership, and exactly the M1-M22 table grants. Docker Scout remains
+  blocked only by required Docker login; no alternative scanner is installed.
 
-No VPS, firewall, sshd, host Caddy, credential, PostgreSQL role, Redis password,
-GitHub secret, deployment, restart, schema, migration, product, P7.2+, or Phase
-6 change was performed.
+No production/VPS, firewall, sshd, host Caddy, credential, PostgreSQL role,
+Redis password, GitHub secret, deployment, production restart/schema/migration,
+product, P7.2+, or Phase 6 change was performed.
 
 ## 5. Current Repository Structure
 
@@ -1132,17 +1134,19 @@ Current branch: `chore/p7.1-production-security-baseline`.
 ## 6. Current Blockers
 
 No open Phase-5 feature blocker remains. P7.1 public-launch blockers are the
-EOL Node 20 production runtime, pre-existing release-provenance wording/history,
-and any production runtime database privilege failure found by A. DATE-001 and
-AuditLog immutability remain explicitly assigned to P7.5 and P7.7.
+confirmed overprivileged production database identity, missing authenticated
+Critical/High final-image scan evidence, and four historical provenance findings
+awaiting A's separate history decision. DATE-001 and AuditLog immutability remain
+explicitly assigned to P7.5 and P7.7.
 
 ---
 
 ## 7. Current Task
 
-P7.1 — Production Security Baseline is implemented under accepted D-029 and
-awaits B review plus A-owned production validation. It is not operationally
-closed. Do not start P7.2 or Phase 6.
+P7.1 — Production Security Baseline follow-up is implemented under accepted
+D-029. B re-review remains blocked on the final-image scan, and A-owned
+production validation remains outstanding. P7.1 is not operationally closed.
+Do not start P7.2 or Phase 6.
 
 ### Last completed product milestone: M22
 

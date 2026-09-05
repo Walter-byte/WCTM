@@ -1,4 +1,4 @@
-FROM node:20-alpine AS dependencies
+FROM node:24.20.0-alpine3.24@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS dependencies
 
 WORKDIR /app
 
@@ -17,7 +17,7 @@ COPY telegram-bot ./telegram-bot
 
 RUN npm run build --workspace=@wc-telegram/telegram-bot
 
-FROM node:20-alpine AS production
+FROM node:24.20.0-alpine3.24@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS production
 
 ENV NODE_ENV=production
 WORKDIR /app
@@ -27,7 +27,8 @@ COPY backend/package.json ./backend/package.json
 COPY telegram-bot/package.json ./telegram-bot/package.json
 
 RUN apk add --no-cache --virtual .native-build-deps python3 make g++ \
-  && npm ci --omit=dev --workspace=@wc-telegram/telegram-bot \
+  && npm ci --omit=dev --omit=optional --workspace=@wc-telegram/telegram-bot \
+  && node -e "require('node:fs').rmSync('/app/node_modules/typescript', { recursive: true, force: true })" \
   && apk del .native-build-deps \
   && npm cache clean --force
 

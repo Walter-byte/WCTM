@@ -137,6 +137,10 @@ describe('P7.1 production security baseline', () => {
 
   it('has no wildcard CORS and applies explicit bounded body parsers', () => {
     const main = readFileSync(resolve(process.cwd(), 'src/main.ts'), 'utf8');
+    const bodyParsers = readFileSync(
+      resolve(process.cwd(), 'src/http/body-parsers.ts'),
+      'utf8'
+    );
     const packageManifest = readFileSync(
       resolve(process.cwd(), 'package.json'),
       'utf8'
@@ -144,10 +148,11 @@ describe('P7.1 production security baseline', () => {
 
     expect(main).not.toMatch(/enableCors|Access-Control-Allow-Origin/);
     expect(packageManifest).not.toMatch(/"cors"\s*:/);
-    expect(main).toContain("const JSON_BODY_LIMIT = '64kb'");
-    expect(main).toContain("const WEBHOOK_BODY_LIMIT = '1mb'");
-    expect(main).toContain('inflate: false, limit: WEBHOOK_BODY_LIMIT');
-    expect(main).toContain('parameterLimit: 100');
+    expect(main).toContain('configureBodyParsers(application)');
+    expect(bodyParsers).toContain("JSON_BODY_LIMIT = '64kb'");
+    expect(bodyParsers).toContain("WEBHOOK_BODY_LIMIT = '1mb'");
+    expect(bodyParsers).toContain('inflate: false, limit: WEBHOOK_BODY_LIMIT');
+    expect(bodyParsers).toContain('parameterLimit: 100');
   });
 
   it('keeps runtime containers non-root and private services unpublished', () => {
@@ -164,7 +169,22 @@ describe('P7.1 production security baseline', () => {
       'utf8'
     );
 
-    expect(backendDockerfile).toMatch(/FROM node:20-alpine AS production/);
+    expect(backendDockerfile).toMatch(
+      /FROM node:24\.20\.0-alpine3\.24@sha256:[a-f0-9]{64} AS production/
+    );
+    expect(botDockerfile).toMatch(
+      /FROM node:24\.20\.0-alpine3\.24@sha256:[a-f0-9]{64} AS production/
+    );
+    expect(botDockerfile).toContain(
+      'npm ci --omit=dev --omit=optional --workspace=@wc-telegram/telegram-bot'
+    );
+    expect(botDockerfile).toContain("rmSync('/app/node_modules/typescript'");
+    expect(compose).toMatch(
+      /image: postgres:16\.15-alpine3\.24@sha256:[a-f0-9]{64}/
+    );
+    expect(compose).toMatch(
+      /image: redis:7\.4\.11-alpine3\.21@sha256:[a-f0-9]{64}/
+    );
     expect(backendDockerfile).toContain(
       'npm ci --omit=dev --omit=optional --workspace=@wc-telegram/backend'
     );

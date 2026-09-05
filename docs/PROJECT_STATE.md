@@ -552,7 +552,7 @@ those cases were accepted from automated/adversarial coverage. M17 operational
 validation passed and M17 is fully closed.
 
 M18 adds Tenant-owned `timezone` and `language` directly to the existing Tenant
-model. Timezone accepts canonical IANA-style identifiers through the Node 20
+model. Timezone accepts canonical IANA-style identifiers through the Node
 `Intl` runtime, including `UTC` and `Asia/Tehran`, without a dependency.
 Language is the typed `TenantLanguage` enum with exactly `FA` and `EN`, mapped
 to persisted `fa` and `en` codes.
@@ -809,24 +809,23 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No open Phase-5 feature blocker remains. Public launch is blocked because the
-production images remain based on Node.js 20, which reached upstream end of life
-on 2026-04-30; upgrading to a supported Node major requires separate A approval
-and compatibility validation. The current floating base-image tags also require
-digest/version pinning as part of that approved runtime correction before a
-reproducible release. The initial release-provenance audit also found
-pre-existing implementation-agent names in tracked canonical documents and
-their Git history. Current files can be corrected only within ownership rules,
-and history rewriting remains prohibited without separate A approval. A must
-also prove the production runtime database role is non-superuser and run the
-remaining host/Docker validation before P7.1 operational closure.
+No open Phase-5 feature blocker remains. Public launch is blocked because A's
+read-only production audit confirmed that the application database identity is
+superuser and has CREATEDB, CREATEROLE, and replication privileges. A must apply
+the reviewed least-privilege procedure and validate the resulting runtime before
+P7.1 operational closure. Docker Scout is installed but requires a Docker login,
+and no other bounded image scanner is available, so final Critical/High image
+scan evidence also remains blocked. Four historical implementation-provenance
+findings remain for A's separate history-remediation decision and the P7.8
+release audit; current tracked content is clean and Git history was not rewritten.
 
 ---
 
 Next Milestone
 
-P7.1 — Production Security Baseline awaits B review and A-owned production
-validation. Do not start P7.2.
+P7.1 — Production Security Baseline follow-up is implemented. B re-review
+remains blocked on the final-image scan, and A-owned production validation
+remains outstanding. Do not start P7.2.
 
 ---
 
@@ -876,12 +875,13 @@ P7.1 Implementation State
   production runbook preserves both browser and restricted-network direct
   connector HTTPS origins, automatic HTTP-to-HTTPS redirects, backend loopback
   publication, and private PostgreSQL/Redis/bot exposure.
-- Backend and bot production stages run as `node`; build OS toolchains are
-  removed, and backend runtime installation now omits development and optional
-  packages, excluding the unused Prisma CLI/tooling peer tree. No image uses
-  `latest`. Node.js 20 upstream EOL and floating base-image tags remain explicit
-  launch blockers because P7.1 cannot silently perform the required major
-  upgrade or pin a release candidate that cannot be built in this environment.
+- Backend and bot production stages run as UID 1000 (`node`) on exact
+  `node:24.20.0-alpine3.24` plus immutable digest. Build OS toolchains are
+  absent from both runtime images; backend production installation omits
+  development and optional packages, and bot production installation omits
+  development/optional packages plus the workspace-hoisted TypeScript compiler.
+  PostgreSQL remains 16.15 and Redis remains 7.4.11, both with exact Alpine
+  distro tags and immutable digests. No image uses `latest` or a floating tag.
 - Connector input now accepts only the exact M7 `reg_` token format. Existing
   `manage_woocommerce` capability, nonce, escaping, autoload-disabled storage,
   hidden secret, direct-origin, Retry/reconciliation, and HMAC behavior remain
@@ -890,20 +890,36 @@ P7.1 Implementation State
   rotation/restart/reconnect consequences, provides safe port/firewall/sshd/
   Docker/Caddy/header/health/database-role/log/CI checks, and gives a bounded
   DML-only runtime-role procedure derived from all current M1-M22 tables.
+- A's read-only production audit returned `true` for superuser, CREATEDB,
+  CREATEROLE, and replication, confirming a P7.1 launch blocker. The reviewed
+  runtime-role procedure passed against isolated PostgreSQL 16.15 after all 16
+  migrations: every elevated/bypass-RLS flag false, CONNECT/schema USAGE only,
+  no TEMP/schema CREATE/migration-table DML/object ownership, and the exact 57
+  M1-M22 table grants. The final backend started with that role and reported
+  PostgreSQL and Redis ready; a synthetic register, Tenant create, Tenant-context,
+  Tenant read, and Tenant update flow also passed through the application. The
+  production procedure was not executed.
 - Prisma 7.10.0 is exact-pinned after the bounded compatible audit update.
   Exact transitive overrides patch Prisma tooling's `deepmerge-ts` at 8.0.0
   (`GHSA-ggr8-5vv4-36mx`) and `mysql2` at 3.23.1
   (`GHSA-3f6p-5ww8-9rcr`, `GHSA-rgwj-5xj2-c3m3`). Prisma config loading and
   all regressions pass; the final production-dependency audit reports zero
   vulnerabilities.
-- Clean `npm ci`, Prisma format/validate/generate, build, 465 backend Jest
-  tests, 28 backend Node/contract tests, 68 bot tests, typecheck, lint, format,
-  and diff checks pass. Native PHP and Docker image/runtime/scanner checks are
-  environment-blocked because PHP is absent and the Docker daemon is stopped;
-  static connector and non-root/private-port image checks pass.
+- Clean Node 24.20.0 `npm ci`, Prisma format/validate/generate, build, 465
+  backend Jest tests, 32 backend Node/contract tests, 68 bot tests, typecheck,
+  lint, format, and diff checks pass. PHP 8.4 lint and the existing native
+  connector reconciliation test pass. Final backend/bot builds, UID 1000 and
+  Node-version checks, absence of runtime compiler toolchains, backend Argon2id
+  hash/verify, bot configuration bootstrap, backend startup/readiness, and
+  final-image config-audit valid/invalid paths pass. Both final production
+  dependency audits report zero vulnerabilities.
+- Docker Scout 1.23.1 is installed but refuses both local image scans until a
+  Docker ID login is supplied. No other bounded scanner is installed; therefore
+  Critical/High image vulnerability evidence remains an exact environment
+  blocker and P7.1 is not ready for operational closure.
 - No production/VPS, firewall, sshd, host Caddy, credential, PostgreSQL role,
-  Redis auth, GitHub secret, deployment, restart, schema, migration, product,
-  P7.2+, or Phase 6 change was performed.
+  Redis auth, GitHub secret, deployment, production restart/schema/migration,
+  product, P7.2+, or Phase 6 change was performed.
 
 ---
 

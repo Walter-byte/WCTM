@@ -1,7 +1,6 @@
 import 'reflect-metadata';
 
 import { NestFactory } from '@nestjs/core';
-import { json, raw, urlencoded } from 'express';
 
 import { AppModule } from './app.module';
 import { configureApplicationRouting } from './application-routing';
@@ -9,13 +8,11 @@ import { StructuredLoggerService } from './common/logging/structured-logger.serv
 import { redactSensitiveData } from './common/utils/redact-sensitive-data';
 import { ApplicationConfigService } from './config/application-config.service';
 import { ConfigurationValidationError } from './config/environment.validation';
+import { configureBodyParsers } from './http/body-parsers';
 
 interface ExpressApplication {
   set(setting: string, value: unknown): void;
 }
-
-const JSON_BODY_LIMIT = '64kb';
-const WEBHOOK_BODY_LIMIT = '1mb';
 
 async function bootstrap(): Promise<void> {
   const application = await NestFactory.create(AppModule, {
@@ -33,14 +30,7 @@ async function bootstrap(): Promise<void> {
     .getInstance() as ExpressApplication;
 
   httpApplication.set('trust proxy', 1);
-  application.use(
-    '/api/webhooks/woocommerce/:endpointKey',
-    raw({ type: 'application/json', inflate: false, limit: WEBHOOK_BODY_LIMIT })
-  );
-  application.use(json({ limit: JSON_BODY_LIMIT }));
-  application.use(
-    urlencoded({ extended: true, limit: JSON_BODY_LIMIT, parameterLimit: 100 })
-  );
+  configureBodyParsers(application);
   configureApplicationRouting(application);
   application.enableShutdownHooks();
 
