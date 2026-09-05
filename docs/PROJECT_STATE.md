@@ -13,8 +13,8 @@ Telegram product features are complete; Persian/English manager UX and backend-
 authoritative basic entitlement enforcement are operational. Phase 4 and
 M1–M16 remain complete and unchanged. By explicit A decision D-029, the current
 phase is Phase 7 — Production Readiness, which executes before Phase 6. P7.1 —
-Production Security Baseline is the next milestone and has not begun
-implementation. Phase 6 commercial SaaS work remains deferred and unstarted
+Production Security Baseline is implemented on its approved branch and awaits B
+review plus A-owned production validation. Phase 6 commercial SaaS work remains deferred and unstarted
 until Phase 7 completes and A separately authorizes it. Unrestricted public
 launch is not approved.
 
@@ -22,10 +22,11 @@ launch is not approved.
 
 Current Task
 
-No implementation task is active. M22 and Phase 5 are closed. No product
-feature work is active. Do not begin P7.1 until the implementation task is
-authorized, and do not begin Phase 6 until Phase 7 completes and A separately
-authorizes it.
+P7.1 — Production Security Baseline is the only active implementation task. Its
+repository implementation is complete and awaiting B review. Production/VPS
+validation and launch-blocker resolution remain A-owned; P7.1 is not
+operationally closed. No product feature work is active. Do not begin P7.2 or
+Phase 6 without separate approval.
 
 ---
 
@@ -37,7 +38,7 @@ Project Version
 
 Repository
 
-Current branch: `main`.
+Current branch: `chore/p7.1-production-security-baseline`.
 
 M22 implementation commit:
 `35f9e72335c8ed0c6a039497d92bed763dc68fb5 feat(entitlements): add MVP tenant
@@ -271,8 +272,9 @@ accepts `/start`, `/start <token>`, `/status`, and `/unlink` with a single
 inline confirmation step. Only private chats are processed; group, supergroup,
 and channel updates receive one safe rejection and cannot change state.
 
-The bot validates `TELEGRAM_BOT_TOKEN`, `BOT_INTERNAL_API_KEY`, and
-`BACKEND_INTERNAL_URL`, calls only the NestJS internal Telegram API, propagates
+The bot alone receives and validates `TELEGRAM_BOT_TOKEN`; it also validates
+`BOT_INTERNAL_API_KEY` and `BACKEND_INTERNAL_URL`, calls only the NestJS
+internal Telegram API, propagates
 correlation and Telegram update IDs, and writes no local persistent state. It
 does not import Prisma or connect to PostgreSQL.
 
@@ -550,7 +552,7 @@ those cases were accepted from automated/adversarial coverage. M17 operational
 validation passed and M17 is fully closed.
 
 M18 adds Tenant-owned `timezone` and `language` directly to the existing Tenant
-model. Timezone accepts canonical IANA-style identifiers through the Node 20
+model. Timezone accepts canonical IANA-style identifiers through the Node
 `Intl` runtime, including `UTC` and `Asia/Tehran`, without a dependency.
 Language is the typed `TenantLanguage` enum with exactly `FA` and `EN`, mapped
 to persisted `fa` and `en` codes.
@@ -776,7 +778,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-main
+chore/p7.1-production-security-baseline
 
 ---
 
@@ -807,14 +809,23 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No open Phase-5 feature blocker remains. Existing later-phase known issues and
-technical debt remain recorded.
+No open Phase-5 feature blocker remains. Public launch is blocked because A's
+read-only production audit confirmed that the application database identity is
+superuser and has CREATEDB, CREATEROLE, and replication privileges. A must apply
+the reviewed least-privilege procedure and validate the resulting runtime before
+P7.1 operational closure. Authenticated Docker Scout scans of the patched final
+backend and bot images now report zero Critical and zero High findings. Four
+historical implementation-provenance findings remain for A's separate history-
+remediation decision and the P7.8 release audit; current tracked content is clean
+and Git history was not rewritten.
 
 ---
 
 Next Milestone
 
-P7.1 — Production Security Baseline. It has not begun implementation.
+P7.1 — Production Security Baseline follow-up is implemented. B re-review
+may continue with final-image scan evidence complete; A-owned production
+database-role remediation and validation remain outstanding. Do not start P7.2.
 
 ---
 
@@ -833,7 +844,85 @@ Excellent
 
 Last Updated
 
-2026-09-04
+2026-09-05
+
+---
+
+P7.1 Implementation State
+
+- D-029 is Accepted. Phase 7 runs P7.1 through P7.8 before deferred Phase 6;
+  P7.2 and later work remain unstarted.
+- Production configuration rejects committed development and test secret
+  placeholders, short bot service credentials, pilot mode, debug/verbose log
+  levels, and unrelated cross-boundary secret reuse without reporting values.
+  `TELEGRAM_BOT_TOKEN` remains bot-only and is not injected into the backend.
+  The unused global `WOOCOMMERCE_WEBHOOK_SECRET` setting was removed; M8's
+  unique encrypted per-Store secrets remain unchanged.
+- `security:config-audit` uses the typed validation boundary and reports only
+  setting names, categories, and PASS/FAIL, including
+  `APP_ENCRYPTION_KEY` shape and secret-boundary separation.
+- Central structured logging now redacts configured secret sentinels even in
+  unlabeled strings, broad sensitive payload/query/note/customer/update keys,
+  and request query/fragment content. Existing exception responses remain
+  normalized and secret-safe.
+- `/onboarding` and its same-origin assets send the approved CSP, no-store,
+  nosniff, no-referrer, DENY frame, and restrictive Permissions Policy headers.
+  No wildcard CORS, cookie/session auth, inline executable script, unsafe-eval,
+  URL token, or browser persistence was added. Normal JSON/form bodies are
+  capped at 64 KiB/100 parameters and exact raw WooCommerce bodies at 1 MiB
+  without changing M8 HMAC semantics.
+- Caddy examples set exact one-year HSTS without subdomains/preload. The
+  production runbook preserves both browser and restricted-network direct
+  connector HTTPS origins, automatic HTTP-to-HTTPS redirects, backend loopback
+  publication, and private PostgreSQL/Redis/bot exposure.
+- Backend and bot production stages run as UID 1000 (`node`) on exact
+  `node:24.20.0-alpine3.24` plus immutable digest. Build OS toolchains are
+  absent from both runtime images; backend production installation omits
+  development and optional packages, and bot production installation omits
+  development/optional packages plus the workspace-hoisted TypeScript compiler.
+  PostgreSQL remains 16.15 and Redis remains 7.4.11, both with exact Alpine
+  distro tags and immutable digests. No image uses `latest` or a floating tag.
+- Connector input now accepts only the exact M7 `reg_` token format. Existing
+  `manage_woocommerce` capability, nonce, escaping, autoload-disabled storage,
+  hidden secret, direct-origin, Retry/reconciliation, and HMAC behavior remain
+  intact and have focused static coverage.
+- The runbook inventories every environment/connector/CI boundary, classifies
+  rotation/restart/reconnect consequences, provides safe port/firewall/sshd/
+  Docker/Caddy/header/health/database-role/log/CI checks, and gives a bounded
+  DML-only runtime-role procedure derived from all current M1-M22 tables.
+- A's read-only production audit returned `true` for superuser, CREATEDB,
+  CREATEROLE, and replication, confirming a P7.1 launch blocker. The reviewed
+  runtime-role procedure passed against isolated PostgreSQL 16.15 after all 16
+  migrations: every elevated/bypass-RLS flag false, CONNECT/schema USAGE only,
+  no TEMP/schema CREATE/migration-table DML/object ownership, and the exact 57
+  M1-M22 table grants. The final backend started with that role and reported
+  PostgreSQL and Redis ready; a synthetic register, Tenant create, Tenant-context,
+  Tenant read, and Tenant update flow also passed through the application. The
+  production procedure was not executed.
+- Prisma 7.10.0 is exact-pinned after the bounded compatible audit update.
+  Exact transitive overrides patch Prisma tooling's `deepmerge-ts` at 8.0.0
+  (`GHSA-ggr8-5vv4-36mx`) and `mysql2` at 3.23.1
+  (`GHSA-3f6p-5ww8-9rcr`, `GHSA-rgwj-5xj2-c3m3`). Prisma config loading and
+  all regressions pass; the final production-dependency audit reports zero
+  vulnerabilities.
+- Clean Node 24.20.0 `npm ci`, Prisma format/validate/generate, build, 465
+  backend Jest tests, 32 backend Node/contract tests, 68 bot tests, typecheck,
+  lint, format, and diff checks pass. PHP 8.4 lint and the existing native
+  connector reconciliation test pass. Final backend/bot builds, UID 1000 and
+  Node-version checks, absence of runtime compiler toolchains, backend Argon2id
+  hash/verify, bot configuration bootstrap, backend startup/readiness, and
+  final-image config-audit valid/invalid paths pass. Both final production
+  dependency audits report zero vulnerabilities.
+- Authenticated Docker Scout initially found Alpine OpenSSL 3.5.7-r0 and three
+  packages bundled only under the official image's global npm 11.19.0 tooling.
+  The final stages now exact-pin Alpine 3.24 `libcrypto3`/`libssl3` 3.5.8-r0 and
+  npm 11.19.1, which bundles `brace-expansion` 5.0.9, `ip-address` 10.5.0, and
+  `tar` 7.5.22. Clean rebuilt backend and bot images both report zero Critical
+  and zero High findings. The bot build also installs only root tooling and its
+  own workspace and no longer installs an unnecessary native toolchain.
+- No production/VPS, firewall, sshd, host Caddy, credential, PostgreSQL role,
+  Redis auth, GitHub secret, deployment, production restart/schema/migration,
+  product, P7.2+, or Phase 6 change was performed.
 
 ---
 

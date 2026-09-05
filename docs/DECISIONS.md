@@ -1062,4 +1062,49 @@ Accepted.
 
 ---
 
-Next decision number: D-029.
+## D-029
+
+Date
+
+2026-09-05
+
+Decision
+
+Phase 7 — Production Readiness executes before deferred Phase 6 commercial
+SaaS work. Its approved order is P7.1 Production Security Baseline, P7.2
+Production Migration & Deployment Path, P7.3 Backup/Restore & Disaster
+Recovery, P7.4 Monitoring & Alerting, P7.5 Data & Time Correctness, P7.6
+Network & Runtime Reliability, P7.7 Audit & Operational Integrity, and P7.8
+Final Launch Readiness Gate.
+
+P7.1 establishes the security baseline for the completed M1-M22 architecture.
+It inventories and validates production configuration, hardens secret and
+logging boundaries, preserves endpoint-scoped abuse controls, establishes
+browser/TLS/network/container/connector/repository checks, and provides
+secret-safe host validation procedures. Backend-authoritative Tenant/RBAC,
+raw-body webhook HMAC, stateless bot, existing Store credential encryption,
+direct connector origin, private PostgreSQL/Redis/bot topology, and every
+M1-M22 behavior remain authoritative.
+
+P7.1 performs no VPS change, deployment, production credential rotation,
+`APP_ENCRYPTION_KEY` rotation, database-role mutation, Git history rewrite,
+product expansion, Phase 6 work, or P7.2+ implementation. Production evidence
+is required before operational closure. Critical findings that require an
+unapproved runtime/architecture change remain explicit launch blockers rather
+than being silently expanded into P7.1.
+
+Reason
+
+The completed MVP requires a bounded, reviewable production-security gate
+before commercial expansion. Sequencing all readiness work first preserves the
+existing product while separating repository hardening from host operations and
+later deployment, recovery, monitoring, correctness, reliability, audit, and
+final-release ceremonies.
+
+Status
+
+Accepted.
+
+---
+
+Next decision number: D-030.

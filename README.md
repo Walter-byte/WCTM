@@ -49,9 +49,13 @@ docker compose up --build
 
 Verify the stack:
 
-- Placeholder page: `http://localhost`
-- Backend health: `http://localhost/api/health`
+- Backend health: `http://127.0.0.1:3000/api/health`
 - Container status: `docker compose ps`
+
+The repository Compose file publishes only the backend on host loopback;
+PostgreSQL, Redis, and the bot remain private. Production uses host-level Caddy
+in front of that loopback listener. See the production security section in the
+setup guide before exposing any service.
 
 Stop the stack with `docker compose down`. Add `--volumes` only when you
 intentionally want to delete local PostgreSQL, Redis, and Caddy data.

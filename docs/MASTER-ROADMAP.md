@@ -18,7 +18,7 @@ Only A (Project Owner + Architect) may modify the roadmap.
 
 B (Project Orchestrator) must follow it.
 
-C (GapCode) implements only the current task.
+C implements only the current task.
 
 ---
 

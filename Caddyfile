@@ -4,6 +4,8 @@
 }
 
 {$CADDY_DOMAIN} {
+	header Strict-Transport-Security "max-age=31536000"
+
 	handle /api/* {
 		reverse_proxy backend:{$BACKEND_PORT:3000}
 	}

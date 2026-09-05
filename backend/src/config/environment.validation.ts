@@ -13,13 +13,11 @@ const DEVELOPMENT_VALUES = {
   REDIS_URL: 'redis://redis:6379',
   JWT_SECRET: 'development-only-jwt-secret-change-me',
   APP_ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-  TELEGRAM_BOT_TOKEN: '0000000000:development-placeholder-token',
   BOT_INTERNAL_API_KEY: 'development-only-bot-internal-api-key',
   BOT_INTERNAL_URL: 'http://telegram-bot:3001',
   TELEGRAM_CALLBACK_SIGNING_KEY:
     'development-only-telegram-callback-signing-key',
   BACKEND_INTERNAL_URL: 'http://backend:3000/api',
-  WOOCOMMERCE_WEBHOOK_SECRET: 'development-only-webhook-secret-change-me',
   POSTGRES_PASSWORD: 'development-only-postgres-password',
 } as const;
 
@@ -28,12 +26,10 @@ const TEST_VALUES = {
   REDIS_URL: 'redis://localhost:6379',
   JWT_SECRET: 'test-only-jwt-secret-not-for-production',
   APP_ENCRYPTION_KEY: 'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=',
-  TELEGRAM_BOT_TOKEN: '0000000000:test-placeholder-token-value',
   BOT_INTERNAL_API_KEY: 'test-only-bot-internal-api-key',
   BOT_INTERNAL_URL: 'http://localhost:3001',
   TELEGRAM_CALLBACK_SIGNING_KEY: 'test-only-telegram-callback-signing-key',
   BACKEND_INTERNAL_URL: 'http://localhost:3000/api',
-  WOOCOMMERCE_WEBHOOK_SECRET: 'test-only-webhook-secret-not-for-production',
 } as const;
 
 const NODE_ENVIRONMENTS: readonly NodeEnvironment[] = [
@@ -111,11 +107,6 @@ function createEnvironmentSchema(
     nodeEnvironment,
     TEST_VALUES.APP_ENCRYPTION_KEY
   );
-  let telegramBotToken = requiredOrTestDefault(
-    Joi.string().pattern(/^\d+:[A-Za-z0-9_-]{20,}$/),
-    nodeEnvironment,
-    TEST_VALUES.TELEGRAM_BOT_TOKEN
-  );
   let botInternalApiKey = requiredOrTestDefault(
     Joi.string().trim().min(1),
     nodeEnvironment,
@@ -140,31 +131,31 @@ function createEnvironmentSchema(
     nodeEnvironment,
     TEST_VALUES.BOT_INTERNAL_URL
   );
-  let webhookSecret = requiredOrTestDefault(
-    Joi.string().trim().min(32),
-    nodeEnvironment,
-    TEST_VALUES.WOOCOMMERCE_WEBHOOK_SECRET
-  );
   let postgresPassword = Joi.string().trim().min(1).optional();
 
   if (isProduction) {
-    databaseUrl = databaseUrl.invalid(DEVELOPMENT_VALUES.DATABASE_URL);
-    redisUrl = redisUrl.required();
-    jwtSecret = jwtSecret.invalid(DEVELOPMENT_VALUES.JWT_SECRET);
+    databaseUrl = databaseUrl.invalid(
+      DEVELOPMENT_VALUES.DATABASE_URL,
+      TEST_VALUES.DATABASE_URL
+    );
+    redisUrl = redisUrl.required().invalid(TEST_VALUES.REDIS_URL);
+    jwtSecret = jwtSecret.invalid(
+      DEVELOPMENT_VALUES.JWT_SECRET,
+      TEST_VALUES.JWT_SECRET
+    );
     encryptionKey = encryptionKey.invalid(
-      DEVELOPMENT_VALUES.APP_ENCRYPTION_KEY
+      DEVELOPMENT_VALUES.APP_ENCRYPTION_KEY,
+      TEST_VALUES.APP_ENCRYPTION_KEY
     );
-    telegramBotToken = telegramBotToken.invalid(
-      DEVELOPMENT_VALUES.TELEGRAM_BOT_TOKEN
-    );
-    botInternalApiKey = botInternalApiKey.invalid(
-      DEVELOPMENT_VALUES.BOT_INTERNAL_API_KEY
-    );
+    botInternalApiKey = botInternalApiKey
+      .min(32)
+      .invalid(
+        DEVELOPMENT_VALUES.BOT_INTERNAL_API_KEY,
+        TEST_VALUES.BOT_INTERNAL_API_KEY
+      );
     telegramCallbackSigningKey = telegramCallbackSigningKey.invalid(
-      DEVELOPMENT_VALUES.TELEGRAM_CALLBACK_SIGNING_KEY
-    );
-    webhookSecret = webhookSecret.invalid(
-      DEVELOPMENT_VALUES.WOOCOMMERCE_WEBHOOK_SECRET
+      DEVELOPMENT_VALUES.TELEGRAM_CALLBACK_SIGNING_KEY,
+      TEST_VALUES.TELEGRAM_CALLBACK_SIGNING_KEY
     );
     postgresPassword = postgresPassword.invalid(
       DEVELOPMENT_VALUES.POSTGRES_PASSWORD
@@ -183,9 +174,7 @@ function createEnvironmentSchema(
       ? Joi.number().integer().min(1).max(65535).required()
       : Joi.number().integer().min(1).max(65535).default(3000),
     LOG_LEVEL: isProduction
-      ? Joi.string()
-          .valid(...LOG_LEVELS)
-          .required()
+      ? Joi.string().valid('fatal', 'error', 'warn', 'log').required()
       : Joi.string()
           .valid(...LOG_LEVELS)
           .default(isTest ? 'error' : 'debug'),
@@ -194,7 +183,6 @@ function createEnvironmentSchema(
     JWT_SECRET: jwtSecret,
     JWT_ACCESS_TTL: Joi.string().trim().min(1).required(),
     APP_ENCRYPTION_KEY: encryptionKey,
-    TELEGRAM_BOT_TOKEN: telegramBotToken,
     BOT_INTERNAL_API_KEY: botInternalApiKey,
     BOT_INTERNAL_URL: botInternalUrl,
     BOT_INTERNAL_PORT: Joi.number().integer().min(1).max(65535).default(3001),
@@ -212,7 +200,6 @@ function createEnvironmentSchema(
       .integer()
       .min(1)
       .default(300),
-    WOOCOMMERCE_WEBHOOK_SECRET: webhookSecret,
     WOOCOMMERCE_REST_MAX_ATTEMPTS: Joi.number().integer().min(1).default(3),
     WOOCOMMERCE_REST_ATTEMPT_TIMEOUT_MS: Joi.number()
       .integer()
@@ -244,7 +231,9 @@ function createEnvironmentSchema(
       .default(60),
     AUTH_LOGIN_RATE_LIMIT: Joi.number().integer().min(1).default(10),
     AUTH_LOGIN_RATE_WINDOW_SECONDS: Joi.number().integer().min(1).default(60),
-    PILOT_MODE: Joi.boolean().truthy('true').falsy('false').default(false),
+    PILOT_MODE: isProduction
+      ? Joi.boolean().truthy('true').falsy('false').valid(false).required()
+      : Joi.boolean().truthy('true').falsy('false').default(false),
     PILOT_WEBHOOK_BASE_URL: Joi.string()
       .trim()
       .empty('')
@@ -298,6 +287,87 @@ function describeValidationFailure(detail: Joi.ValidationErrorItem): string {
   }
 }
 
+interface SecretBoundaryValue {
+  name: string;
+  boundary: string;
+  value: string;
+}
+
+function urlPassword(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  try {
+    const password = new URL(value).password;
+    return password === '' ? undefined : password;
+  } catch {
+    return undefined;
+  }
+}
+
+function secretBoundaryFailures(
+  environment: Record<string, unknown>
+): string[] {
+  const candidates: SecretBoundaryValue[] = [
+    {
+      name: 'JWT_SECRET',
+      boundary: 'jwt',
+      value: String(environment['JWT_SECRET'] ?? ''),
+    },
+    {
+      name: 'APP_ENCRYPTION_KEY',
+      boundary: 'encryption',
+      value: String(environment['APP_ENCRYPTION_KEY'] ?? ''),
+    },
+    {
+      name: 'BOT_INTERNAL_API_KEY',
+      boundary: 'backend-bot',
+      value: String(environment['BOT_INTERNAL_API_KEY'] ?? ''),
+    },
+    {
+      name: 'TELEGRAM_CALLBACK_SIGNING_KEY',
+      boundary: 'telegram-callback',
+      value: String(environment['TELEGRAM_CALLBACK_SIGNING_KEY'] ?? ''),
+    },
+    {
+      name: 'DATABASE_URL password',
+      boundary: 'postgresql',
+      value: urlPassword(environment['DATABASE_URL']) ?? '',
+    },
+    {
+      name: 'POSTGRES_PASSWORD',
+      boundary: 'postgresql',
+      value: String(environment['POSTGRES_PASSWORD'] ?? ''),
+    },
+    {
+      name: 'REDIS_URL password',
+      boundary: 'redis',
+      value: urlPassword(environment['REDIS_URL']) ?? '',
+    },
+  ].filter((candidate) => candidate.value !== '');
+  const failures = new Set<string>();
+
+  for (let leftIndex = 0; leftIndex < candidates.length; leftIndex += 1) {
+    for (
+      let rightIndex = leftIndex + 1;
+      rightIndex < candidates.length;
+      rightIndex += 1
+    ) {
+      const left = candidates[leftIndex]!;
+      const right = candidates[rightIndex]!;
+
+      if (left.boundary !== right.boundary && left.value === right.value) {
+        failures.add(
+          `${left.name} and ${right.name} must not reuse one secret across trust boundaries`
+        );
+      }
+    }
+  }
+
+  return [...failures];
+}
+
 export class ConfigurationValidationError extends Error {
   constructor(failures: readonly string[]) {
     super(
@@ -323,6 +393,14 @@ export function validateEnvironment(
   if (error) {
     const failures = [...new Set(error.details.map(describeValidationFailure))];
     throw new ConfigurationValidationError(failures);
+  }
+
+  if (nodeEnvironment === 'production') {
+    const failures = secretBoundaryFailures(value);
+
+    if (failures.length > 0) {
+      throw new ConfigurationValidationError(failures);
+    }
   }
 
   return Object.fromEntries(

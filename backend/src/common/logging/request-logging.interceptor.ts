@@ -11,7 +11,16 @@ import { StructuredLoggerService } from './structured-logger.service';
 interface HttpRequestDetails {
   method?: string;
   originalUrl?: string;
+  path?: string;
   url?: string;
+}
+
+function safeRequestPath(request: HttpRequestDetails): string | undefined {
+  if (request.path) {
+    return request.path;
+  }
+
+  return (request.originalUrl ?? request.url)?.split(/[?#]/, 1)[0];
 }
 
 @Injectable()
@@ -26,7 +35,7 @@ export class RequestLoggingInterceptor implements NestInterceptor {
         'HTTP request received',
         {
           method: request.method,
-          path: request.originalUrl ?? request.url,
+          path: safeRequestPath(request),
         },
         RequestLoggingInterceptor.name
       );

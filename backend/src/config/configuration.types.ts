@@ -12,7 +12,6 @@ export interface ValidatedEnvironment {
   JWT_SECRET: string;
   JWT_ACCESS_TTL: string;
   APP_ENCRYPTION_KEY: string;
-  TELEGRAM_BOT_TOKEN: string;
   BOT_INTERNAL_API_KEY: string;
   BOT_INTERNAL_URL: string;
   BOT_INTERNAL_PORT: number;
@@ -24,7 +23,6 @@ export interface ValidatedEnvironment {
   TELEGRAM_CALLBACK_SIGNING_KEY: string;
   TELEGRAM_CALLBACK_REF_TTL_SECONDS: number;
   TELEGRAM_ORDER_FRESHNESS_THRESHOLD_SECONDS: number;
-  WOOCOMMERCE_WEBHOOK_SECRET: string;
   WOOCOMMERCE_REST_MAX_ATTEMPTS: number;
   WOOCOMMERCE_REST_ATTEMPT_TIMEOUT_MS: number;
   WOOCOMMERCE_REST_TOTAL_TIMEOUT_MS: number;
@@ -56,7 +54,6 @@ export const CONFIG_ENV_KEYS = [
   'JWT_SECRET',
   'JWT_ACCESS_TTL',
   'APP_ENCRYPTION_KEY',
-  'TELEGRAM_BOT_TOKEN',
   'BOT_INTERNAL_API_KEY',
   'BOT_INTERNAL_URL',
   'BOT_INTERNAL_PORT',
@@ -68,7 +65,6 @@ export const CONFIG_ENV_KEYS = [
   'TELEGRAM_CALLBACK_SIGNING_KEY',
   'TELEGRAM_CALLBACK_REF_TTL_SECONDS',
   'TELEGRAM_ORDER_FRESHNESS_THRESHOLD_SECONDS',
-  'WOOCOMMERCE_WEBHOOK_SECRET',
   'WOOCOMMERCE_REST_MAX_ATTEMPTS',
   'WOOCOMMERCE_REST_ATTEMPT_TIMEOUT_MS',
   'WOOCOMMERCE_REST_TOTAL_TIMEOUT_MS',
@@ -115,7 +111,6 @@ export interface EncryptionSettings {
 }
 
 export interface TelegramSettings {
-  botToken: string;
   internalApiKey: string;
   botInternalUrl: string;
   internalPort: number;
@@ -130,7 +125,6 @@ export interface TelegramSettings {
 }
 
 export interface WooCommerceSettings {
-  webhookSecret: string;
   rest: WooCommerceRestSettings;
 }
 

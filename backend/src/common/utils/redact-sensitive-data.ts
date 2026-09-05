@@ -5,21 +5,36 @@ export const REDACTED_VALUE = '****';
 const SENSITIVE_KEYS = new Set([
   'apikey',
   'authorization',
+  'body',
   'cookie',
+  'customer',
+  'email',
   'databaseurl',
   'encryptionkey',
+  'headers',
   'key',
+  'note',
+  'notebody',
   'password',
   'passwordhash',
+  'payload',
+  'phone',
   'privatekey',
+  'query',
+  'rawbody',
+  'rawwebhookbody',
   'redisurl',
+  'searchquery',
   'secret',
+  'signature',
+  'telegramupdate',
   'token',
+  'update',
   'url',
 ]);
 
 const SENSITIVE_TEXT_PATTERN =
-  /((?:api[_ -]?key|authorization|credentials?|encryption[_ -]?key|password[_ -]?hash|password|secret|token)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi;
+  /((?:api[_ -]?key|authorization|credentials?|encryption[_ -]?key|password[_ -]?hash|password|secret|signature|token)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi;
 const BEARER_TOKEN_PATTERN = /\b(Bearer)\s+[^\s,;]+/gi;
 
 function isSensitiveKey(key: string): boolean {
@@ -33,19 +48,46 @@ function isSensitiveKey(key: string): boolean {
     normalized.endsWith('passwordhash') ||
     normalized.endsWith('password') ||
     normalized.endsWith('secret') ||
-    normalized.endsWith('token')
+    normalized.endsWith('signature') ||
+    normalized.endsWith('token') ||
+    normalized.endsWith('body') ||
+    normalized.endsWith('query') ||
+    normalized.endsWith('payload') ||
+    normalized.endsWith('update') ||
+    normalized.endsWith('email') ||
+    normalized.endsWith('phone')
   );
 }
 
-export function redactSensitiveText(value: string): string {
-  return value
+function redactKnownValues(
+  value: string,
+  sensitiveValues: readonly string[]
+): string {
+  return [...new Set(sensitiveValues)]
+    .filter((secret) => secret.length >= 8)
+    .sort((left, right) => right.length - left.length)
+    .reduce(
+      (redacted, secret) => redacted.split(secret).join(REDACTED_VALUE),
+      value
+    );
+}
+
+export function redactSensitiveText(
+  value: string,
+  sensitiveValues: readonly string[] = []
+): string {
+  return redactKnownValues(value, sensitiveValues)
     .replace(BEARER_TOKEN_PATTERN, '$1 ****')
     .replace(SENSITIVE_TEXT_PATTERN, `$1${REDACTED_VALUE}`);
 }
 
-function redactValue(value: unknown, seen: WeakSet<object>): unknown {
+function redactValue(
+  value: unknown,
+  seen: WeakSet<object>,
+  sensitiveValues: readonly string[]
+): unknown {
   if (typeof value === 'string') {
-    return redactSensitiveText(value);
+    return redactSensitiveText(value, sensitiveValues);
   }
 
   if (
@@ -77,25 +119,32 @@ function redactValue(value: unknown, seen: WeakSet<object>): unknown {
   if (value instanceof Error) {
     return {
       name: value.name,
-      message: redactSensitiveText(value.message),
-      stack: value.stack ? redactSensitiveText(value.stack) : undefined,
+      message: redactSensitiveText(value.message, sensitiveValues),
+      stack: value.stack
+        ? redactSensitiveText(value.stack, sensitiveValues)
+        : undefined,
     };
   }
 
   if (Array.isArray(value)) {
-    return value.map((entry) => redactValue(entry, seen));
+    return value.map((entry) => redactValue(entry, seen, sensitiveValues));
   }
 
   return Object.fromEntries(
     Object.entries(value).map(([key, entry]) => [
       key,
-      isSensitiveKey(key) ? REDACTED_VALUE : redactValue(entry, seen),
+      isSensitiveKey(key)
+        ? REDACTED_VALUE
+        : redactValue(entry, seen, sensitiveValues),
     ])
   );
 }
 
-export function redactSensitiveData(value: unknown): unknown {
-  return redactValue(value, new WeakSet<object>());
+export function redactSensitiveData(
+  value: unknown,
+  sensitiveValues: readonly string[] = []
+): unknown {
+  return redactValue(value, new WeakSet<object>(), sensitiveValues);
 }
 
 export function guardSensitiveSerialization<T extends object>(value: T): T {

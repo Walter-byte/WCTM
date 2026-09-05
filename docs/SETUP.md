@@ -7,7 +7,7 @@ The complete WC-Telegram-SaaS scaffold can run locally in under five minutes.
 - Docker Desktop, Docker Engine, or an equivalent container runtime
 - Docker Compose v2 (`docker compose version`)
 - Git
-- Optional for host-based TypeScript development: Node.js 20+ and npm 10+
+- Optional for host-based TypeScript development: Node.js 24.20.0 and npm 11+
 
 No local PostgreSQL, Redis, Caddy, WordPress core, or global NestJS CLI is
 required.
@@ -196,12 +196,15 @@ flow. It is safe to rerun.
 docker compose up --build
 ```
 
-Docker starts:
+Docker Compose starts:
 
 1. PostgreSQL 16 and Redis 7 with persistent named volumes.
 2. The NestJS backend after both data services pass health checks.
 3. The grammY bot transport, which calls the backend internal Telegram API.
-4. Caddy as the HTTP/HTTPS entry point.
+
+Caddy is not a Compose service in the current repository. Local development
+reaches the loopback-published backend directly. Production uses the existing
+host-level Caddy topology documented below.
 
 Expected application log messages include:
 
@@ -216,20 +219,14 @@ In another terminal:
 
 ```bash
 docker compose ps
-curl http://localhost
-curl http://localhost/api/health
+curl --fail "http://127.0.0.1:${PORT:-3000}/api/health"
 docker compose exec postgres pg_isready \
   -U "$(awk -F= '/^POSTGRES_USER=/{print $2}' .env)" \
   -d "$(awk -F= '/^POSTGRES_DB=/{print $2}' .env)"
 docker compose exec redis redis-cli ping
 ```
 
-Expected HTTP responses:
-
-```text
-WC-Telegram-SaaS is running
-{"status":"ok"}
-```
+The health response is `{"status":"ok"}`.
 
 The backend also exposes a public dependency-readiness probe:
 
@@ -249,10 +246,8 @@ traffic.
 
 Redis returns `PONG`, and PostgreSQL reports that it accepts connections.
 
-The default `CADDY_DOMAIN=http://localhost` keeps local development on plain
-HTTP. Set `CADDY_DOMAIN` to a publicly resolvable hostname without the
-`http://` scheme in production so Caddy can automatically provision a trusted
-TLS certificate.
+`CADDY_DOMAIN=http://localhost` is for manually running the repository Caddy
+example in local development. The shared VPS does not run Caddy from Compose.
 
 ## Host-Based TypeScript Workflow
 
@@ -450,3 +445,308 @@ Host Caddy terminates HTTPS and reverse-proxies
 wctm.walterbyte.com to localhost:${PORT}.
 
 The Docker Compose Caddy service is not used on the shared VPS.
+
+## Production Security Baseline (P7.1)
+
+P7.1 changes repository configuration and runbooks only. It does not authorize
+SSH access, firewall/sshd/Caddy changes, credential rotation, database-role
+changes, deployment, or service restart. A performs and records every command
+in this section before public launch. Never paste secret values into chat,
+issues, logs, screenshots, or shell command arguments.
+
+### Runtime configuration inventory
+
+The trusted-shell audit classifies and validates backend-visible settings with:
+
+```bash
+docker compose exec -T backend npm run security:config-audit
+```
+
+It prints only each setting name, its category, and `PASS` or `FAIL`. It never
+prints values, hashes, credentials, URLs, tokens, keys, or passwords. The
+production process must report `PASS` for every line. In particular, it rejects
+all committed development/test secret placeholders, malformed encryption-key
+shape, short service/signing secrets, enabled pilot tooling, debug/verbose
+production logging, and secret reuse across unrelated backend trust boundaries.
+`TELEGRAM_BOT_TOKEN` is intentionally bot-only: it is not injected into the
+backend and is validated by the bot at startup against committed placeholders.
+
+Secret settings:
+
+- `DATABASE_URL`, `REDIS_URL`, `POSTGRES_PASSWORD`, `JWT_SECRET`,
+  `APP_ENCRYPTION_KEY`, `TELEGRAM_BOT_TOKEN`, `BOT_INTERNAL_API_KEY`, and
+  `TELEGRAM_CALLBACK_SIGNING_KEY`.
+
+Security-sensitive non-secret settings:
+
+- `NODE_ENV`, `PORT`, `LOG_LEVEL`, `JWT_ACCESS_TTL`, `BOT_INTERNAL_URL`,
+  `BOT_INTERNAL_PORT`, `BACKEND_INTERNAL_URL`,
+  `TELEGRAM_LINK_TOKEN_TTL_SECONDS`, `TELEGRAM_CALLBACK_REF_TTL_SECONDS`,
+  `WOOCOMMERCE_REST_MAX_ATTEMPTS`,
+  `PLUGIN_REGISTRATION_TOKEN_TTL_SECONDS`,
+  `PLUGIN_REGISTRATION_RATE_LIMIT`,
+  `PLUGIN_REGISTRATION_RATE_WINDOW_SECONDS`, `AUTH_REGISTER_RATE_LIMIT`,
+  `AUTH_REGISTER_RATE_WINDOW_SECONDS`, `AUTH_LOGIN_RATE_LIMIT`,
+  `AUTH_LOGIN_RATE_WINDOW_SECONDS`, `PILOT_MODE`, `PILOT_WEBHOOK_BASE_URL`,
+  `POSTGRES_USER`, and `CADDY_DOMAIN`.
+
+Ordinary configuration:
+
+- `BOT_DELIVERY_TIMEOUT_MS`, `BOT_BACKEND_TIMEOUT_MS`,
+  `BOT_STATUS_WRITE_TIMEOUT_MS`,
+  `TELEGRAM_ORDER_FRESHNESS_THRESHOLD_SECONDS`,
+  `WOOCOMMERCE_REST_ATTEMPT_TIMEOUT_MS`,
+  `WOOCOMMERCE_REST_TOTAL_TIMEOUT_MS`,
+  `WOOCOMMERCE_REST_BACKOFF_BASE_MS`, `WOOCOMMERCE_REST_BACKOFF_FACTOR`,
+  `WOOCOMMERCE_REST_JITTER_RATIO`, `PILOT_READINESS_TIMEOUT_SECONDS`, and
+  `POSTGRES_DB`.
+
+`WOOCOMMERCE_WEBHOOK_SECRET` was removed from runtime configuration because it
+had no consumer. Actual M8 HMAC secrets are unique per Store, generated by the
+backend, encrypted at rest, returned only during their established one-time
+ceremony, and never sourced from a global environment value.
+
+Connector-owned material is not an environment setting: WooCommerce REST
+consumer key/secret, plugin credential, per-Store webhook HMAC secret, and
+endpoint routing key remain governed by M4/M7/M8. The endpoint key is routing
+information, not authentication. Caddy uses its local state for normal ACME
+automation; no DNS-provider/API credential is referenced by the current
+repository. CI references no GitHub secret today; its `DATABASE_URL` is a
+non-production test fixture.
+
+### Secret action classification
+
+`APP_ENCRYPTION_KEY` must not be rotated under P7.1. The config audit checks
+only its exact 32-byte base64 shape. If repository or production evidence shows
+that the deployed key is compromised, copied from an example, reused, or
+otherwise unsafe, stop launch work: data-preserving key rotation requires a
+separate approved design.
+
+For all other boundaries, take action only from concrete evidence:
+
+| Boundary                                       | Required action when unsafe/exposed                                        | Coordination                                                            |
+| ---------------------------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| JWT signing                                    | Rotate                                                                     | Backend restart; existing access tokens become invalid                  |
+| Telegram bot token                             | Revoke/reissue through Telegram                                            | Bot restart; no WCTM relink is expected                                 |
+| Backend-bot service key                        | Rotate                                                                     | Coordinated backend and bot restart                                     |
+| Callback signing                               | Rotate                                                                     | Backend restart; outstanding signed references expire immediately       |
+| WooCommerce REST credential                    | Rotate in WooCommerce and update through the existing validated Store path | Backend uses the newly encrypted credential; no new trust path          |
+| Plugin credential                              | Issue a new M7 token and reconnect                                         | Existing webhook material remains hidden and is reconciled by Retry     |
+| Per-Store webhook HMAC secret                  | Use the existing M8 rotation then connector reconnect/reconciliation       | Coordinate to avoid an authentication gap; do not reuse plugin material |
+| PostgreSQL login                               | Rotate or replace with the runtime role below                              | Update `DATABASE_URL`, then controlled backend restart                  |
+| Redis password, when configured                | Rotate                                                                     | Update `REDIS_URL`, then controlled backend restart                     |
+| Caddy ACME/DNS credential, if later configured | Rotate at the provider                                                     | Reload Caddy only after the replacement is present                      |
+| GitHub Actions secret, if later added          | Rotate in repository settings                                              | Re-run only the affected workflow                                       |
+
+No current-repository evidence requires rotation of a production credential.
+That statement does not replace A's name-only production secret inventory.
+
+The reviewed production images are exact patch/distro tags pinned to immutable
+official-registry manifest digests. Do not replace them with `latest`, a
+major/minor-only tag, or a tag without its digest:
+
+| Service     | Selected official image                                                                             |
+| ----------- | --------------------------------------------------------------------------------------------------- |
+| Backend/bot | `node:24.20.0-alpine3.24@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf`   |
+| PostgreSQL  | `postgres:16.15-alpine3.24@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685` |
+| Redis       | `redis:7.4.11-alpine3.21@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf`   |
+
+Node 24.20.0 replaces the EOL Node 20 runtime for both application images.
+PostgreSQL remains on major 16 and Redis remains on major 7.
+
+### Host Caddy and HTTPS
+
+Keep both the browser origin and the direct connector origin. The latter is
+required for restricted/Iran-hosted WooCommerce stores and must remain DNS-only
+when that routing constraint applies. The host-level shape is:
+
+```caddyfile
+wctm.walterbyte.com, connector.wctm.walterbyte.com {
+    header Strict-Transport-Security "max-age=31536000"
+    reverse_proxy 127.0.0.1:3000
+}
+```
+
+Caddy automatic HTTPS must remain enabled, which redirects HTTP to HTTPS. Do
+not add `includeSubDomains` or `preload` to HSTS. The application serves
+`/onboarding` with same-origin executable JavaScript and a CSP containing
+`default-src 'none'`, `script-src 'self'`, `connect-src 'self'`,
+`base-uri 'none'`, `frame-ancestors 'none'`, `object-src 'none'`, and
+`form-action 'self'`, without `unsafe-eval`. It also sends `nosniff`,
+`Referrer-Policy: no-referrer`, `X-Frame-Options: DENY`, a restrictive
+Permissions Policy, and `Cache-Control: no-store`. No wildcard CORS, cookies,
+or browser token persistence are introduced.
+
+### Network, TLS, SSH, and service verification
+
+Run these read-only checks on the VPS after A has applied the host configuration
+and deployed the reviewed release:
+
+```bash
+sudo ss -lntup
+sudo ufw status verbose
+sudo nft list ruleset
+sudo sshd -T | rg '^(pubkeyauthentication|passwordauthentication|permitrootlogin) '
+docker compose ps
+docker compose port backend 3000
+docker compose port postgres 5432 || true
+docker compose port redis 6379 || true
+docker compose port telegram-bot 3001 || true
+curl --fail --silent --show-error http://127.0.0.1:3000/api/health
+curl --fail --silent --show-error http://127.0.0.1:3000/api/health/readiness
+curl --silent --show-error --output /dev/null --dump-header - http://wctm.walterbyte.com/onboarding
+curl --silent --show-error --output /dev/null --dump-header - https://wctm.walterbyte.com/onboarding
+curl --fail --silent --show-error https://connector.wctm.walterbyte.com/api/health
+```
+
+Expected results:
+
+- only Caddy HTTP/HTTPS and the approved SSH administration port are public;
+- backend reports only `127.0.0.1:${PORT}` on the host;
+- PostgreSQL, Redis, and the bot return no host-published port;
+- HTTP returns a redirect to the equivalent HTTPS URL;
+- HTTPS includes the exact one-year HSTS value and the onboarding headers above;
+- both health endpoints pass, including PostgreSQL and Redis readiness;
+- the direct connector hostname remains reachable over trusted HTTPS.
+
+The effective SSH baseline is public-key authentication enabled, password
+authentication disabled unless A records a time-bounded recovery exception,
+and direct root login disabled or deliberately constrained to key-only
+administration. SSH configuration must contain no application secret.
+
+### PostgreSQL runtime role
+
+Inspect the backend's current database role without printing the connection
+URL or password:
+
+```bash
+docker compose exec -T backend node -e 'const {Client}=require("pg");const c=new Client({connectionString:process.env.DATABASE_URL});(async()=>{await c.connect();const r=await c.query("select rolsuper, rolcreatedb, rolcreaterole, rolreplication from pg_roles where rolname=current_user");const v=r.rows[0];console.log(JSON.stringify({superuser:v.rolsuper,createDb:v.rolcreatedb,createRole:v.rolcreaterole,replication:v.rolreplication}));await c.end()})().catch(()=>{console.error("database privilege audit failed");process.exitCode=1})'
+```
+
+All four values must be `false`. A's approved read-only audit returned
+`true` for all four values, so the production runtime role is a confirmed P7.1
+launch blocker. The following procedure is reviewed for A to execute in a
+controlled production window; it was validated against an isolated PostgreSQL
+16 instance containing the complete 16-migration M1-M22 schema. P7.2 will
+define the supported privileged migration identity/path. The runtime role must
+not own the schema, any relation, or `_prisma_migrations` and receives no DDL or
+migration privilege.
+
+Create the new role through a hidden password prompt. If `createuser` reports
+that `wctm_runtime` already exists, stop and review that role rather than
+silently reusing it:
+
+```bash
+docker compose exec -T postgres sh -c 'createuser -U "$POSTGRES_USER" --login --no-superuser --no-createdb --no-createrole --no-inherit --no-replication --no-bypassrls wctm_runtime'
+docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\\password wctm_runtime"'
+```
+
+Apply the reviewed grants as the current privileged database owner. The
+database is dedicated to WCTM, so revoking public schema creation and temporary
+table creation does not affect another application:
+
+```bash
+docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -v database_name="$POSTGRES_DB" -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+BEGIN;
+ALTER ROLE wctm_runtime NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS;
+REVOKE CREATE ON SCHEMA public FROM PUBLIC;
+REVOKE TEMPORARY ON DATABASE :"database_name" FROM PUBLIC;
+REVOKE ALL PRIVILEGES ON DATABASE :"database_name" FROM wctm_runtime;
+REVOKE ALL PRIVILEGES ON SCHEMA public FROM wctm_runtime;
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM wctm_runtime;
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM wctm_runtime;
+GRANT CONNECT ON DATABASE :"database_name" TO wctm_runtime;
+GRANT USAGE ON SCHEMA public TO wctm_runtime;
+GRANT SELECT, INSERT, UPDATE ON TABLE
+  tenants, users, memberships, stores, webhook_events, orders,
+  telegram_accounts,
+  telegram_settings_references, telegram_chat_authorizations,
+  telegram_link_tokens, telegram_callback_references,
+  telegram_order_note_actions, telegram_order_status_writes,
+  telegram_order_notification_deliveries, inventory_items,
+  telegram_inventory_notification_deliveries
+TO wctm_runtime;
+GRANT SELECT, INSERT ON TABLE
+  audit_logs, telegram_inventory_references, telegram_search_references
+TO wctm_runtime;
+GRANT SELECT, INSERT, DELETE ON TABLE store_notification_recipients
+TO wctm_runtime;
+COMMIT;
+SQL
+```
+
+The DML matrix is derived from actual M1-M22 Prisma operations: application
+state tables receive `SELECT`/`INSERT`/`UPDATE`; append-only audit and read-only
+reference tables receive `SELECT`/`INSERT`; only selected-recipient mappings
+receive `DELETE`. The procedure intentionally grants no sequence privilege,
+superuser, database/schema creation, temporary-table creation, role creation,
+replication, bypass-RLS, object ownership, DDL, or `_prisma_migrations` access.
+
+Before switching the application, A must verify the role and grants from the
+owner connection, still without printing a URL or password:
+
+```bash
+docker compose exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+SELECT json_build_object(
+  'superuser', rolsuper,
+  'createDb', rolcreatedb,
+  'createRole', rolcreaterole,
+  'replication', rolreplication,
+  'bypassRls', rolbypassrls
+)
+FROM pg_roles
+WHERE rolname = 'wctm_runtime';
+SELECT
+  has_schema_privilege('wctm_runtime', 'public', 'USAGE') AS schema_usage,
+  has_schema_privilege('wctm_runtime', 'public', 'CREATE') AS schema_create,
+  has_database_privilege('wctm_runtime', current_database(), 'TEMP') AS database_temp,
+  has_table_privilege('wctm_runtime', 'public._prisma_migrations', 'SELECT') OR
+  has_table_privilege('wctm_runtime', 'public._prisma_migrations', 'INSERT') OR
+  has_table_privilege('wctm_runtime', 'public._prisma_migrations', 'UPDATE') OR
+  has_table_privilege('wctm_runtime', 'public._prisma_migrations', 'DELETE')
+    AS migration_table_dml;
+SELECT count(*) AS runtime_owned_objects
+FROM pg_class
+WHERE relowner = (SELECT oid FROM pg_roles WHERE rolname = 'wctm_runtime');
+SQL
+```
+
+Expected: the four required role flags plus `bypassRls` are false,
+`schema_usage` is true, `schema_create`, `database_temp`, and
+`migration_table_dml` are false, and `runtime_owned_objects` is zero. A then
+updates only the backend runtime `DATABASE_URL`, performs the controlled
+backend restart, and verifies `security:config-audit`, health/readiness, and a
+bounded representative M1-M22 application smoke. Do not run Prisma Migrate as
+`wctm_runtime`. PostgreSQL remains unpublished; same-host private Docker traffic
+does not require a new database TLS topology in P7.1.
+
+### Redis, logs, and CI secret inventory
+
+Redis has no published host port in Compose and is reachable only on the
+project network. Under that topology, absence of a Redis password alone is not
+a P7.1 launch blocker; authentication remains defense in depth. If A finds any
+external/public Redis reachability, launch is blocked until authentication and
+network isolation are both enforced.
+
+Recent-log structure may be checked without printing matching lines:
+
+```bash
+if docker compose logs --since 30m backend telegram-bot | rg --quiet 'Bearer [A-Za-z0-9._-]+|postgres(?:ql)?://[^ ]+:[^ ]+@|redis(?:s)?://:[^ ]+@|X-Bot-Api-Key|X-WCTM-Plugin-Credential|X-WC-Webhook-Signature'; then echo 'FAIL: sensitive log structure detected'; else echo 'PASS: no sensitive log structure detected'; fi
+```
+
+If this reports FAIL, preserve access to the logs, do not paste the matching
+line, and stop launch for a bounded secret-specific review. The central logger
+redacts sensitive keys, configured runtime secret sentinels, authorization
+text, request query strings, raw bodies/payloads, note bodies, search queries,
+customer contact fields, Telegram updates, and signatures.
+
+Inventory CI configuration by name only:
+
+```bash
+gh secret list --repo OWNER/REPOSITORY
+gh variable list --repo OWNER/REPOSITORY
+```
+
+Do not use `gh secret set`, print environment dumps, `docker inspect` container
+environments, `docker compose config`, or shell tracing during this validation;
+those paths can expose values.
