@@ -12,6 +12,7 @@ export interface ValidatedEnvironment {
   JWT_SECRET: string;
   JWT_ACCESS_TTL: string;
   APP_ENCRYPTION_KEY: string;
+  APP_ENCRYPTION_PREVIOUS_KEY?: string;
   BOT_INTERNAL_API_KEY: string;
   BOT_INTERNAL_URL: string;
   BOT_INTERNAL_PORT: number;
@@ -54,6 +55,7 @@ export const CONFIG_ENV_KEYS = [
   'JWT_SECRET',
   'JWT_ACCESS_TTL',
   'APP_ENCRYPTION_KEY',
+  'APP_ENCRYPTION_PREVIOUS_KEY',
   'BOT_INTERNAL_API_KEY',
   'BOT_INTERNAL_URL',
   'BOT_INTERNAL_PORT',
@@ -108,6 +110,7 @@ export interface JwtSettings {
 
 export interface EncryptionSettings {
   key: string;
+  previousKey?: string;
 }
 
 export interface TelegramSettings {

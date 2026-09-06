@@ -25,6 +25,7 @@ function configurationWithSentinels(): ApplicationConfigService {
     jwt: { secret: 'jwt-secret-sentinel-12345678901234567890' },
     encryption: {
       key: 'ZW5jcnlwdGlvbi1rZXktc2VudGluZWwtMzItYnl0ZXM=',
+      previousKey: 'cHJldmlvdXMtZW5jcnlwdGlvbi1rZXktc2VudGluZWw=',
     },
     telegram: {
       internalApiKey: 'bot-internal-sentinel-123456789012345',
@@ -140,6 +141,7 @@ describe('StructuredLoggerService', () => {
       configuration.redis.url,
       configuration.jwt.secret,
       configuration.encryption.key,
+      configuration.encryption.previousKey,
       configuration.telegram.internalApiKey,
       configuration.telegram.callbackSigningKey,
     ];

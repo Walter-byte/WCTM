@@ -285,6 +285,64 @@ test('invalid port and encryption key report clear rules together', () => {
   );
 });
 
+test('temporary previous encryption key is typed, redacted, and distinct', () => {
+  const previousKey = Buffer.alloc(32, 29).toString('base64');
+  const environment = validEnvironment({
+    NODE_ENV: 'production',
+    PILOT_MODE: 'false',
+    APP_ENCRYPTION_PREVIOUS_KEY: previousKey,
+  });
+  const configuration = createConfiguration(environment);
+  const output = [
+    JSON.stringify(configuration),
+    String(configuration),
+    inspect(configuration.encryption),
+  ].join('\n');
+
+  assert.equal(configuration.encryption.previousKey, previousKey);
+  assert.doesNotMatch(output, new RegExp(previousKey));
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...environment,
+        APP_ENCRYPTION_PREVIOUS_KEY: environment.APP_ENCRYPTION_KEY,
+      }),
+    /APP_ENCRYPTION_PREVIOUS_KEY must differ from APP_ENCRYPTION_KEY/
+  );
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...environment,
+        APP_ENCRYPTION_PREVIOUS_KEY: 'invalid',
+      }),
+    /APP_ENCRYPTION_PREVIOUS_KEY must be valid base64 encoding exactly 32 bytes/
+  );
+  assert.throws(
+    () =>
+      validateEnvironment({
+        ...environment,
+        JWT_SECRET: previousKey,
+      }),
+    /APP_ENCRYPTION_PREVIOUS_KEY and JWT_SECRET|JWT_SECRET and APP_ENCRYPTION_PREVIOUS_KEY/
+  );
+});
+
+test('production permits the documented old placeholder only as the temporary previous key', () => {
+  const validated = validateEnvironment(
+    validEnvironment({
+      NODE_ENV: 'production',
+      PILOT_MODE: 'false',
+      APP_ENCRYPTION_PREVIOUS_KEY:
+        'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+    })
+  );
+
+  assert.equal(
+    validated.APP_ENCRYPTION_PREVIOUS_KEY,
+    'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
+  );
+});
+
 test('production rejects documented development placeholder values', () => {
   const developmentOnlyJwtSecret = 'development-only-jwt-secret-change-me';
 
@@ -415,6 +473,7 @@ test('trusted-shell config audit reports names, categories, and PASS or FAIL onl
 
   assert.equal(passed.passed, true);
   assert.match(passedOutput, /PASS APP_ENCRYPTION_KEY \[secret\]/);
+  assert.match(passedOutput, /PASS APP_ENCRYPTION_PREVIOUS_KEY \[secret\]/);
   assert.match(
     passedOutput,
     /PASS SECRET_BOUNDARY_SEPARATION \[security-sensitive non-secret\]/
@@ -443,6 +502,16 @@ test('trusted-shell config audit reports names, categories, and PASS or FAIL onl
   assert.equal(failed.passed, false);
   assert.match(failedOutput, /FAIL JWT_SECRET \[secret\]/);
   assert.doesNotMatch(failedOutput, /development-only-jwt-secret-change-me/);
+
+  const transitional = runSecurityConfigAudit({
+    ...environment,
+    APP_ENCRYPTION_PREVIOUS_KEY: Buffer.alloc(32, 41).toString('base64'),
+  });
+  assert.equal(transitional.passed, false);
+  assert.match(
+    transitional.lines.join('\n'),
+    /FAIL APP_ENCRYPTION_PREVIOUS_KEY \[secret\]/
+  );
 });
 
 test('.env.example separates the bot-only token from the backend validation contract', () => {

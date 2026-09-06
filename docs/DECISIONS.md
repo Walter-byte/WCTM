@@ -1107,4 +1107,66 @@ Accepted.
 
 ---
 
-Next decision number: D-030.
+## D-030
+
+Date
+
+2026-09-06
+
+Decision
+
+P7.1 remediates an unsafe deployed `APP_ENCRYPTION_KEY` through a temporary
+previous/current-key bridge and one trusted-shell rotation command. The normal
+`APP_ENCRYPTION_KEY` is always the current encryption/write key. Optional
+`APP_ENCRYPTION_PREVIOUS_KEY` is decrypt-only, must be a distinct base64-encoded
+32-byte key, and exists only for the bounded migration window.
+
+The existing AES-256-GCM `iv:auth-tag:ciphertext` format remains unchanged and
+contains no key identifier. Reads authenticate with the current key first and
+then the previous key when configured; all new writes use only the current key.
+The operator-only command inventories, rotates, and verifies the exact five
+encrypted fields on Store, TelegramCallbackReference, and
+TelegramSearchReference. It has no HTTP, Telegram, queue, or product route.
+
+Rotation performs a complete read-only preflight, uses fixed-size reads and a
+transaction per affected row, verifies previous-decrypt/current-encrypt/current-
+decrypt in memory before a conditional update, and records only a secret-safe
+system AuditLog. Mixed progress remains readable under the dual-key runtime and
+reruns are idempotent. Completion requires every affected value to authenticate
+with the current key, current-only backend restart and Store/connection reads,
+and removal of the previous key from runtime configuration.
+
+The subsequent A-owned transition establishes and verifies the approved
+restricted runtime role without changing the application, then switches only
+the backend database login and proves that role in production. Only after that
+isolated stage passes does a coordinated backend/bot stop replace JWT, backend-
+bot, and callback-signing secrets while enabling production mode. JWT and
+outstanding callback invalidation are intentional. Per-Store webhook plaintext,
+WooCommerce credentials, plugin/link hashes, durable business state, and M1-M22
+behavior remain unchanged.
+
+Reason
+
+Authenticated dual-key reads plus row-local verified re-encryption are the
+smallest mechanism that prevents partial progress from making existing data
+unreadable. Trial decryption is necessary because the established ciphertext
+has no key version. A schema migration, KMS platform, public route, stored key,
+or general secret-management abstraction is not required for this one bounded
+production remediation.
+
+Boundary
+
+C adds only repository code, tests, and the P7.1 runbook. C performs no VPS,
+production configuration, live secret, database, deployment, history, P7.2+,
+or Phase 6 action. The previous key must not remain after current-only
+verification, and production validation is not weakened to accept the unsafe
+key as current.
+
+Status
+
+Accepted. Production execution and validation remain A-owned. P7.1 is not
+closed.
+
+---
+
+Next decision number: D-031.

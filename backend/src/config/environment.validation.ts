@@ -183,6 +183,7 @@ function createEnvironmentSchema(
     JWT_SECRET: jwtSecret,
     JWT_ACCESS_TTL: Joi.string().trim().min(1).required(),
     APP_ENCRYPTION_KEY: encryptionKey,
+    APP_ENCRYPTION_PREVIOUS_KEY: encryptionKeySchema().empty('').optional(),
     BOT_INTERNAL_API_KEY: botInternalApiKey,
     BOT_INTERNAL_URL: botInternalUrl,
     BOT_INTERNAL_PORT: Joi.number().integer().min(1).max(65535).default(3001),
@@ -321,6 +322,11 @@ function secretBoundaryFailures(
       value: String(environment['APP_ENCRYPTION_KEY'] ?? ''),
     },
     {
+      name: 'APP_ENCRYPTION_PREVIOUS_KEY',
+      boundary: 'encryption',
+      value: String(environment['APP_ENCRYPTION_PREVIOUS_KEY'] ?? ''),
+    },
+    {
       name: 'BOT_INTERNAL_API_KEY',
       boundary: 'backend-bot',
       value: String(environment['BOT_INTERNAL_API_KEY'] ?? ''),
@@ -397,6 +403,14 @@ export function validateEnvironment(
 
   if (nodeEnvironment === 'production') {
     const failures = secretBoundaryFailures(value);
+    if (
+      value.APP_ENCRYPTION_PREVIOUS_KEY !== undefined &&
+      value.APP_ENCRYPTION_PREVIOUS_KEY === value.APP_ENCRYPTION_KEY
+    ) {
+      failures.push(
+        'APP_ENCRYPTION_PREVIOUS_KEY must differ from APP_ENCRYPTION_KEY'
+      );
+    }
 
     if (failures.length > 0) {
       throw new ConfigurationValidationError(failures);

@@ -16,6 +16,7 @@ const CONFIG_CATEGORIES = {
   JWT_SECRET: 'secret',
   JWT_ACCESS_TTL: 'security-sensitive non-secret',
   APP_ENCRYPTION_KEY: 'secret',
+  APP_ENCRYPTION_PREVIOUS_KEY: 'secret',
   BOT_INTERNAL_API_KEY: 'secret',
   BOT_INTERNAL_URL: 'security-sensitive non-secret',
   BOT_INTERNAL_PORT: 'security-sensitive non-secret',
@@ -58,6 +59,9 @@ export function runSecurityConfigAudit(
   environment: Record<string, unknown>
 ): SecurityConfigAuditResult {
   let validationMessage = '';
+  const previousEncryptionKeyPresent =
+    typeof environment['APP_ENCRYPTION_PREVIOUS_KEY'] === 'string' &&
+    environment['APP_ENCRYPTION_PREVIOUS_KEY'].trim() !== '';
 
   try {
     validateEnvironment(environment);
@@ -68,7 +72,10 @@ export function runSecurityConfigAudit(
   const lines = CONFIG_ENV_KEYS.map((name) => {
     const failed =
       validationMessage.includes(name) ||
-      (name === 'NODE_ENV' && environment['NODE_ENV'] !== 'production');
+      (name === 'NODE_ENV' && environment['NODE_ENV'] !== 'production') ||
+      (name === 'APP_ENCRYPTION_PREVIOUS_KEY' &&
+        environment['NODE_ENV'] === 'production' &&
+        previousEncryptionKeyPresent);
     return `${failed ? 'FAIL' : 'PASS'} ${name} [${CONFIG_CATEGORIES[name]}]`;
   });
   const boundaryFailure = validationMessage.includes(

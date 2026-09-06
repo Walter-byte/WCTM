@@ -102,6 +102,7 @@ export class StructuredLoggerService implements LoggerService {
       this.configuration.redis?.url,
       this.configuration.jwt?.secret,
       this.configuration.encryption?.key,
+      this.configuration.encryption?.previousKey,
       this.configuration.telegram?.internalApiKey,
       this.configuration.telegram?.callbackSigningKey,
     ].filter((value): value is string => typeof value === 'string');
