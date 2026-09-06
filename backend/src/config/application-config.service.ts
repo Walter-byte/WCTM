@@ -50,6 +50,9 @@ export class ApplicationConfigService {
     });
     this.encryption = guardSecretSerialization({
       key: this.configService.get('APP_ENCRYPTION_KEY', { infer: true }),
+      previousKey: this.configService.get('APP_ENCRYPTION_PREVIOUS_KEY', {
+        infer: true,
+      }),
     });
     this.telegram = guardSecretSerialization({
       internalApiKey: this.configService.get('BOT_INTERNAL_API_KEY', {

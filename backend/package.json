@@ -15,6 +15,8 @@
     "prisma:migrate:status": "prisma migrate status",
     "prisma:validate": "prisma validate",
     "security:config-audit": "node dist/security/security-config-audit.cli.js",
+    "security:rotate-encryption-key": "node dist/security/encryption-key-rotation.cli.js",
+    "security:rotation:integration": "node test/integration/encryption-key-rotation.integration.cjs",
     "entitlement:manage": "node dist/entitlements/entitlement.cli.js",
     "pilot:setup": "node dist/pilot/pilot.cli.js setup",
     "pilot:readiness": "node dist/pilot/pilot.cli.js readiness",

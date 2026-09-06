@@ -23,8 +23,10 @@ launch is not approved.
 Current Task
 
 P7.1 — Production Security Baseline is the only active implementation task. Its
-repository implementation is complete and awaiting B review. Production/VPS
-validation and launch-blocker resolution remain A-owned; P7.1 is not
+production-secret remediation follow-up adds the reviewed data-preserving
+application encryption-key rotation path on
+`fix/p7.1-production-secret-rotation`. Production/VPS secret rotation,
+runtime-role cutover, deployment, and validation remain A-owned; P7.1 is not
 operationally closed. No product feature work is active. Do not begin P7.2 or
 Phase 6 without separate approval.
 
@@ -38,7 +40,7 @@ Project Version
 
 Repository
 
-Current branch: `chore/p7.1-production-security-baseline`.
+Current branch: `fix/p7.1-production-secret-rotation`.
 
 M22 implementation commit:
 `35f9e72335c8ed0c6a039497d92bed763dc68fb5 feat(entitlements): add MVP tenant
@@ -778,7 +780,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-chore/p7.1-production-security-baseline
+fix/p7.1-production-secret-rotation
 
 ---
 
@@ -809,23 +811,25 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No open Phase-5 feature blocker remains. Public launch is blocked because A's
-read-only production audit confirmed that the application database identity is
-superuser and has CREATEDB, CREATEROLE, and replication privileges. A must apply
-the reviewed least-privilege procedure and validate the resulting runtime before
-P7.1 operational closure. Authenticated Docker Scout scans of the patched final
-backend and bot images now report zero Critical and zero High findings. Four
-historical implementation-provenance findings remain for A's separate history-
-remediation decision and the P7.8 release audit; current tracked content is clean
-and Git history was not rewritten.
+No open Phase-5 feature blocker remains. Public launch remains blocked until A
+executes and validates the data-preserving application-key rotation, coordinated
+JWT/backend-bot/callback/database credential cutover, final production-mode
+configuration audit, and the reviewed least-privilege runtime-role switch. The
+current production database identity remains confirmed overprivileged until
+that switch. Authenticated Docker Scout scans of the patched final backend and
+bot images report zero Critical and zero High findings. Four historical
+implementation-provenance findings remain for A's separate history-remediation
+decision and the P7.8 release audit; current tracked content is clean and Git
+history was not rewritten.
 
 ---
 
 Next Milestone
 
-P7.1 — Production Security Baseline follow-up is implemented. B re-review
-may continue with final-image scan evidence complete; A-owned production
-database-role remediation and validation remain outstanding. Do not start P7.2.
+P7.1 — Production Security Baseline follow-up remains current. B review may
+continue with repository encryption-rotation evidence; A-owned production
+secret rotation, database-role remediation, production-mode switch, and runtime
+validation remain outstanding. Do not start P7.2.
 
 ---
 
@@ -844,12 +848,41 @@ Excellent
 
 Last Updated
 
-2026-09-05
+2026-09-06
 
 ---
 
 P7.1 Implementation State
 
+- D-030 defines a temporary previous/current application-encryption-key bridge.
+  `APP_ENCRYPTION_KEY` remains the sole current write key; optional
+  `APP_ENCRYPTION_PREVIOUS_KEY` is decrypt-only and must be removed after
+  current-only verification. Production validation still rejects the known
+  development placeholder as the current key.
+- The complete APP encryption surface is five fields:
+  `Store.consumerKeyEncrypted`, `Store.consumerSecretEncrypted`,
+  `Store.webhookSecretEncrypted`,
+  `TelegramCallbackReference.noteBodyEncrypted`, and
+  `TelegramSearchReference.queryEncrypted`. The unchanged AES-256-GCM envelope
+  embeds random IV and authentication tag but no key version or identifier; no
+  non-database artifact uses this key.
+- `security:rotate-encryption-key` provides inspect, rotate, and verify modes
+  through a dedicated Nest application context with no HTTP, Telegram, queue,
+  or product surface. It preflights all values, verifies re-encryption before a
+  conditional row update, commits one row plus a secret-safe AuditLog at a
+  time, reports counts/status only, and is resumable/idempotent.
+- An isolated PostgreSQL 16.15 database received the full 16-migration schema.
+  Representative Store credentials, webhook secret, pending note body, and
+  search query seeded through the existing encryption service rotated 3 rows/5
+  values. Current-only verification, backend restart, tenant-scoped Store read,
+  synthetic connection test, zero-update rerun, unrelated Store credential
+  preservation, and secret-safe output passed. An injected mid-run unit failure
+  proved mixed progress remains dual-key readable and resumes safely.
+- The P7.1 runbook now records A's exact backup/rollback prerequisites,
+  no-output secret generation, dual-key application rotation, current-only
+  verification, coordinated JWT/backend-bot/callback cutover, approved runtime
+  role switch, final production-mode audit, and rollback boundary. No
+  production action was performed.
 - D-029 is Accepted. Phase 7 runs P7.1 through P7.8 before deferred Phase 6;
   P7.2 and later work remain unstarted.
 - Production configuration rejects committed development and test secret
