@@ -586,14 +586,6 @@ the current key and none requires the previous key. A repeated successful
 audit intentionally reports `FAIL` while the previous-key setting is present;
 it is a migration-only state, not an acceptable steady state.
 
-Before production rotation, A must have a fresh encrypted database backup, a
-successful isolated restore check, a protected copy of the current runtime
-configuration outside the repository, console access, a maintenance window,
-and the reviewed release already running successfully with the unchanged old
-key. If any prerequisite is absent, stop. Do not use shell tracing, environment
-dumps, `docker inspect`, `docker compose config`, or command-line secret
-arguments.
-
 Generate independent replacements into shell memory without terminal output;
 write them through the existing protected runtime-configuration procedure and
 unset the variables immediately afterward:
@@ -602,84 +594,149 @@ unset the variables immediately afterward:
 set +x
 umask 077
 APP_ENCRYPTION_KEY_NEW="$(openssl rand -base64 32 | tr -d '\n')"
-JWT_SECRET_NEW="$(openssl rand -base64 48 | tr -d '\n')"
-BOT_INTERNAL_API_KEY_NEW="$(openssl rand -base64 48 | tr -d '\n')"
-TELEGRAM_CALLBACK_SIGNING_KEY_NEW="$(openssl rand -base64 48 | tr -d '\n')"
-DATABASE_PASSWORD_NEW="$(openssl rand -base64 48 | tr -d '\n')"
+JWT_SECRET_NEW="$(openssl rand -hex 32)"
+BOT_INTERNAL_API_KEY_NEW="$(openssl rand -hex 32)"
+TELEGRAM_CALLBACK_SIGNING_KEY_NEW="$(openssl rand -hex 32)"
+DATABASE_PASSWORD_NEW="$(openssl rand -hex 32)"
 test "$(printf %s "$APP_ENCRYPTION_KEY_NEW" | openssl base64 -d -A | wc -c | tr -d ' ')" -eq 32
 test "$JWT_SECRET_NEW" != "$BOT_INTERNAL_API_KEY_NEW"
 test "$JWT_SECRET_NEW" != "$TELEGRAM_CALLBACK_SIGNING_KEY_NEW"
 test "$BOT_INTERNAL_API_KEY_NEW" != "$TELEGRAM_CALLBACK_SIGNING_KEY_NEW"
 ```
 
-The exact A-owned application-key sequence is:
+The APP encryption key remains standard Base64 because application validation
+requires a Base64 value that decodes to exactly 32 bytes. JWT, backend-bot,
+callback-signing, and database-login replacements are each independently
+generated from 32 random bytes and encoded as 64 lowercase hexadecimal
+characters. In particular, the database password is directly safe in the
+password component of the PostgreSQL URI and requires no manual percent-
+encoding. Do not use ordinary Base64 for it.
 
-1. Keep `NODE_ENV=development`, `LOG_LEVEL=log`, `PILOT_MODE=false`, the
-   existing database identity, and all unrelated current secrets while this
-   one key is repaired. Confirm health/readiness and a current Store connection
-   test.
-2. Set `APP_ENCRYPTION_KEY` to the new value and
+### A-owned staged production transition
+
+#### Stage 1 — preconditions
+
+Before any encryption-key rotation, A must require all of the following:
+
+1. The reviewed code is deployed without any live secret change.
+2. Current health/readiness and the current Store connection test pass.
+3. A fresh protected database backup exists and a one-off isolated restore of
+   that exact backup succeeds.
+4. A protected snapshot of the current runtime configuration and current
+   application key exists outside the repository.
+5. Console access and a maintenance window are available.
+
+The one-off isolated restore is only a P7.1 operation-specific safety
+prerequisite. It does not define backup scheduling, retention, RPO/RTO,
+automation, off-site policy, generalized disaster recovery, or any other P7.3
+work. If any prerequisite is absent, stop. Do not use shell tracing,
+environment dumps, `docker inspect`, `docker compose config`, or command-line
+secret arguments.
+
+#### Stage 2 — rotate `APP_ENCRYPTION_KEY` only
+
+Keep `NODE_ENV=development`, `LOG_LEVEL=log`, `PILOT_MODE=false`, the existing
+production database identity, existing `JWT_SECRET`, existing
+`BOT_INTERNAL_API_KEY`, and existing `TELEGRAM_CALLBACK_SIGNING_KEY` throughout
+this stage.
+
+1. Set `APP_ENCRYPTION_KEY` to the new value and
    `APP_ENCRYPTION_PREVIOUS_KEY` to the old value through the protected runtime
    configuration, then recreate/restart only the backend. Do not put either
    value on the command line.
-3. Confirm health/readiness. Run `inspect`; require zero unreadable values and
+2. Confirm health/readiness. Run `inspect`; require zero unreadable values and
    a count consistent with the five fields above. Run `rotate`, then `verify`;
    require `complete`, zero previous, and zero unreadable.
-4. Exercise Store read and connection test, authenticated M8 webhook ingestion,
-   M7 connector health, M10 status/link authorization, an M13 order
-   notification path, and an M19 inventory read/notification path. These
-   operations must preserve the actual webhook secret and all hashed/routing
-   credentials; only their database encryption wrapper changes.
-5. Remove `APP_ENCRYPTION_PREVIOUS_KEY`, recreate/restart the backend, run
+3. Require the Store connection test, connector health, an authenticated M8
+   webhook, Telegram `/status`, representative order access, and `/stock` to
+   pass. These operations must preserve the actual webhook secret and all
+   hashed/routing credentials; only their database encryption wrapper changes.
+4. Only after every check is clean, remove `APP_ENCRYPTION_PREVIOUS_KEY`,
+   recreate/restart only the backend, run
    `verify` again with current key only, and repeat health/readiness plus the
-   Store connection test. The old key is no longer required only after this
-   passes.
+   Store connection test. The new APP key is authoritative after this passes.
 
-If a command or application check fails before step 5, keep the backend on both
+If a command or application check fails before step 4, keep the backend on both
 keys and rerun safely after correcting the cause. Every committed row remains
-readable with that dual-key configuration. If A must return to the old key
-before the final production-mode cutover, stop application traffic, swap the
-old key back to current and the new key to previous, run the same
-inspect/rotate/verify cycle, remove the previous key, and restore the prior
-configuration. Do not restore an old database backup while newer application
-writes exist. After final current-only verification, any database restore must
-be paired with the matching protected key snapshot and handled as an incident;
-do not improvise a mixed backup/key rollback.
+readable with that dual-key configuration; do not casually restore the
+database. Reverse rotation is permitted only while application traffic is
+controlled: set the old key as current and the new key as previous, run the
+same inspect/rotate/verify cycle, remove the previous key, and restore the
+matching prior configuration. After current-key-only verification, the new APP
+key is authoritative. Never restore an old database backup without its matching
+protected key snapshot. Retain the old APP key securely until P7.1 production
+validation formally closes.
 
-### Coordinated production-secret and runtime-role cutover
+#### Stage 3 — establish the restricted database role independently
 
-After the application-key rotation passes current-only verification, A performs
-one controlled cutover:
+After Stage 2 passes completely, create `wctm_runtime` with the new hexadecimal
+database password, apply the already-approved exact least-privilege ACL below,
+and verify its role flags, ownership, schema/database privileges, migration-
+table exclusion, and exact application-table grants before using it. Do not
+change the backend `DATABASE_URL` while creating or verifying the role. Keep the
+privileged owner available for the current Prisma migration mechanism until
+P7.2. Record a new protected rollback configuration snapshot containing the
+new authoritative APP key. If role creation or verification fails, no
+application rollback is necessary; correct the isolated role configuration
+without widening grants ad hoc.
 
-1. Create and verify the approved `wctm_runtime` role below with its new unique
-   database password. Keep the privileged owner for the current Prisma
-   migration mechanism until P7.2, but never configure the backend to use it
-   after this cutover.
-2. Stop backend and bot together. Update the protected runtime configuration
-   with the new `JWT_SECRET`, one shared new `BOT_INTERNAL_API_KEY` value for
-   both processes, the new `TELEGRAM_CALLBACK_SIGNING_KEY`, and the restricted
-   `wctm_runtime` `DATABASE_URL`. Keep the verified new
-   `APP_ENCRYPTION_KEY`; ensure `APP_ENCRYPTION_PREVIOUS_KEY` is absent.
-3. In the same configuration change set `NODE_ENV=production`,
-   `LOG_LEVEL=log`, and `PILOT_MODE=false`. Start/recreate backend and bot
-   together, then require clean startup, health, readiness, and every
-   `security:config-audit` line to report `PASS`.
-4. Log in again because replacing `JWT_SECRET` intentionally invalidates all
-   existing JWTs. Re-open Telegram flows because replacing the callback signing
-   key intentionally invalidates outstanding signed callback references; it
-   does not delete Orders, Stores, projections, deliveries, incidents, notes
-   already sent to WooCommerce, or other durable business state.
-5. Confirm backend-to-bot delivery after the coherent service-key restart. The
-   planned joint stop prevents a prolonged mismatched-key window. Existing
-   failed/ambiguous/delivered no-blind-resend rules remain authoritative.
-6. Repeat the bounded M1-M22 smoke, recent-log structure scan, runtime-role
-   privilege query, and current-only encryption verification. Unset the local
-   generation variables after the protected configuration is safely stored:
+#### Stage 4 — switch only `DATABASE_URL`
+
+Change only the backend runtime `DATABASE_URL` to authenticate as
+`wctm_runtime`. Keep `NODE_ENV=development`, the existing JWT, existing backend-
+bot key, existing callback-signing key, and the current APP encryption key only.
+Restart only the backend, then prove under the real production restricted role:
+
+- health/readiness;
+- the actual current database role and all elevated flags false;
+- login and Tenant read;
+- representative application read and write;
+- AuditLog insert; and
+- authenticated webhook ingestion and projection.
+
+If this stage fails, restore only the previous owner-backed backend
+`DATABASE_URL` and restart the backend. Do not change schema/data or add ad-hoc
+privileges; leave `wctm_runtime` available for diagnosis. Proceed only after
+this isolated stage passes.
+
+#### Stage 5 — service secrets and production mode
+
+After the restricted database runtime is independently proven, save another
+protected rollback baseline containing the current APP key, verified
+`wctm_runtime` database connection, old JWT, old backend-bot key, and old
+callback-signing key.
+
+Stop backend and bot together. Install the new `JWT_SECRET`, the same new
+`BOT_INTERNAL_API_KEY` on both sides, and the new
+`TELEGRAM_CALLBACK_SIGNING_KEY`. Keep the current APP key only and the
+restricted runtime `DATABASE_URL`; ensure `APP_ENCRYPTION_PREVIOUS_KEY` is
+absent. Set `NODE_ENV=production`, `LOG_LEVEL=log`, and `PILOT_MODE=false`, then
+start backend and bot together.
+
+Require clean startup, every `security:config-audit` line to report `PASS`,
+current-key-only encryption verification, restricted-role verification, a new
+login, a bounded M1-M22 smoke, and a secret-safe recent-log scan. Replacing
+`JWT_SECRET` intentionally invalidates all existing JWTs. Replacing the
+callback-signing key invalidates outstanding signed callback references but not
+durable business state. The coherent backend/bot stop and start prevents a
+prolonged service-key mismatch. Do not weaken validation if production startup
+fails.
+
+After the protected configuration is safely stored, unset the local generation
+variables:
 
 ```bash
 unset APP_ENCRYPTION_KEY_NEW JWT_SECRET_NEW BOT_INTERNAL_API_KEY_NEW
 unset TELEGRAM_CALLBACK_SIGNING_KEY_NEW DATABASE_PASSWORD_NEW
 ```
+
+Service-secret rollback must respect each boundary: JWT rollback affects
+sessions only; the backend-bot key must roll back on backend and bot together;
+and callback-key rollback affects outstanding references, not durable business
+state. If production-mode startup fails and service restoration is necessary,
+do not weaken the validator: restore the immediately preceding protected
+configuration baseline. P7.1 remains open until production validation is
+formally accepted.
 
 This cutover does not rotate `TELEGRAM_BOT_TOKEN`, per-Store webhook plaintext,
 WooCommerce REST credentials, plugin credentials, registration/link-token
@@ -897,12 +954,13 @@ SQL
 
 Expected: the four required role flags plus `bypassRls` are false,
 `schema_usage` is true, `schema_create`, `database_temp`, and
-`migration_table_dml` are false, and `runtime_owned_objects` is zero. A then
-updates only the backend runtime `DATABASE_URL`, performs the controlled
-backend restart, and verifies `security:config-audit`, health/readiness, and a
-bounded representative M1-M22 application smoke. Do not run Prisma Migrate as
-`wctm_runtime`. PostgreSQL remains unpublished; same-host private Docker traffic
-does not require a new database TLS topology in P7.1.
+`migration_table_dml` are false, and `runtime_owned_objects` is zero. Follow
+Stage 4 above: update only the backend runtime `DATABASE_URL`, restart only the
+backend, and prove health/readiness, the actual current role and flags,
+login/Tenant read, representative application read/write, AuditLog insert, and
+authenticated webhook/projection. Do not run Prisma Migrate as `wctm_runtime`.
+PostgreSQL remains unpublished; same-host private Docker traffic does not
+require a new database TLS topology in P7.1.
 
 ### Redis, logs, and CI secret inventory
 

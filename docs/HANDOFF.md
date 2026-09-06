@@ -1057,12 +1057,15 @@ Final closure evidence:
   rerun. An injected failure after the Store transaction proved safe mixed-state
   reads and resumable completion. No value, ciphertext, key, or identifier was
   emitted by the operator command.
-- A still owns the protected production sequence: verified backup/restore
-  prerequisite; dual-key application rotation; removal/current-only restart;
-  coordinated JWT, backend-bot, and callback signing replacement; approved
-  `wctm_runtime` database cutover; final `NODE_ENV=production`,
-  `LOG_LEVEL=log`, `PILOT_MODE=false`; all-PASS config audit; and bounded M1-M22
-  smoke. C performed none of those production actions and P7.1 remains open.
+- A has formally accepted D-030 and still owns its protected production
+  sequence: operation-specific backup/restore prerequisite; isolated dual-key
+  application rotation and current-only verification; independent
+  `wctm_runtime` creation and database-only cutover; then coordinated JWT,
+  backend-bot, and callback replacement with final `NODE_ENV=production`,
+  `LOG_LEVEL=log`, `PILOT_MODE=false`, all-PASS config audit, and bounded M1-M22
+  smoke. Non-APP replacement secrets use independent 32-byte lowercase-hex
+  values; the APP key alone uses validated Base64. C performed none of those
+  production actions and P7.1 remains open.
 - Production configuration now rejects every committed development/test secret
   placeholder, short backend-bot service credentials, production pilot mode,
   debug/verbose production logging, and reuse across unrelated secret

@@ -812,9 +812,9 @@ AuditLog immutability enforcement is deferred to a future approved task.
 Current Blockers
 
 No open Phase-5 feature blocker remains. Public launch remains blocked until A
-executes and validates the data-preserving application-key rotation, coordinated
-JWT/backend-bot/callback/database credential cutover, final production-mode
-configuration audit, and the reviewed least-privilege runtime-role switch. The
+executes and validates the data-preserving application-key rotation, separately
+establishes and proves the least-privilege runtime-role switch, then performs
+the coordinated JWT/backend-bot/callback and production-mode cutover. The
 current production database identity remains confirmed overprivileged until
 that switch. Authenticated Docker Scout scans of the patched final backend and
 bot images report zero Critical and zero High findings. Four historical
@@ -878,11 +878,15 @@ P7.1 Implementation State
   synthetic connection test, zero-update rerun, unrelated Store credential
   preservation, and secret-safe output passed. An injected mid-run unit failure
   proved mixed progress remains dual-key readable and resumes safely.
-- The P7.1 runbook now records A's exact backup/rollback prerequisites,
-  no-output secret generation, dual-key application rotation, current-only
-  verification, coordinated JWT/backend-bot/callback cutover, approved runtime
-  role switch, final production-mode audit, and rollback boundary. No
+- The P7.1 runbook records A's exact operation-specific backup/restore and
+  rollback prerequisites, no-output secret generation, isolated dual-key APP
+  rotation, independent restricted-role creation and database-only cutover,
+  then coordinated JWT/backend-bot/callback plus production-mode cutover. The
+  database password and the three non-APP service secrets use independently
+  generated 32-byte lowercase-hex values; only the APP key uses Base64. No
   production action was performed.
+- A has formally accepted D-030. Its architecture is unchanged; production
+  execution and validation remain A-owned and P7.1 remains open.
 - D-029 is Accepted. Phase 7 runs P7.1 through P7.8 before deferred Phase 6;
   P7.2 and later work remain unstarted.
 - Production configuration rejects committed development and test secret

@@ -1136,12 +1136,14 @@ reruns are idempotent. Completion requires every affected value to authenticate
 with the current key, current-only backend restart and Store/connection reads,
 and removal of the previous key from runtime configuration.
 
-The subsequent A-owned coordinated cutover replaces JWT, backend-bot,
-callback-signing, and database-login secrets; switches the backend to the
-approved restricted runtime role; and only then enables production mode. JWT
-and outstanding callback invalidation are intentional. Per-Store webhook
-plaintext, WooCommerce credentials, plugin/link hashes, durable business state,
-and M1-M22 behavior remain unchanged.
+The subsequent A-owned transition establishes and verifies the approved
+restricted runtime role without changing the application, then switches only
+the backend database login and proves that role in production. Only after that
+isolated stage passes does a coordinated backend/bot stop replace JWT, backend-
+bot, and callback-signing secrets while enabling production mode. JWT and
+outstanding callback invalidation are intentional. Per-Store webhook plaintext,
+WooCommerce credentials, plugin/link hashes, durable business state, and M1-M22
+behavior remain unchanged.
 
 Reason
 
@@ -1162,8 +1164,8 @@ key as current.
 
 Status
 
-Accepted for implementation; production execution and validation remain
-A-owned. P7.1 is not closed.
+Accepted. Production execution and validation remain A-owned. P7.1 is not
+closed.
 
 ---
 
