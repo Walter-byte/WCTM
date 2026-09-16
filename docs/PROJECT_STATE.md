@@ -13,22 +13,20 @@ Telegram product features are complete; Persian/English manager UX and backend-
 authoritative basic entitlement enforcement are operational. Phase 4 and
 M1–M16 remain complete and unchanged. By explicit A decision D-029, the current
 phase is Phase 7 — Production Readiness, which executes before Phase 6. P7.1 —
-Production Security Baseline is implemented on its approved branch and awaits B
-review plus A-owned production validation. Phase 6 commercial SaaS work remains deferred and unstarted
-until Phase 7 completes and A separately authorizes it. Unrestricted public
-launch is not approved.
+Production Security Baseline is complete after successful A-owned production
+validation. Phase 7 is not complete. P7.2 — Production Migration & Deployment
+Path is next but unstarted. Phase 6 commercial SaaS work remains deferred and
+unstarted until Phase 7 completes and A separately authorizes it. Unrestricted
+public launch is not approved.
 
 ---
 
 Current Task
 
-P7.1 — Production Security Baseline is the only active implementation task. Its
-production-secret remediation follow-up adds the reviewed data-preserving
-application encryption-key rotation path on
-`fix/p7.1-production-secret-rotation`. Production/VPS secret rotation,
-runtime-role cutover, deployment, and validation remain A-owned; P7.1 is not
-operationally closed. No product feature work is active. Do not begin P7.2 or
-Phase 6 without separate approval.
+P7.1 — Production Security Baseline is complete. P7.2 — Production Migration &
+Deployment Path is the next allowed Phase 7 work and remains unstarted pending
+separate approval. No product feature work is active. Do not begin P7.2, P7.3+,
+Phase 6, or product expansion without separate approval.
 
 ---
 
@@ -40,7 +38,7 @@ Project Version
 
 Repository
 
-Current branch: `fix/p7.1-production-secret-rotation`.
+Current branch: `docs/p7.1-production-security-closure`.
 
 M22 implementation commit:
 `35f9e72335c8ed0c6a039497d92bed763dc68fb5 feat(entitlements): add MVP tenant
@@ -811,32 +809,26 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No open Phase-5 feature blocker remains. Public launch remains blocked until A
-executes and validates the data-preserving application-key rotation, separately
-establishes and proves the least-privilege runtime-role switch, then performs
-the coordinated JWT/backend-bot/callback and production-mode cutover. The
-current production database identity remains confirmed overprivileged until
-that switch. Authenticated Docker Scout scans of the patched final backend and
-bot images report zero Critical and zero High findings. Four historical
-implementation-provenance findings remain for A's separate history-remediation
-decision and the P7.8 release audit; current tracked content is clean and Git
-history was not rewritten.
+No open Phase-5 or P7.1 blocker remains. Public launch remains gated by the
+unstarted P7.2–P7.8 milestones. Four historical implementation-provenance
+findings remain unresolved for A's separate history-remediation decision and
+the P7.8 final release audit; current tracked content is clean and Git history
+was not rewritten.
 
 ---
 
 Next Milestone
 
-P7.1 — Production Security Baseline follow-up remains current. B review may
-continue with repository encryption-rotation evidence; A-owned production
-secret rotation, database-role remediation, production-mode switch, and runtime
-validation remain outstanding. Do not start P7.2.
+P7.2 — Production Migration & Deployment Path is next but unstarted. Its
+current migration mechanism and privileged migration identity remain future
+work. Do not start it without separate approval.
 
 ---
 
 Last Completed
 
-M22 — Basic MVP Entitlements & Phase 5 Closure is the last operationally closed
-milestone. Final decision: PASS. Phase 5 final decision: COMPLETE.
+P7.1 — Production Security Baseline is the last operationally closed milestone.
+Final decision: PASS. Phase 7 remains in progress.
 
 ---
 
@@ -848,11 +840,11 @@ Excellent
 
 Last Updated
 
-2026-09-06
+2026-09-16
 
 ---
 
-P7.1 Implementation State
+P7.1 Closure State
 
 - D-030 defines a temporary previous/current application-encryption-key bridge.
   `APP_ENCRYPTION_KEY` remains the sole current write key; optional
@@ -883,10 +875,11 @@ P7.1 Implementation State
   rotation, independent restricted-role creation and database-only cutover,
   then coordinated JWT/backend-bot/callback plus production-mode cutover. The
   database password and the three non-APP service secrets use independently
-  generated 32-byte lowercase-hex values; only the APP key uses Base64. No
-  production action was performed.
-- A has formally accepted D-030. Its architecture is unchanged; production
-  execution and validation remain A-owned and P7.1 remains open.
+  generated 32-byte lowercase-hex values; only the APP key uses Base64. C
+  performed no production action during implementation.
+- A has formally accepted D-030. Its staged architecture and history remain
+  unchanged. A completed the protected production execution and validation;
+  P7.1 is closed.
 - D-029 is Accepted. Phase 7 runs P7.1 through P7.8 before deferred Phase 6;
   P7.2 and later work remain unstarted.
 - Production configuration rejects committed development and test secret
@@ -927,15 +920,13 @@ P7.1 Implementation State
   rotation/restart/reconnect consequences, provides safe port/firewall/sshd/
   Docker/Caddy/header/health/database-role/log/CI checks, and gives a bounded
   DML-only runtime-role procedure derived from all current M1-M22 tables.
-- A's read-only production audit returned `true` for superuser, CREATEDB,
-  CREATEROLE, and replication, confirming a P7.1 launch blocker. The reviewed
-  runtime-role procedure passed against isolated PostgreSQL 16.15 after all 16
-  migrations: every elevated/bypass-RLS flag false, CONNECT/schema USAGE only,
-  no TEMP/schema CREATE/migration-table DML/object ownership, and the exact 57
-  M1-M22 table grants. The final backend started with that role and reported
-  PostgreSQL and Redis ready; a synthetic register, Tenant create, Tenant-context,
-  Tenant read, and Tenant update flow also passed through the application. The
-  production procedure was not executed.
+- Production now authenticates the backend as `wctm_runtime`. Authentication,
+  all six restricted role flags, schema USAGE without CREATE, no database TEMP,
+  no `_prisma_migrations` data access, zero runtime-owned objects, and the exact
+  approved ACL passed. Health/readiness, authenticated reads, representative
+  writes, an audited synthetic order-status mutation, AuditLog insertion, and
+  webhook projection passed without permission errors. The privileged migration
+  identity remains outside backend runtime and is owned by P7.2.
 - Prisma 7.10.0 is exact-pinned after the bounded compatible audit update.
   Exact transitive overrides patch Prisma tooling's `deepmerge-ts` at 8.0.0
   (`GHSA-ggr8-5vv4-36mx`) and `mysql2` at 3.23.1
@@ -957,9 +948,30 @@ P7.1 Implementation State
   `tar` 7.5.22. Clean rebuilt backend and bot images both report zero Critical
   and zero High findings. The bot build also installs only root tooling and its
   own workspace and no longer installs an unnecessary native toolchain.
-- No production/VPS, firewall, sshd, host Caddy, credential, PostgreSQL role,
-  Redis auth, GitHub secret, deployment, production restart/schema/migration,
-  product, P7.2+, or Phase 6 change was performed.
+- Production validation after merge `5edce65` completed D-030: a fresh backup
+  restored successfully to isolated PostgreSQL 16.15 with 16 migrations, 21
+  public tables, and matching selected row counts; this was only the P7.1
+  operation-specific prerequisite and is not generalized P7.3 work. APP-key
+  rotation updated 34 rows/38 values from previous-key to current-key
+  authentication with zero unreadable values; current-key-only verification
+  passed after removal of `APP_ENCRYPTION_PREVIOUS_KEY`. Store/connector and
+  Telegram status/order/stock paths remained functional.
+- Production runs with `NODE_ENV=production`, `LOG_LEVEL=log`,
+  `PILOT_MODE=false`, restricted `wctm_runtime`, the new authoritative APP key
+  only, independently rotated unique JWT/backend-bot/callback/runtime-database
+  secrets, and an all-PASS security configuration audit. No secret value is
+  recorded here.
+- The final bounded M1–M22 production smoke passed web login, authenticated
+  Tenant read, Telegram status/orders/search/report/stock, reversible settings,
+  Store/connector health, one authenticated synthetic WooCommerce order through
+  projection and exactly one correct Telegram notification/callback, and final
+  health/readiness. Recent permission and secret-pattern/log-leak scans were
+  clean. One isolated ordinary HTTP 404 was non-blocking.
+- P7.2 is next but unstarted. P7.3–P7.8, Phase 6, and product expansion remain
+  unstarted. Backup/restore/DR remains P7.3, monitoring P7.4, DATE-001 P7.5,
+  network/runtime resilience P7.6, AuditLog structural immutability P7.7, and
+  historical provenance/final launch gate P7.8. The provenance findings remain
+  unresolved.
 
 ---
 

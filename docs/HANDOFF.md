@@ -76,7 +76,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-027 | Tenant-authoritative typed Persian/English Telegram presentation, RTL/bidi and Tenant-timezone calendar formatting, and semantic M13/M19 notification rendering without delivery-policy changes                            | Accepted |
 | D-028 | One backend-authoritative Tenant ACTIVE/SUSPENDED lifecycle with derived expiry, operator-only mutation, explicit product gates, continued projections, terminal notification suppression, and no commercial billing scope | Accepted |
 | D-029 | Phase 7 production readiness precedes deferred Phase 6; P7.1 establishes the bounded repository security baseline while host changes, credential rotation, deployment, and P7.2+ remain separately controlled              | Accepted |
-| D-030 | P7.1 uses a temporary decrypt-only previous key, current-key-only writes, and a trusted-shell row-transactional rotation command for the exact five encrypted database fields                                            | Accepted |
+| D-030 | P7.1 uses a temporary decrypt-only previous key, current-key-only writes, and a trusted-shell row-transactional rotation command for the exact five encrypted database fields                                              | Accepted |
 
 Next decision number: **D-031**, if a future task produces a genuine
 architectural or product decision.
@@ -1031,7 +1031,7 @@ Final closure evidence:
 
 ### Phase 7 — Production Readiness (current)
 
-#### P7.1 — Production Security Baseline (follow-up verified; A production validation outstanding)
+#### P7.1 — Production Security Baseline (complete; production validated)
 
 - Production evidence confirmed that the deployed application encryption key
   is the committed development placeholder. D-030 now provides a bounded
@@ -1057,15 +1057,39 @@ Final closure evidence:
   rerun. An injected failure after the Store transaction proved safe mixed-state
   reads and resumable completion. No value, ciphertext, key, or identifier was
   emitted by the operator command.
-- A has formally accepted D-030 and still owns its protected production
-  sequence: operation-specific backup/restore prerequisite; isolated dual-key
+- A formally accepted D-030 and completed its protected production sequence:
+  operation-specific backup/restore prerequisite; isolated dual-key
   application rotation and current-only verification; independent
   `wctm_runtime` creation and database-only cutover; then coordinated JWT,
   backend-bot, and callback replacement with final `NODE_ENV=production`,
   `LOG_LEVEL=log`, `PILOT_MODE=false`, all-PASS config audit, and bounded M1-M22
   smoke. Non-APP replacement secrets use independent 32-byte lowercase-hex
-  values; the APP key alone uses validated Base64. C performed none of those
-  production actions and P7.1 remains open.
+  values; the APP key alone uses validated Base64. The staged architecture and
+  rollback history remain authoritative; P7.1 is closed.
+- After merge `5edce65`, APP rotation updated 34 rows/38 encrypted values.
+  Current-key-only verification after removing
+  `APP_ENCRYPTION_PREVIOUS_KEY` reported 38 current, zero previous, zero
+  unreadable, and PASS. Store/connector and Telegram status/order/stock paths
+  remained functional; the new APP key is authoritative.
+- The operation-specific prerequisite created a fresh backup and restored it in
+  isolated PostgreSQL 16.15 with 16 migrations, 21 public tables, and selected
+  source/restored row counts matching. This is not generalized P7.3
+  Backup/Restore/DR implementation.
+- Production backend runtime now uses restricted `wctm_runtime`; authentication,
+  role flags, ACL restrictions, no migration-table access, zero ownership,
+  health/readiness, reads, writes, audited order-status mutation, AuditLog
+  insertion, and webhook projection passed without permission errors. The
+  privileged migration identity/path remains P7.2 work.
+- Final production state is `NODE_ENV=production`, `LOG_LEVEL=log`,
+  `PILOT_MODE=false`, restricted runtime DB identity, current APP key only, and
+  independently rotated unique JWT/backend-bot/callback/runtime-DB secrets.
+  Every security configuration audit check passed; no value is recorded.
+- The bounded M1–M22 smoke passed web login, Tenant read, Telegram
+  status/orders/search/report/stock, reversible settings, Store/connector
+  health, one authenticated synthetic WooCommerce order through projection and
+  exactly one correct Telegram notification/callback, and final
+  health/readiness. Permission and secret-pattern/log-leak scans were clean. An
+  isolated ordinary HTTP 404 was non-blocking.
 - Production configuration now rejects every committed development/test secret
   placeholder, short backend-bot service credentials, production pilot mode,
   debug/verbose production logging, and reuse across unrelated secret
@@ -1109,12 +1133,12 @@ Final closure evidence:
   database-role, recent-log, config, and GitHub name-only checks plus a bounded
   DML-only PostgreSQL runtime-role procedure derived from every M1-M22 table.
 
-Launch blockers and pending operational evidence:
+Remaining launch-gate evidence:
 
-- A's approved read-only production audit returned `true` for superuser,
-  CREATEDB, CREATEROLE, and replication. Production launch remains blocked until
-  A applies the reviewed least-privilege procedure and validates the resulting
-  runtime. No production database role or service was changed here.
+- The original read-only audit found an overprivileged identity; the completed
+  production cutover replaced it for backend runtime with validated restricted
+  `wctm_runtime`. Owner/migration credentials remain outside runtime pending
+  P7.2.
 - The current tracked tree contains no avoidable implementation-tool/agent
   provenance. Four historical tracked-content findings remain unchanged for A's
   separate history-remediation decision and the P7.8 release audit.
@@ -1155,9 +1179,9 @@ Dependency and automated evidence:
   missing or excessive privileges across all 20 application tables, while the
   existing privileged owner remains available for Prisma migration execution.
 
-No production/VPS, firewall, sshd, host Caddy, credential, PostgreSQL role,
-Redis password, GitHub secret, deployment, production restart/schema/migration,
-product, P7.2+, or Phase 6 change was performed.
+This closure branch changes documentation only. It performs no VPS, production,
+secret, database, deployment, schema, migration, application, product, P7.2+,
+or Phase 6 action.
 
 ## 5. Current Repository Structure
 
@@ -1166,28 +1190,25 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `fix/p7.1-production-secret-rotation`.
+Current branch: `docs/p7.1-production-security-closure`.
 
 ---
 
 ## 6. Current Blockers
 
-No open Phase-5 feature blocker remains. P7.1 public-launch blockers are A's
-unexecuted production application/service-secret rotation and production-mode
-validation, the confirmed overprivileged production database identity, and four
-historical provenance findings awaiting A's separate history decision.
-Authenticated final-image scans pass. DATE-001 and AuditLog immutability remain
-explicitly assigned to P7.5 and P7.7.
+No open Phase-5 or P7.1 blocker remains. Public launch remains gated by
+unstarted P7.2–P7.8. Historical provenance remains unresolved and assigned to
+P7.8. Generalized backup/restore/DR remains P7.3, monitoring P7.4, DATE-001
+P7.5, network/runtime resilience P7.6, and AuditLog structural immutability
+P7.7.
 
 ---
 
 ## 7. Current Task
 
-P7.1 — Production Security Baseline follow-up now includes D-030's repository
-secret-rotation path. B review may continue with isolated rotation evidence;
-A-owned production secret rotation, database-role remediation, final production-
-mode switch, and runtime validation remain outstanding. P7.1 is not
-operationally closed. Do not start P7.2 or Phase 6.
+P7.1 — Production Security Baseline is complete. P7.2 — Production Migration &
+Deployment Path is next but unstarted pending separate approval. Do not start
+P7.2+, Phase 6, or product expansion from this docs-only closure.
 
 ### Last completed product milestone: M22
 

@@ -1164,8 +1164,12 @@ key as current.
 
 Status
 
-Accepted. Production execution and validation remain A-owned. P7.1 is not
-closed.
+Accepted. A completed the staged production execution and validation after the
+reviewed remediation was merged. Current-key-only encryption, the restricted
+runtime database role, independently rotated service secrets, production-mode
+startup, the all-PASS security configuration audit, and the bounded M1–M22
+production smoke all passed. P7.1 is complete. This acceptance does not alter
+the staged D-030 architecture or start P7.2+.
 
 ---
 
