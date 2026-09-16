@@ -15,18 +15,21 @@ M1–M16 remain complete and unchanged. By explicit A decision D-029, the curren
 phase is Phase 7 — Production Readiness, which executes before Phase 6. P7.1 —
 Production Security Baseline is complete after successful A-owned production
 validation. Phase 7 is not complete. P7.2 — Production Migration & Deployment
-Path is next but unstarted. Phase 6 commercial SaaS work remains deferred and
-unstarted until Phase 7 completes and A separately authorizes it. Unrestricted
-public launch is not approved.
+Path and P7.3 — Backup, Restore & Disaster Recovery are repository-implemented
+and ready for B review, but remain open pending A-owned production validation.
+P7.4 is next only after both are accepted. Phase 6 commercial SaaS work remains
+deferred and unstarted until Phase 7 completes and A separately authorizes it.
+Unrestricted public launch is not approved.
 
 ---
 
 Current Task
 
-P7.1 — Production Security Baseline is complete. P7.2 — Production Migration &
-Deployment Path is the next allowed Phase 7 work and remains unstarted pending
-separate approval. No product feature work is active. Do not begin P7.2, P7.3+,
-Phase 6, or product expansion without separate approval.
+P7.1 — Production Security Baseline is complete. P7.2 and P7.3 repository work
+is implemented in one approved operations cycle and awaits B review plus A-owned
+live validation. Neither is production-complete. P7.4 remains unstarted and is
+next only after both acceptances. No product feature work is active. Do not
+begin P7.4+, Phase 6, or product expansion without separate approval.
 
 ---
 
@@ -38,7 +41,7 @@ Project Version
 
 Repository
 
-Current branch: `docs/p7.1-production-security-closure`.
+Current branch: `chore/p7.2-p7.3-production-operations`.
 
 M22 implementation commit:
 `35f9e72335c8ed0c6a039497d92bed763dc68fb5 feat(entitlements): add MVP tenant
@@ -778,7 +781,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-fix/p7.1-production-secret-rotation
+chore/p7.2-p7.3-production-operations
 
 ---
 
@@ -794,10 +797,9 @@ dependent sorting or reporting may be affected.
 AuditLog structural immutability is not yet enforced; the schema includes an
 updatable timestamp. A future approved decision must define enforcement.
 
-The production backend image omits the Prisma CLI because production dependency
-installation excludes the Prisma development dependency. M3 migrations were
-verified with the Docker builder stage; the production migration execution path
-requires a future approved infrastructure correction.
+The normal production backend image intentionally omits the Prisma CLI. P7.2
+adds a separate ephemeral operations image with exact Prisma tooling and
+migration state; live validation of that path remains pending A.
 
 ---
 
@@ -809,26 +811,25 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No open Phase-5 or P7.1 blocker remains. Public launch remains gated by the
-unstarted P7.2–P7.8 milestones. Four historical implementation-provenance
-findings remain unresolved for A's separate history-remediation decision and
-the P7.8 final release audit; current tracked content is clean and Git history
-was not rewritten.
+No open Phase-5 or P7.1 blocker remains. Public launch remains gated by pending
+P7.2/P7.3 production acceptance and unstarted P7.4–P7.8. Four historical
+implementation-provenance findings remain unresolved for A's separate history-
+remediation decision and the P7.8 final release audit; current tracked content
+is clean and Git history was not rewritten.
 
 ---
 
 Next Milestone
 
-P7.2 — Production Migration & Deployment Path is next but unstarted. Its
-current migration mechanism and privileged migration identity remain future
-work. Do not start it without separate approval.
+P7.2 and P7.3 require B review and one A-owned combined live validation session.
+After both are accepted, P7.4 — Monitoring & Alerting is next but unstarted.
 
 ---
 
 Last Completed
 
 P7.1 — Production Security Baseline is the last operationally closed milestone.
-Final decision: PASS. Phase 7 remains in progress.
+P7.2/P7.3 are repository-complete only. Phase 7 remains in progress.
 
 ---
 
@@ -880,8 +881,9 @@ P7.1 Closure State
 - A has formally accepted D-030. Its staged architecture and history remain
   unchanged. A completed the protected production execution and validation;
   P7.1 is closed.
-- D-029 is Accepted. Phase 7 runs P7.1 through P7.8 before deferred Phase 6;
-  P7.2 and later work remain unstarted.
+- D-029 is Accepted. Phase 7 runs P7.1 through P7.8 before deferred Phase 6.
+  P7.2/P7.3 now await review and live validation; P7.4 and later remain
+  unstarted.
 - Production configuration rejects committed development and test secret
   placeholders, short bot service credentials, pilot mode, debug/verbose log
   levels, and unrelated cross-boundary secret reuse without reporting values.
@@ -967,11 +969,62 @@ P7.1 Closure State
   projection and exactly one correct Telegram notification/callback, and final
   health/readiness. Recent permission and secret-pattern/log-leak scans were
   clean. One isolated ordinary HTTP 404 was non-blocking.
-- P7.2 is next but unstarted. P7.3–P7.8, Phase 6, and product expansion remain
-  unstarted. Backup/restore/DR remains P7.3, monitoring P7.4, DATE-001 P7.5,
-  network/runtime resilience P7.6, AuditLog structural immutability P7.7, and
-  historical provenance/final launch gate P7.8. The provenance findings remain
-  unresolved.
+- P7.2/P7.3 repository implementation is complete and ready for B review, but
+  neither milestone is production-complete. D-031 provides explicit ephemeral
+  privileged migration plus deterministic deployment and immutable PostgreSQL/
+  Redis reconciliation while retaining `wctm_runtime` for backend runtime.
+  D-032 provides verified custom-format backup, retention, off-host transfer,
+  daily scheduling templates, isolated restore, and DR procedures. A must run
+  the combined production-validation gates before acceptance.
+- P7.4–P7.8, Phase 6, and product expansion remain unstarted. Monitoring stays
+  P7.4, DATE-001 P7.5, network/runtime resilience P7.6, AuditLog structural
+  immutability P7.7, and historical provenance/final launch gate P7.8. The
+  provenance findings remain unresolved.
+
+---
+
+P7.2/P7.3 Repository Implementation State
+
+- P7.2 implementation commit:
+  `91e16fd5933ffa4e6386d649f21f9e2592833ed5 chore(ops): establish production
+migration and deployment path`.
+- P7.3 implementation commit:
+  `ddde3c705b249a29a131a3bfc96763f17b6e9cbc chore(ops): add production backup
+and recovery path`.
+- D-031 and D-032 are Accepted for repository implementation; D-029 and D-030
+  remain Accepted and unchanged.
+- `migrate` is an operations-profile Compose service built from a dedicated
+  backend Dockerfile target. It runs non-root/read-only, contains the exact
+  checked-out Prisma CLI/migrations, accepts a distinct credential only for one
+  wrapper-controlled invocation, rejects `wctm_runtime`, and is removed after
+  execution. Normal backend startup remains migration-free.
+- The revision-locked deployment wrapper requires clean synchronized Git state,
+  Compose/config audit, a fresh verified backup, image build, explicit migration
+  before cutover, health/readiness, and exact restricted runtime-role proof.
+  Database/cache reconciliation separately preserves and verifies named volumes
+  while moving only PostgreSQL/Redis to the reviewed immutable references.
+- Backup tooling creates atomic mode-0600 PostgreSQL custom dumps with UTC names,
+  SHA-256, dump readability validation, and non-secret revision/migration/
+  version metadata. Explicit retention defaults to 14 valid sets, protects the
+  newest, and ignores unrelated/incomplete/corrupt files. The rclone hook fails
+  on copy or remote-size mismatch; systemd templates schedule daily execution
+  without committed secrets.
+- Restore tooling has no production target option. It checksum-validates and
+  restores only into a generated PostgreSQL 16.15 container/volume with no
+  network, verifies exact repository migration count, public schema, and
+  configurable critical rows, then removes only generated resources.
+- The combined A-runbook covers preflight, backup/off-host proof, migration,
+  PostgreSQL/Redis reconciliation, application cutover, bounded M1-M22 smoke,
+  post-deployment backup, isolated restore, final scans, failure handling and
+  DR. Initial RPO/RTO are targets of 24 hours/eight hours, not guarantees.
+- Database ciphertext recovery requires the matching APP encryption key and,
+  only for a historical controlled rotation-window backup, any necessary
+  previous key. JWT/callback/internal/bot/database secrets restore their own
+  trust boundaries and do not decrypt stored ciphertext.
+- Repository implementation is ready for B review. Neither P7.2 nor P7.3 is
+  production-complete until A performs and accepts live validation. No VPS,
+  production, secret, database, deployment, schema, migration, or product
+  mutation occurred during repository implementation.
 
 ---
 

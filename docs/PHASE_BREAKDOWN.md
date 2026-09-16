@@ -758,7 +758,40 @@ Node 24.20.0 now backs both application images; Node, PostgreSQL 16, and Redis 7
 use exact patch/distro tags plus immutable digests. The initial overprivileged
 production identity was replaced for backend runtime by the validated
 restricted role. Historical release-provenance findings remain without history
-rewrite and are still assigned to P7.8. P7.2 is next but unstarted; P7.3 through
+rewrite and are still assigned to P7.8.
+
+### P7.2 — Production Migration & Deployment Path 🟡 Repository Complete / Awaiting Validation
+
+- D-031 establishes an ephemeral, non-root Compose migration job containing the
+  exact checked-out Prisma migration state. A distinct protected migration URL
+  is supplied only for the operation; `wctm_runtime` is rejected and remains
+  the backend-only restricted identity with no migration-table or DDL access.
+- Revision-locked deployment fails before cutover on preflight, config audit,
+  backup, build, or migration failure. Backend startup performs no migration or
+  `db push`; health/readiness and restricted-role verification follow cutover.
+- Guarded PostgreSQL/Redis reconciliation requires a verified backup and exact
+  named-volume confirmation, preserves volumes, recreates only those services
+  on the reviewed immutable references, and verifies health/data continuity.
+- Repository implementation is ready for B review. Production validation and
+  A acceptance remain required; P7.2 is not production-complete.
+
+### P7.3 — Backup, Restore & Disaster Recovery 🟡 Repository Complete / Awaiting Validation
+
+- D-032 establishes atomic PostgreSQL custom-format backups, SHA-256 and
+  readability verification, non-secret metadata, explicit 14-valid-set default
+  retention, verified provider-neutral off-host transfer, and daily systemd
+  templates with no committed credentials.
+- Guarded restore always targets an isolated PostgreSQL 16.15 container/volume
+  with no network exposure, verifies repository migration state, schema and
+  configurable critical row counts, and cannot target production by default.
+- The DR runbook covers application/container, deployment, database, and total
+  VPS loss; distinguishes APP-key decryption dependency from other service
+  credentials; and sets target-only 24-hour RPO/eight-hour RTO objectives.
+- Repository implementation is ready for B review. A must choose the off-host
+  destination, install/enable scheduling, and execute the combined live backup,
+  deployment and isolated-restore runbook. P7.3 is not production-complete.
+
+P7.4 remains next only after P7.2/P7.3 production acceptance. P7.4 through
 P7.8 are unstarted. Phase 7 is not complete.
 
 ### Approved Phase 7 order

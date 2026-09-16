@@ -2,7 +2,7 @@
 
 **Generated:** 2026-07-19
 
-**Updated:** 2026-09-06
+**Updated:** 2026-09-16
 
 **Reason:** Maintaining implementation continuity
 
@@ -43,7 +43,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-030)
+## 3. Architectural Decisions (D-001–D-032)
 
 | ID    | Decision                                                                                                                                                                                                                   | Status   |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -77,8 +77,10 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-028 | One backend-authoritative Tenant ACTIVE/SUSPENDED lifecycle with derived expiry, operator-only mutation, explicit product gates, continued projections, terminal notification suppression, and no commercial billing scope | Accepted |
 | D-029 | Phase 7 production readiness precedes deferred Phase 6; P7.1 establishes the bounded repository security baseline while host changes, credential rotation, deployment, and P7.2+ remain separately controlled              | Accepted |
 | D-030 | P7.1 uses a temporary decrypt-only previous key, current-key-only writes, and a trusted-shell row-transactional rotation command for the exact five encrypted database fields                                              | Accepted |
+| D-031 | P7.2 separates restricted backend runtime from an ephemeral explicit Prisma migration identity and defines revision-locked fail-fast deployment plus volume-preserving immutable data-service reconciliation               | Accepted |
+| D-032 | P7.3 establishes atomic verified PostgreSQL backups, explicit retention, verified provider-neutral off-host copy, daily systemd scheduling, isolated guarded restore, DR dependencies, and target-only RPO/RTO             | Accepted |
 
-Next decision number: **D-031**, if a future task produces a genuine
+Next decision number: **D-033**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -1179,9 +1181,60 @@ Dependency and automated evidence:
   missing or excessive privileges across all 20 application tables, while the
   existing privileged owner remains available for Prisma migration execution.
 
-This closure branch changes documentation only. It performs no VPS, production,
-secret, database, deployment, schema, migration, application, product, P7.2+,
-or Phase 6 action.
+#### P7.2 — Production Migration & Deployment Path (repository complete; awaiting validation)
+
+- Implementation commit:
+  `91e16fd5933ffa4e6386d649f21f9e2592833ed5 chore(ops): establish production
+migration and deployment path`.
+- D-031 keeps `wctm_runtime` as the backend-only restricted identity and moves
+  Prisma tooling into an explicit ephemeral Compose operations target. The
+  wrapper reads one protected external migration URL, rejects `wctm_runtime`,
+  runs exact checked-out migrations, removes the container, and never exposes
+  that credential to normal backend runtime.
+- `deploy-production.sh` is revision-locked and fail-fast across clean/synced
+  Git, Compose, config audit, fresh verified P7.3 backup, image build, explicit
+  migration before cutover, backend/bot recreation, health/readiness, and
+  restricted-role verification. Backend startup remains `node dist/main.js`
+  with no automatic schema mutation or `db push`.
+- `reconcile-data-images.sh` requires the verified backup plus explicit current
+  PostgreSQL/Redis volume names, preserves those volumes, recreates only those
+  services on the P7.1 immutable references, verifies health, migration/key
+  continuity and exact image configuration, and leaves apps stopped for cutover.
+- Failure guidance distinguishes safe application-image restoration from
+  irreversible/forward-only schema effects and hands database recovery to P7.3.
+  Repository implementation is ready for B review; production acceptance is
+  pending A's combined runbook.
+
+#### P7.3 — Backup, Restore & Disaster Recovery (repository complete; awaiting validation)
+
+- Implementation commit:
+  `ddde3c705b249a29a131a3bfc96763f17b6e9cbc chore(ops): add production backup
+and recovery path`.
+- D-032 adds atomic mode-0600 custom-format dumps with UTC unique names,
+  `pg_restore --list`, SHA-256, and non-secret revision/migration/size/version
+  metadata. Explicit retention defaults to 14 valid sets, always protects the
+  newest, and ignores unrelated/incomplete/corrupt files.
+- A provider-neutral executable hook is supported; the supplied rclone hook
+  copies dump/checksum/metadata and verifies remote sizes. Failure is non-zero.
+  Daily Ubuntu systemd templates load paths/remote name from an external file,
+  expose failures through service status/journal, and contain no credential.
+- Restore accepts one explicit local backup only and creates a generated
+  PostgreSQL 16.15 container/volume with `--network none`. It verifies checksum,
+  dump readability, exact repository migration count, public schema and chosen
+  critical table rows, and removes only its own isolated resources.
+- DR covers application/container loss, failed deployment, database corruption,
+  and new-host recovery. Stored ciphertext requires the matching APP key; other
+  service/signing/database credentials do not decrypt it. Initial targets are a
+  24-hour RPO and eight-hour RTO, not SLA guarantees.
+- The executable combined A session is
+  `docs/operations/P7_2_P7_3_RUNBOOK.md`: preflight; fresh verified/off-host
+  backup; migration identity proof; immutable PostgreSQL/Redis reconciliation;
+  app deployment; bounded smoke; post-deployment backup; isolated restore; and
+  final permission/migration/backup/secret/health scans.
+
+This repository cycle performs no VPS, production, secret, live database,
+deployment, schema, migration, or product mutation. P7.2 and P7.3 are not
+production-complete. P7.4+, Phase 6, and product work remain unstarted.
 
 ## 5. Current Repository Structure
 
@@ -1190,15 +1243,15 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `docs/p7.1-production-security-closure`.
+Current branch: `chore/p7.2-p7.3-production-operations`.
 
 ---
 
 ## 6. Current Blockers
 
 No open Phase-5 or P7.1 blocker remains. Public launch remains gated by
-unstarted P7.2–P7.8. Historical provenance remains unresolved and assigned to
-P7.8. Generalized backup/restore/DR remains P7.3, monitoring P7.4, DATE-001
+P7.2/P7.3 production acceptance and unstarted P7.4–P7.8. Historical provenance
+remains unresolved and assigned to P7.8. Monitoring remains P7.4, DATE-001
 P7.5, network/runtime resilience P7.6, and AuditLog structural immutability
 P7.7.
 
@@ -1206,9 +1259,10 @@ P7.7.
 
 ## 7. Current Task
 
-P7.1 — Production Security Baseline is complete. P7.2 — Production Migration &
-Deployment Path is next but unstarted pending separate approval. Do not start
-P7.2+, Phase 6, or product expansion from this docs-only closure.
+P7.1 is complete. P7.2 and P7.3 repository implementation is complete and ready
+for B review; both await A-owned live validation and neither is production-
+complete. P7.4 is next only after both acceptances and remains unstarted. Do not
+start P7.4+, Phase 6, or product expansion.
 
 ### Last completed product milestone: M22
 
