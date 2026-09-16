@@ -1,0 +1,5 @@
+# Install as /etc/wctm/backup.conf with root:wctm ownership and mode 0640.
+WCTM_BACKUP_DIRECTORY=/var/backups/wctm
+WCTM_BACKUP_RETENTION_COUNT=14
+# Optional provider-neutral rclone remote. Configure credentials outside Git.
+# WCTM_OFFSITE_DESTINATION=remote-name:wctm-production

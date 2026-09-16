@@ -1,0 +1,21 @@
+[Unit]
+Description=WCTM PostgreSQL backup and verified off-host copy
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=wctm
+Group=wctm
+WorkingDirectory=/srv/wctm
+EnvironmentFile=/etc/wctm/backup.conf
+ExecStart=/srv/wctm/scripts/ops/scheduled-backup.sh
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/backups/wctm
+
+[Install]
+WantedBy=multi-user.target
