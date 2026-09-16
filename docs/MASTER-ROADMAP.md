@@ -293,8 +293,8 @@ commercial/product expansion.
 
 Milestones, in order:
 
-- P7.1 — Production Security Baseline
-- P7.2 — Production Migration & Deployment Path
+- P7.1 — Production Security Baseline — ✅ Complete
+- P7.2 — Production Migration & Deployment Path — ⬜ Next / unstarted
 - P7.3 — Backup, Restore & Disaster Recovery
 - P7.4 — Monitoring & Alerting
 - P7.5 — Data & Time Correctness
@@ -302,7 +302,9 @@ Milestones, in order:
 - P7.7 — Audit & Operational Integrity
 - P7.8 — Final Launch Readiness Gate
 
-No Phase 7 milestone has started. P7.1 is the next implementation milestone.
+P7.1 is complete following accepted production validation. P7.2 is the next
+allowed Phase 7 milestone and remains unstarted. P7.3–P7.8 and Phase 6 remain
+unstarted; Phase 7 is not complete.
 
 ---
 

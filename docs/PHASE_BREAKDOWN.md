@@ -720,7 +720,7 @@ launch is not approved.
 
 ## Phase 7 — Production Readiness 🔵 Current
 
-### P7.1 — Production Security Baseline 🟡 Implemented; awaiting review and production validation
+### P7.1 — Production Security Baseline ✅ Complete / Production Validated
 
 - Complete runtime configuration and secret-boundary inventory, with production
   rejection of committed placeholders, unsafe pilot/log settings, and unrelated
@@ -743,13 +743,23 @@ launch is not approved.
 - DML-only runtime PostgreSQL procedure derived from the current M1-M22 schema;
   P7.2 retains ownership of the final migration role/path.
 
-P7.1 remains operationally open until B review and A-owned production checks.
+After merge `5edce65`, A completed the staged D-030 production transition.
+Current-key-only APP encryption passed for 34 rows/38 values with zero
+unreadable values; production uses restricted `wctm_runtime`, independently
+rotated unique service secrets, production mode, and an all-PASS security
+configuration audit. The bounded M1–M22 production smoke, permission scan, and
+secret-pattern/log-leak scan passed.
+
+The fresh backup and successful isolated PostgreSQL 16.15 restore (16
+migrations, 21 public tables, selected row-count comparison PASS) were a one-off
+P7.1 operation-specific prerequisite, not generalized P7.3 implementation.
+P7.1 is closed.
 Node 24.20.0 now backs both application images; Node, PostgreSQL 16, and Redis 7
-use exact patch/distro tags plus immutable digests. A's production runtime-role
-audit confirmed superuser, CREATEDB, CREATEROLE, and replication privileges, so
-launch remains blocked until A applies the reviewed least-privilege procedure
-and validates the resulting runtime. Historical release-provenance findings
-remain without history rewrite. P7.2 through P7.8 are unstarted.
+use exact patch/distro tags plus immutable digests. The initial overprivileged
+production identity was replaced for backend runtime by the validated
+restricted role. Historical release-provenance findings remain without history
+rewrite and are still assigned to P7.8. P7.2 is next but unstarted; P7.3 through
+P7.8 are unstarted. Phase 7 is not complete.
 
 ### Approved Phase 7 order
 

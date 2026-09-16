@@ -448,7 +448,7 @@ The Docker Compose Caddy service is not used on the shared VPS.
 
 ## Production Security Baseline (P7.1)
 
-P7.1 repository work does not itself authorize SSH access, firewall/sshd/Caddy
+P7.1 repository work did not itself authorize SSH access, firewall/sshd/Caddy
 changes, credential rotation, database-role changes, deployment, or service
 restart. A owns and records every production action in this section. Never
 paste secret values into chat, issues, logs, screenshots, command arguments, or
@@ -735,7 +735,7 @@ sessions only; the backend-bot key must roll back on backend and bot together;
 and callback-key rollback affects outstanding references, not durable business
 state. If production-mode startup fails and service restoration is necessary,
 do not weaken the validator: restore the immediately preceding protected
-configuration baseline. P7.1 remains open until production validation is
+configuration baseline. P7.1 remained open until production validation was
 formally accepted.
 
 This cutover does not rotate `TELEGRAM_BOT_TOKEN`, per-Store webhook plaintext,
@@ -864,10 +864,10 @@ URL or password:
 docker compose exec -T backend node -e 'const {Client}=require("pg");const c=new Client({connectionString:process.env.DATABASE_URL});(async()=>{await c.connect();const r=await c.query("select rolsuper, rolcreatedb, rolcreaterole, rolreplication from pg_roles where rolname=current_user");const v=r.rows[0];console.log(JSON.stringify({superuser:v.rolsuper,createDb:v.rolcreatedb,createRole:v.rolcreaterole,replication:v.rolreplication}));await c.end()})().catch(()=>{console.error("database privilege audit failed");process.exitCode=1})'
 ```
 
-All four values must be `false`. A's approved read-only audit returned
-`true` for all four values, so the production runtime role is a confirmed P7.1
-launch blocker. The following procedure is reviewed for A to execute in a
-controlled production window; it was validated against an isolated PostgreSQL
+All four values must be `false`. A's initial approved read-only audit returned
+`true` for all four values, which established the original P7.1 launch blocker.
+The following procedure was reviewed for A to execute in a controlled
+production window; it was validated against an isolated PostgreSQL
 16 instance containing the complete 16-migration M1-M22 schema. P7.2 will
 define the supported privileged migration identity/path. The runtime role must
 not own the schema, any relation, or `_prisma_migrations` and receives no DDL or
@@ -961,6 +961,38 @@ login/Tenant read, representative application read/write, AuditLog insert, and
 authenticated webhook/projection. Do not run Prisma Migrate as `wctm_runtime`.
 PostgreSQL remains unpublished; same-host private Docker traffic does not
 require a new database TLS topology in P7.1.
+
+### P7.1 production closure record
+
+After merge `5edce65`, A executed the staged D-030 transition successfully.
+The operation-specific prerequisite created a fresh production backup, restored
+that exact backup in isolated PostgreSQL 16.15, found 16 migrations and 21
+public tables, and passed selected source/restored row-count comparison. This is
+not generalized backup/restore/DR implementation; that remains P7.3.
+
+APP-key inspection found 34 rows/38 encrypted values, all on the previous key
+and none unreadable. Rotation updated all 34 rows/38 values. Verification with
+the current key only, after removal of `APP_ENCRYPTION_PREVIOUS_KEY`, reported
+38 current, zero previous, zero unreadable, and PASS. The new APP key is
+authoritative; the protected pre-rotation snapshot remains retained for the
+closure window.
+
+Production now runs in production mode with `LOG_LEVEL=log`, `PILOT_MODE=false`,
+restricted `wctm_runtime`, the current APP key only, independently rotated
+unique JWT/backend-bot/callback/runtime-database secrets, and every security
+configuration audit check passing. Runtime-role authentication, exact ACL and
+restriction checks, application reads/writes, audited order-status mutation,
+AuditLog insertion, webhook projection, health, and readiness passed without
+permission errors. Owner/migration credentials remain outside backend runtime;
+the supported privileged migration identity/path remains P7.2.
+
+The final bounded M1–M22 production smoke passed login, Tenant read, Telegram
+status/orders/search/report/stock, reversible settings, Store/connector health,
+one authenticated synthetic WooCommerce order with exactly one correct Telegram
+notification and callback, and final health/readiness. Recent permission and
+secret-pattern/log-leak scans were clean. One isolated ordinary HTTP 404 had no
+associated webhook, database, permission, secret, or runtime failure and was
+non-blocking. P7.1 is complete; this record starts no P7.2+ work.
 
 ### Redis, logs, and CI secret inventory
 
