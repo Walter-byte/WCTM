@@ -72,9 +72,13 @@ scripts/ops/backup-postgres.sh \
   --offsite-destination remote-name:wctm-production
 ```
 
-The hook returns non-zero if any copy or remote size verification fails. A
-local backup remains valid when remote transfer fails, but the DR gate fails.
-The production destination is an A-owned live-validation choice.
+The hook size-checks all three remote artifacts and requires the remote dump to
+match the locally generated SHA-256 before success. It uses a compatible native
+remote SHA-256 when rclone exposes one; otherwise it streams the remote dump
+through rclone and hashes that stream locally without overwriting the local
+backup. Copy, metadata, size, SHA-256, or integrity-verification failure returns
+non-zero. A local backup remains valid when remote transfer fails, but the DR
+gate fails. The production destination is an A-owned live-validation choice.
 
 Explicit migration (schema-changing, fail-fast):
 

@@ -1215,7 +1215,9 @@ and recovery path`.
   metadata. Explicit retention defaults to 14 valid sets, always protects the
   newest, and ignores unrelated/incomplete/corrupt files.
 - A provider-neutral executable hook is supported; the supplied rclone hook
-  copies dump/checksum/metadata and verifies remote sizes. Failure is non-zero.
+  copies dump/checksum/metadata, verifies their remote sizes, and requires the
+  remote dump to match the local SHA-256 through a compatible native remote
+  hash or a locally hashed rclone stream. Failure is non-zero.
   Daily Ubuntu systemd templates load paths/remote name from an external file,
   expose failures through service status/journal, and contain no credential.
 - Restore accepts one explicit local backup only and creates a generated

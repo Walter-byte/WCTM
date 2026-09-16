@@ -1006,9 +1006,10 @@ and recovery path`.
 - Backup tooling creates atomic mode-0600 PostgreSQL custom dumps with UTC names,
   SHA-256, dump readability validation, and non-secret revision/migration/
   version metadata. Explicit retention defaults to 14 valid sets, protects the
-  newest, and ignores unrelated/incomplete/corrupt files. The rclone hook fails
-  on copy or remote-size mismatch; systemd templates schedule daily execution
-  without committed secrets.
+  newest, and ignores unrelated/incomplete/corrupt files. The rclone hook checks
+  all remote sizes and requires the remote dump to match the local SHA-256 via
+  a compatible native hash or a locally hashed remote stream; systemd templates
+  schedule daily execution without committed secrets.
 - Restore tooling has no production target option. It checksum-validates and
   restores only into a generated PostgreSQL 16.15 container/volume with no
   network, verifies exact repository migration count, public schema, and

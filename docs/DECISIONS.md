@@ -1225,8 +1225,12 @@ permissions, atomic finalization, dump-list readability validation, SHA-256,
 and non-secret metadata. Retention is explicit, count-based, defaults to 14
 valid daily sets, never removes the newest valid set, and targets only the exact
 WCTM backup naming pattern. A provider-neutral executable hook supplies
-off-host transfer; the repository rclone implementation verifies each remote
-file size and fails non-zero on copy or verification error.
+off-host transfer. The repository rclone implementation requires the remote
+dump content to match the locally generated SHA-256: it uses a compatible
+native remote SHA-256 when available, otherwise streams the remote dump through
+rclone and hashes it locally without replacing the local backup. Remote size
+remains a secondary check for all three transferred artifacts. Copy, metadata,
+size, content-integrity, or integrity-verification failures exit non-zero.
 
 Daily scheduling uses repository-controlled systemd service/timer templates
 whose external environment file contains paths and an optional remote name but

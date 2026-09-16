@@ -28,6 +28,7 @@ for script in scripts/ops/*.sh; do
     *) bash -n "$script" ;;
   esac
 done
+bash -n scripts/ops/test-fixtures/rclone
 docker compose config --quiet
 docker compose build migrate >/dev/null
 [[ $(docker run --rm --entrypoint id wctm-migrate:latest -u) = 1000 ]]
@@ -97,6 +98,31 @@ WCTM_POSTGRES_CONTAINER=$source_container scripts/ops/backup-postgres.sh --desti
 backup=$(find "$workspace/backups" -maxdepth 1 -name 'wctm-postgres-*.dump' -print)
 [[ -n "$backup" && -f "$backup.sha256" && -f "$backup.json" ]]
 
+mkdir "$workspace/test-bin" "$workspace/offsite-native" "$workspace/offsite-streamed" "$workspace/offsite-corrupt"
+cp scripts/ops/test-fixtures/rclone "$workspace/test-bin/rclone"
+chmod 0700 "$workspace/test-bin/rclone"
+PATH="$workspace/test-bin:$PATH" scripts/ops/offsite-rclone.sh \
+  "$backup" "$backup.sha256" "$backup.json" "testremote:$workspace/offsite-native" \
+  >"$workspace/offsite-native.log" 2>&1
+grep -q 'content_sha256=verified method=native-sha256' "$workspace/offsite-native.log"
+WCTM_TEST_RCLONE_NATIVE_HASH=unavailable PATH="$workspace/test-bin:$PATH" \
+  scripts/ops/offsite-rclone.sh \
+  "$backup" "$backup.sha256" "$backup.json" "testremote:$workspace/offsite-streamed" \
+  >"$workspace/offsite-streamed.log" 2>&1
+grep -q 'content_sha256=verified method=streamed-sha256' "$workspace/offsite-streamed.log"
+if WCTM_TEST_RCLONE_NATIVE_HASH=unavailable WCTM_TEST_RCLONE_CORRUPT_DUMP=true \
+  PATH="$workspace/test-bin:$PATH" scripts/ops/offsite-rclone.sh \
+  "$backup" "$backup.sha256" "$backup.json" "testremote:$workspace/offsite-corrupt" \
+  >"$workspace/offsite-corrupt.log" 2>&1; then
+  echo >&2 'test failed: same-size remote corruption was accepted'
+  exit 1
+fi
+remote_corrupt="$workspace/offsite-corrupt/$(basename "$backup")"
+[[ $(wc -c <"$remote_corrupt" | tr -d ' ') = $(wc -c <"$backup" | tr -d ' ') ]]
+[[ $(sha256sum "$remote_corrupt" | awk '{print $1}') != $(sha256sum "$backup" | awk '{print $1}') ]]
+grep -q 'remote dump SHA-256 mismatch' "$workspace/offsite-corrupt.log"
+! grep -q "$secret_marker" "$workspace/offsite-native.log" "$workspace/offsite-streamed.log" "$workspace/offsite-corrupt.log"
+
 if ! scripts/ops/restore-isolated.sh --backup "$backup" --critical-table tenants --critical-table stores --critical-table operations_probe >"$workspace/restore.log" 2>&1; then
   cat "$workspace/restore.log" >&2
   exit 1
@@ -118,4 +144,4 @@ if scripts/ops/restore-isolated.sh --backup "$corrupt_backup" >"$workspace/corru
   exit 1
 fi
 
-echo 'operations integration: PASS migration-twice backup restore data checksum corruption retention identity-boundary secret-safe-logs'
+echo 'operations integration: PASS migration-twice backup restore data checksum corruption retention offsite-native-sha256 offsite-streamed-sha256 offsite-same-size-corruption-rejected identity-boundary secret-safe-logs'
