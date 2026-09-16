@@ -17,6 +17,18 @@ COPY backend ./backend
 
 RUN npm run build --workspace=@wc-telegram/backend
 
+FROM dependencies AS migration
+
+COPY backend ./backend
+COPY scripts/ops/run-migrations.sh /usr/local/bin/wctm-run-migrations
+
+RUN chmod 0555 /usr/local/bin/wctm-run-migrations
+
+WORKDIR /app
+USER node
+
+ENTRYPOINT ["/usr/local/bin/wctm-run-migrations"]
+
 FROM node:24.20.0-alpine3.24@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf AS production
 
 ARG ALPINE_OPENSSL_VERSION=3.5.8-r0
