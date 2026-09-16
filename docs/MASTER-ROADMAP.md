@@ -294,17 +294,23 @@ commercial/product expansion.
 Milestones, in order:
 
 - P7.1 — Production Security Baseline — ✅ Complete
-- P7.2 — Production Migration & Deployment Path — ⬜ Next / unstarted
-- P7.3 — Backup, Restore & Disaster Recovery
+- P7.2 — Production Migration & Deployment Path — 🟡 Repository implemented;
+  awaiting B review and A-owned production validation
+- P7.3 — Backup, Restore & Disaster Recovery — 🟡 Repository implemented;
+  awaiting B review and A-owned production validation
 - P7.4 — Monitoring & Alerting
 - P7.5 — Data & Time Correctness
 - P7.6 — Network & Runtime Reliability
 - P7.7 — Audit & Operational Integrity
 - P7.8 — Final Launch Readiness Gate
 
-P7.1 is complete following accepted production validation. P7.2 is the next
-allowed Phase 7 milestone and remains unstarted. P7.3–P7.8 and Phase 6 remain
-unstarted; Phase 7 is not complete.
+P7.1 is complete following accepted production validation. P7.2 and P7.3 now
+have repository-side implementation for explicit least-privilege migration,
+deterministic deployment, immutable database/cache image reconciliation,
+verified backup/off-host retention/scheduling, isolated restore, and disaster
+recovery. Both remain open pending B review and A-owned live validation; neither
+is production-complete. P7.4 is next only after both are accepted. P7.4–P7.8
+and Phase 6 remain unstarted; Phase 7 is not complete.
 
 ---
 

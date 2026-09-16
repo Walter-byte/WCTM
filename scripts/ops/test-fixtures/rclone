@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+command_name=${1:-}
+shift || true
+
+remote_path() {
+  case "$1" in
+    testremote:*) printf '%s\n' "${1#testremote:}" ;;
+    *) echo >&2 'test rclone refused a non-test remote'; exit 64 ;;
+  esac
+}
+
+case "$command_name" in
+  copyto)
+    [[ ${1:-} = '--' ]] && shift
+    source_path=${1:?}
+    target_path=$(remote_path "${2:?}")
+    mkdir -p -- "$(dirname "$target_path")"
+    cp -- "$source_path" "$target_path"
+    if [[ ${WCTM_TEST_RCLONE_CORRUPT_DUMP:-false} = true && "$target_path" = *.dump ]]; then
+      first_byte=$(od -An -tu1 -N1 "$target_path" | tr -d ' ')
+      replacement='X'
+      [[ "$first_byte" = 88 ]] && replacement='Y'
+      printf '%s' "$replacement" | dd of="$target_path" bs=1 count=1 conv=notrunc status=none
+    fi
+    ;;
+  size)
+    [[ ${1:-} = '--json' ]] || exit 64
+    target_path=$(remote_path "${2:?}")
+    size_bytes=$(wc -c <"$target_path" | tr -d ' ')
+    printf '{"count":1,"bytes":%s}\n' "$size_bytes"
+    ;;
+  hashsum)
+    [[ ${1:-} = 'sha256' ]] || exit 64
+    [[ ${WCTM_TEST_RCLONE_NATIVE_HASH:-available} = available ]] || exit 1
+    target_path=$(remote_path "${2:?}")
+    sha256sum "$target_path"
+    ;;
+  cat)
+    target_path=$(remote_path "${1:?}")
+    cat -- "$target_path"
+    ;;
+  *)
+    echo >&2 'test rclone received an unsupported command'
+    exit 64
+    ;;
+esac

@@ -1173,4 +1173,92 @@ the staged D-030 architecture or start P7.2+.
 
 ---
 
-Next decision number: D-031.
+## D-031
+
+Date
+
+2026-09-16
+
+Decision
+
+P7.2 separates production schema migration from normal application runtime.
+The backend continues to authenticate only as restricted `wctm_runtime` and
+never runs a migration during startup. An independently invokable, non-root,
+read-only Compose operations job contains the exact checked-out Prisma CLI,
+schema, and migrations and accepts a distinct existing owner/migration
+credential only for that invocation through a protected external file. Its
+entrypoint rejects `wctm_runtime`, Prisma Migrate deploy remains authoritative,
+and the ephemeral container is removed after success or failure.
+
+The supported deployment sequence is revision-locked and fail-fast: clean and
+synchronized repository, production configuration audit, verified P7.3 backup,
+image build, explicit migration before application cutover, backend/bot
+recreation, health/readiness, restricted-role verification, and bounded
+functional smoke. PostgreSQL and Redis are reconciled separately onto the
+reviewed immutable references only after backup and exact named-volume
+verification; their volumes are preserved and never deleted. Schema migrations
+are not assumed reversible, and database recovery delegates to P7.3.
+
+Reason
+
+Keeping migration authority out of long-lived runtime preserves P7.1 least
+privilege while providing one deterministic, auditable production path without
+a new deployment platform or automatic schema mutation.
+
+Status
+
+Accepted for repository implementation. Production acceptance remains pending
+A-owned live validation.
+
+---
+
+## D-032
+
+Date
+
+2026-09-16
+
+Decision
+
+P7.3 uses timestamped PostgreSQL custom-format backups with restrictive local
+permissions, atomic finalization, dump-list readability validation, SHA-256,
+and non-secret metadata. Retention is explicit, count-based, defaults to 14
+valid daily sets, never removes the newest valid set, and targets only the exact
+WCTM backup naming pattern. A provider-neutral executable hook supplies
+off-host transfer. The repository rclone implementation requires the remote
+dump content to match the locally generated SHA-256: it uses a compatible
+native remote SHA-256 when available, otherwise streams the remote dump through
+rclone and hashes it locally without replacing the local backup. Remote size
+remains a secondary check for all three transferred artifacts. Copy, metadata,
+size, content-integrity, or integrity-verification failures exit non-zero.
+
+Daily scheduling uses repository-controlled systemd service/timer templates
+whose external environment file contains paths and an optional remote name but
+no committed credential. Restore validation always targets a uniquely generated
+PostgreSQL 16.15 container and volume with no network or published port; it has
+no production URL/overwrite option, verifies checksum and dump readability,
+restores migration/schema/data state, performs configurable critical row-count
+checks, and removes only its own isolated resources.
+
+Database recovery also requires the matching repository revision and valid APP
+encryption key. A previous APP key is relevant only to a backup taken during a
+controlled historical rotation window. JWT, callback, internal service, bot,
+and database credentials restore their own trust boundaries and do not decrypt
+stored ciphertext. Initial targets are a 24-hour RPO and eight-hour RTO, not
+contractual guarantees or an SLA.
+
+Reason
+
+The P7.1 one-off restore proof did not provide repeatable backup, retention,
+off-host, scheduling, guarded restore, or disaster-recovery operations. This
+bounded repository mechanism supplies those controls without a backup catalog,
+new application table, public endpoint, provider lock-in, or multi-region HA.
+
+Status
+
+Accepted for repository implementation. Production scheduling, destination,
+restore exercise, and milestone acceptance remain pending A-owned validation.
+
+---
+
+Next decision number: D-033.

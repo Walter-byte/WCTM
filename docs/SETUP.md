@@ -1024,3 +1024,87 @@ gh variable list --repo OWNER/REPOSITORY
 Do not use `gh secret set`, print environment dumps, `docker inspect` container
 environments, `docker compose config`, or shell tracing during this validation;
 those paths can expose values.
+
+## Production Migration, Backup, and Recovery (P7.2/P7.3)
+
+P7.2 and P7.3 repository implementation is documented in the executable
+[P7.2/P7.3 production operations runbook](operations/P7_2_P7_3_RUNBOOK.md).
+Neither milestone is production-complete until A performs and accepts the live
+validation gates.
+
+The normal backend continues to run only as restricted `wctm_runtime` and does
+not contain or invoke Prisma migration tooling at startup. Production migration
+uses the separate `migrate` Compose operations profile through:
+
+```bash
+scripts/ops/migrate-production.sh --credential-file /run/wctm/migration.env
+```
+
+The protected file supplies a distinct existing owner/migration URL only for
+that operation. It is mode `0600`/`0400`, stays outside Git and normal runtime,
+and is removed or returned to protected storage afterward. The wrapper and
+container reject `wctm_runtime`; migration failure is non-zero and application
+cutover must not continue.
+
+The supported revision-locked deployment command is:
+
+```bash
+scripts/ops/deploy-production.sh \
+  --revision FULL_REVIEWED_GIT_SHA \
+  --migration-credential-file /run/wctm/migration.env \
+  --backup-directory /var/backups/wctm
+```
+
+It requires a clean synchronized revision, config/Compose preflight, fresh
+verified backup, image build, explicit migration before cutover, health/
+readiness, and restricted runtime-role verification. PostgreSQL/Redis immutable
+image reconciliation is separately guarded by explicit verified-backup and
+named-volume arguments. It preserves volumes and never uses `down -v`.
+
+Create a verified local backup with:
+
+```bash
+scripts/ops/backup-postgres.sh --destination /var/backups/wctm
+```
+
+The custom-format dump is finalized atomically only after non-empty/readability
+checks, receives SHA-256 and non-secret JSON metadata, and uses restrictive
+permissions. Off-host copy is an optional explicit hook; same-VPS storage alone
+does not meet DR:
+
+```bash
+scripts/ops/backup-postgres.sh \
+  --destination /var/backups/wctm \
+  --offsite-hook scripts/ops/offsite-rclone.sh \
+  --offsite-destination remote-name:wctm-production
+```
+
+Retention is dry-run by default and considers only complete, checksum-valid
+WCTM sets. The default operational target retains 14 valid daily sets and never
+deletes the newest valid set:
+
+```bash
+scripts/ops/backup-retention.sh --directory /var/backups/wctm --keep 14
+scripts/ops/backup-retention.sh --directory /var/backups/wctm --keep 14 --apply
+```
+
+Daily systemd templates are under `ops/systemd/`; they are not installed or
+enabled by repository implementation. A must review the service user, checkout
+and backup paths, Docker access, and provider-neutral rclone destination before
+following the installation commands in the operations runbook.
+
+Restore testing always uses a generated, non-networked PostgreSQL 16.15
+container and volume and exposes no production-target option:
+
+```bash
+scripts/ops/restore-isolated.sh \
+  --backup /var/backups/wctm/wctm-postgres-UTC-REVISION.dump \
+  --critical-table tenants --critical-table stores --critical-table orders
+```
+
+Database recovery requires the backup, matching repository revision, and the
+corresponding valid `APP_ENCRYPTION_KEY`; a previous APP key is relevant only
+for a backup made during a controlled historical rotation window. JWT,
+callback-signing, bot/internal, and database credentials restore their own
+trust boundaries and do not decrypt stored database ciphertext. No real key or
+secret belongs in the repository or operational evidence.
