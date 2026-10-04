@@ -16,7 +16,8 @@ phase is Phase 7 — Production Readiness, which executes before Phase 6. P7.1 �
 Production Security Baseline is complete after successful A-owned production
 validation. Phase 7 is not complete. P7.2 — Production Migration & Deployment
 Path and P7.3 — Backup, Restore & Disaster Recovery are repository-implemented
-and ready for B review, but remain open pending A-owned production validation.
+but remain open pending their supported A-owned production-validation runbook
+on `waltpack`.
 P7.4 is next only after both are accepted. Phase 6 commercial SaaS work remains
 deferred and unstarted until Phase 7 completes and A separately authorizes it.
 Unrestricted public launch is not approved.
@@ -26,8 +27,11 @@ Unrestricted public launch is not approved.
 Current Task
 
 P7.1 — Production Security Baseline is complete. P7.2 and P7.3 repository work
-is implemented in one approved operations cycle and awaits B review plus A-owned
-live validation. Neither is production-complete. P7.4 remains unstarted and is
+is implemented. Production migrated successfully from `hetz` to the authoritative
+`waltpack` host at `/srv/wctm`; the old `hetz` WCTM deployment was removed and
+is not a rollback host. The migration is operational evidence, not final P7.2/
+P7.3 acceptance. Both await their supported production-validation runbook on
+`waltpack`. Neither is production-complete. P7.4 remains unstarted and is
 next only after both acceptances. No product feature work is active. Do not
 begin P7.4+, Phase 6, or product expansion without separate approval.
 
@@ -41,7 +45,8 @@ Project Version
 
 Repository
 
-Current branch: `chore/p7.2-p7.3-production-operations`.
+Current work branch: `fix/p7.2-production-build-baseline` from main
+`75913223c214214829452d5ac7740b3a9576a218`.
 
 M22 implementation commit:
 `35f9e72335c8ed0c6a039497d92bed763dc68fb5 feat(entitlements): add MVP tenant

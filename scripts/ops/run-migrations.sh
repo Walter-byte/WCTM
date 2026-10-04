@@ -29,4 +29,4 @@ try {
 NODE
 
 echo 'migration identity boundary: PASS (distinct non-runtime identity supplied for this operation)'
-exec npm run prisma:migrate:deploy --workspace=@wc-telegram/backend
+exec ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts

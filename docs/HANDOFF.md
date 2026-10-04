@@ -2,7 +2,7 @@
 
 **Generated:** 2026-07-19
 
-**Updated:** 2026-09-16
+**Updated:** 2026-10-04
 
 **Reason:** Maintaining implementation continuity
 
@@ -1245,7 +1245,8 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current branch: `chore/p7.2-p7.3-production-operations`.
+Current work branch: `fix/p7.2-production-build-baseline` from main
+`75913223c214214829452d5ac7740b3a9576a218`.
 
 ---
 
@@ -1261,10 +1262,12 @@ P7.7.
 
 ## 7. Current Task
 
-P7.1 is complete. P7.2 and P7.3 repository implementation is complete and ready
-for B review; both await A-owned live validation and neither is production-
-complete. P7.4 is next only after both acceptances and remains unstarted. Do not
-start P7.4+, Phase 6, or product expansion.
+P7.1 is complete. Production migrated successfully from `hetz` to authoritative
+`waltpack` at `/srv/wctm`; the old `hetz` WCTM deployment was removed and is not
+a rollback host. This is operational evidence, not final P7.2/P7.3 acceptance.
+Both still await their supported A-owned production-validation runbook on
+`waltpack` and remain open. P7.4 is next only after both acceptances and remains
+unstarted. Do not start P7.4+, Phase 6, or product expansion.
 
 ### Last completed product milestone: M22
 

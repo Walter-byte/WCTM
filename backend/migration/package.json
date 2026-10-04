@@ -1,0 +1,17 @@
+{
+  "name": "wctm-migration-operations",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "dotenv": "17.2.3",
+    "prisma": "7.10.0"
+  },
+  "overrides": {
+    "deepmerge-ts": "8.0.0",
+    "mysql2": "3.23.1"
+  },
+  "allowScripts": {
+    "prisma@7.10.0": true,
+    "@prisma/engines@7.10.0": true
+  }
+}
