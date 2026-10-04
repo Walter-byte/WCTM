@@ -44,6 +44,10 @@ Backup sets contain:
 - `.dump.json` — non-secret timestamp, database name, repository revision,
   completed migration count, size, checksum, and PostgreSQL tool/server version.
 
+A normal custom-format `pg_dump` contains database objects and data, not
+cluster-level PostgreSQL roles or their passwords. Fresh-cluster recovery must
+restore `wctm_runtime` and its protected credential separately.
+
 Directories are mode `0700`; files are mode `0600`; partial files are removed
 on failure and final names appear only after dump readability succeeds.
 
@@ -268,9 +272,17 @@ trust boundaries. Never print, encode into docs, or commit any recovery secret.
    repository revision; first pass the isolated restore procedure.
 3. A must explicitly authorize creation/replacement of the production target.
    The repository provides no production-overwrite command by default.
-4. Restore custom dump, validate migrations/schema/critical counts, restore the
-   restricted runtime grants, and verify `wctm_runtime` before starting apps.
-5. Deploy the matching application revision, then run full recovery smoke.
+4. Restore the custom dump and validate migrations/schema/critical counts.
+   If the PostgreSQL cluster is fresh, recreate `wctm_runtime` separately with
+   the reviewed role options in `docs/SETUP.md` and restore its credential from
+   protected secret storage/configuration, never from the dump. Keep the
+   owner/migration identity distinct from `wctm_runtime`.
+5. Apply the exact reviewed `wctm_runtime` ACL/least-privilege grants in
+   `docs/SETUP.md`. With PostgreSQL running and backend/bot stopped, run
+   `scripts/ops/verify-runtime-role.sh --prestart` against the restored runtime
+   `DATABASE_URL`; require `"passed":true` before application startup.
+6. Deploy the matching application revision, repeat the normal runtime-role
+   verification, then run full recovery smoke.
 
 ### Complete VPS loss
 
@@ -280,10 +292,17 @@ trust boundaries. Never print, encode into docs, or commit any recovery secret.
 2. Check out the reviewed revision. Restore protected configuration and keys
    from secret storage, never from the database backup.
 3. Initialize exact immutable PostgreSQL/Redis images and new named volumes.
-4. Restore the verified off-host database backup, validate schema/migrations and
-   critical counts, then recreate the restricted runtime role/grants.
-5. Run explicit migrations only if intentionally advancing beyond the restored
-   revision. Deploy backend and Telegram bot and restore Caddy routing.
+4. Restore the verified off-host database backup and validate schema/migrations
+   and critical counts. The dump contains no cluster-level roles or passwords.
+   Recreate `wctm_runtime` using the reviewed role options in `docs/SETUP.md`,
+   restore its credential and runtime `DATABASE_URL` from protected secret
+   storage/configuration, and apply the exact reviewed ACL grants there. Keep
+   the owner/migration identity separate.
+5. With PostgreSQL running and backend/bot stopped, require
+   `scripts/ops/verify-runtime-role.sh --prestart` to report `"passed":true` against the restored
+   database. Only then run explicit migrations if intentionally advancing
+   beyond the restored revision, deploy backend and bot, restore Caddy routing,
+   and repeat normal runtime-role verification.
 6. Validate Store/connector state. Existing WooCommerce hooks and Store secrets
    normally survive through the database; reconcile only through existing M7/M8
    paths if evidence shows otherwise. Restore the Telegram bot token and shared

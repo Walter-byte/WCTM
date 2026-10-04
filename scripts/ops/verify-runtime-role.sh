@@ -1,13 +1,21 @@
 #!/bin/sh
 set -eu
 
-container_id=$(docker compose ps -q backend)
-[ -n "$container_id" ] || {
-  echo >&2 'runtime-role verification failed: backend container is not running'
-  exit 1
-}
+if [ "${1:-}" = '--prestart' ] && [ "$#" -eq 1 ]; then
+  set -- docker compose run --rm --no-deps -T --entrypoint node backend
+elif [ "$#" -eq 0 ]; then
+  container_id=$(docker compose ps -q backend)
+  [ -n "$container_id" ] || {
+    echo >&2 'runtime-role verification failed: backend container is not running'
+    exit 1
+  }
+  set -- docker compose exec -T backend node
+else
+  echo >&2 'usage: verify-runtime-role.sh [--prestart]'
+  exit 2
+fi
 
-docker compose exec -T backend node <<'NODE'
+"$@" <<'NODE'
 const { Client } = require('pg');
 
 async function main() {

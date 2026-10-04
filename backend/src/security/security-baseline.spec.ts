@@ -179,9 +179,12 @@ describe('P7.1 production security baseline', () => {
       'npm ci --omit=dev --omit=optional --workspace=@wc-telegram/telegram-bot'
     );
     for (const dockerfile of [backendDockerfile, botDockerfile]) {
-      expect(dockerfile).toContain('ARG ALPINE_OPENSSL_VERSION=3.5.8-r0');
-      expect(dockerfile).toContain('"libcrypto3=${ALPINE_OPENSSL_VERSION}"');
-      expect(dockerfile).toContain('"libssl3=${ALPINE_OPENSSL_VERSION}"');
+      expect(dockerfile).toContain('apk add --no-cache --upgrade');
+      expect(dockerfile).toContain('    libcrypto3 \\');
+      expect(dockerfile).toContain('    libssl3 \\');
+      expect(dockerfile).not.toMatch(
+        /ALPINE_OPENSSL_VERSION|lib(?:crypto|ssl)3=/
+      );
       expect(dockerfile).toContain('ARG NPM_VERSION=11.19.1');
       expect(dockerfile).toContain(
         'npm install --global "npm@${NPM_VERSION}" --ignore-scripts --no-audit --no-fund'
@@ -198,6 +201,7 @@ describe('P7.1 production security baseline', () => {
     expect(backendDockerfile).toContain(
       'npm ci --omit=dev --omit=optional --workspace=@wc-telegram/backend'
     );
+    expect(backendDockerfile).toContain('apk del .native-build-deps');
     expect(backendDockerfile).toMatch(/\nUSER node\n/);
     expect(botDockerfile).toMatch(/\nUSER node\n/);
     expect(compose).toContain("- '127.0.0.1:${PORT}:${PORT}'");
