@@ -23,14 +23,25 @@ COPY backend ./backend
 
 RUN npm run build --workspace=@wc-telegram/backend
 
-FROM dependencies AS migration
+FROM openssl-pinned AS migration
 
-COPY backend ./backend
+ENV NODE_ENV=production
+WORKDIR /app/backend
+
+COPY backend/migration/package.json backend/migration/package-lock.json ./
+
+RUN npm ci --omit=dev --omit=optional --no-audit --no-fund \
+  && rm -rf /root/.npm \
+  && apk add --repositories-file /dev/null --no-network ca-certificates-bundle \
+  && apk del --repositories-file /dev/null --no-network apk-tools \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+
+COPY backend/prisma ./prisma
+COPY backend/prisma.config.ts ./prisma.config.ts
 COPY scripts/ops/run-migrations.sh /usr/local/bin/wctm-run-migrations
 
 RUN chmod 0555 /usr/local/bin/wctm-run-migrations
 
-WORKDIR /app
 USER node
 
 ENTRYPOINT ["/usr/local/bin/wctm-run-migrations"]

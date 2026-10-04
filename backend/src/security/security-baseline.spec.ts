@@ -168,6 +168,10 @@ describe('P7.1 production security baseline', () => {
       resolve(process.cwd(), '../scripts/ops/install-pinned-openssl.sh'),
       'utf8'
     );
+    const migrationEntrypoint = readFileSync(
+      resolve(process.cwd(), '../scripts/ops/run-migrations.sh'),
+      'utf8'
+    );
     const compose = readFileSync(
       resolve(process.cwd(), '../docker-compose.yml'),
       'utf8'
@@ -179,7 +183,27 @@ describe('P7.1 production security baseline', () => {
     expect(botDockerfile).toMatch(
       /FROM node:24\.20\.0-alpine3\.24@sha256:[a-f0-9]{64} AS openssl-pinned/
     );
-    expect(backendDockerfile).toContain('FROM dependencies AS migration');
+    expect(backendDockerfile).toContain('FROM openssl-pinned AS migration');
+    expect(backendDockerfile).toContain(
+      'COPY backend/migration/package.json backend/migration/package-lock.json ./'
+    );
+    expect(backendDockerfile).toContain(
+      'npm ci --omit=dev --omit=optional --no-audit --no-fund'
+    );
+    const migrationStage = backendDockerfile
+      .split('FROM openssl-pinned AS migration')[1]
+      .split('FROM openssl-pinned AS production')[0];
+    expect(migrationStage).toContain('COPY backend/prisma ./prisma');
+    expect(migrationStage).toContain(
+      'COPY backend/prisma.config.ts ./prisma.config.ts'
+    );
+    expect(migrationStage).not.toContain('COPY backend ./backend');
+    expect(migrationStage).toContain(
+      'rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx'
+    );
+    expect(migrationEntrypoint).toContain(
+      'exec ./node_modules/.bin/prisma migrate deploy --config prisma.config.ts'
+    );
     expect(botDockerfile).toContain(
       'npm ci --omit=dev --omit=optional --workspace=@wc-telegram/telegram-bot'
     );
