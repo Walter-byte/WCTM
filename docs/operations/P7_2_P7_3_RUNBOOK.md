@@ -106,9 +106,19 @@ in synchronized `origin/main`, valid Compose configuration, running services,
 an all-PASS production configuration audit, and a fresh verified backup. It
 builds the migration/backend/bot images, runs migration before cutover, stops
 immediately on migration failure, recreates backend then bot, checks local
-health/readiness, and verifies the actual backend identity and restrictions.
+health/readiness with bounded startup retries, and verifies the actual backend
+identity and restrictions. The two local probes must both pass in the same
+attempt; after at most 12 attempts, with 1, 2, 4, then 5-second capped delays,
+the script fails and names the last failing probe.
 It does not reconcile PostgreSQL/Redis images or run product smoke by itself;
 those controlled gates below surround the application deployment.
+
+Run every production backend configuration audit directly through the compiled
+CLI in the minimized image:
+
+```bash
+docker compose exec -T backend node dist/security/security-config-audit.cli.js
+```
 
 ## Controlled PostgreSQL/Redis image reconciliation
 

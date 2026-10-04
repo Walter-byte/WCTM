@@ -44,7 +44,7 @@ docker compose config --quiet
   exit 1
 }
 if [ -n "$(docker compose ps -q backend)" ]; then
-  docker compose exec -T backend npm run security:config-audit
+  docker compose exec -T backend node dist/security/security-config-audit.cli.js
 else
   echo 'pre-cutover config audit: previously required by Gate 1 (backend currently stopped)'
 fi
@@ -59,8 +59,30 @@ docker compose up -d --no-deps --force-recreate backend
 docker compose up -d --no-deps --force-recreate telegram-bot
 
 runtime_port=${PORT:-3000}
-curl --fail --silent --show-error "http://127.0.0.1:$runtime_port/api/health" >/dev/null
-curl --fail --silent --show-error "http://127.0.0.1:$runtime_port/api/health/readiness" >/dev/null
+attempt=1
+max_attempts=12
+retry_delay=1
+while :; do
+  if curl --fail --silent --connect-timeout 1 --max-time 2 "http://127.0.0.1:$runtime_port/api/health" >/dev/null 2>&1; then
+    if curl --fail --silent --connect-timeout 1 --max-time 2 "http://127.0.0.1:$runtime_port/api/health/readiness" >/dev/null 2>&1; then
+      break
+    fi
+    failed_check=readiness
+  else
+    failed_check=health
+  fi
+
+  if [ "$attempt" -ge "$max_attempts" ]; then
+    echo >&2 "deployment failed: backend $failed_check did not pass after $max_attempts attempts"
+    exit 1
+  fi
+  sleep "$retry_delay"
+  attempt=$((attempt + 1))
+  if [ "$retry_delay" -lt 5 ]; then
+    retry_delay=$((retry_delay * 2))
+    [ "$retry_delay" -le 5 ] || retry_delay=5
+  fi
+done
 scripts/ops/verify-runtime-role.sh
 
 echo "deployment path: PASS revision=$actual_revision"
