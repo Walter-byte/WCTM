@@ -164,32 +164,50 @@ describe('P7.1 production security baseline', () => {
       resolve(process.cwd(), '../telegram-bot/Dockerfile'),
       'utf8'
     );
+    const pinnedOpenssl = readFileSync(
+      resolve(process.cwd(), '../scripts/ops/install-pinned-openssl.sh'),
+      'utf8'
+    );
     const compose = readFileSync(
       resolve(process.cwd(), '../docker-compose.yml'),
       'utf8'
     );
 
     expect(backendDockerfile).toMatch(
-      /FROM node:24\.20\.0-alpine3\.24@sha256:[a-f0-9]{64} AS production/
+      /FROM node:24\.20\.0-alpine3\.24@sha256:[a-f0-9]{64} AS openssl-pinned/
     );
     expect(botDockerfile).toMatch(
-      /FROM node:24\.20\.0-alpine3\.24@sha256:[a-f0-9]{64} AS production/
+      /FROM node:24\.20\.0-alpine3\.24@sha256:[a-f0-9]{64} AS openssl-pinned/
     );
+    expect(backendDockerfile).toContain('FROM dependencies AS migration');
     expect(botDockerfile).toContain(
       'npm ci --omit=dev --omit=optional --workspace=@wc-telegram/telegram-bot'
     );
     for (const dockerfile of [backendDockerfile, botDockerfile]) {
-      expect(dockerfile).toContain('apk add --no-cache --upgrade');
-      expect(dockerfile).toContain('    libcrypto3 \\');
-      expect(dockerfile).toContain('    libssl3 \\');
-      expect(dockerfile).not.toMatch(
-        /ALPINE_OPENSSL_VERSION|lib(?:crypto|ssl)3=/
-      );
+      expect(dockerfile).toContain('FROM openssl-pinned AS dependencies');
+      expect(dockerfile).toContain('FROM openssl-pinned AS production');
+      expect(dockerfile).toContain('RUN sh /tmp/install-pinned-openssl.sh');
+      expect(dockerfile).not.toContain('apk add --no-cache --upgrade');
       expect(dockerfile).toContain('ARG NPM_VERSION=11.19.1');
       expect(dockerfile).toContain(
         'npm install --global "npm@${NPM_VERSION}" --ignore-scripts --no-audit --no-fund'
       );
+      expect(dockerfile).toContain(
+        'apk add --repositories-file /dev/null --no-network ca-certificates-bundle'
+      );
+      expect(dockerfile).toContain(
+        'apk del --repositories-file /dev/null --no-network apk-tools'
+      );
+      expect(dockerfile).toContain(
+        'rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx'
+      );
     }
+    expect(pinnedOpenssl).toContain('openssl_version=3.5.9-r0');
+    expect(pinnedOpenssl).toContain('sha256sum -c -');
+    expect(pinnedOpenssl).toContain('apk verify "$apk_file"');
+    expect(pinnedOpenssl).toContain(
+      'apk add --repositories-file /dev/null --no-network --no-cache --upgrade'
+    );
     expect(botDockerfile).toContain("rmSync('/app/node_modules/typescript'");
     expect(botDockerfile).not.toContain('.native-build-deps');
     expect(compose).toMatch(
