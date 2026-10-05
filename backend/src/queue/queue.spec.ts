@@ -7,6 +7,9 @@ import type { TenantContextService } from '../tenant/tenant-context.service';
 import type { InventoryBootstrapProcessor } from './inventory-bootstrap.processor';
 import type { InventoryNotificationProcessor } from './inventory-notification.processor';
 import {
+  COMPLETED_JOB_RETENTION_SECONDS,
+  FAILED_JOB_RETENTION_SECONDS,
+  QUEUE_RETENTION_BATCH_SIZE,
   INVENTORY_BOOTSTRAP_JOB_NAME,
   REFERENCE_JOB_ATTEMPTS,
   REFERENCE_JOB_NAME,
@@ -63,6 +66,35 @@ const inventoryNotificationProcessor = (): InventoryNotificationProcessor =>
   }) as unknown as InventoryNotificationProcessor;
 
 describe('M5 operations queue', () => {
+  it('cleans only terminal jobs after their pilot retention windows', async () => {
+    const clean = jest.fn().mockResolvedValue([] as never);
+    const runtime = new QueueRuntimeService(
+      { app: { nodeEnv: 'test' } } as ApplicationConfigService,
+      new ReferenceProcessor(),
+      webhookProcessor(),
+      notificationProcessor(),
+      inventoryBootstrapProcessor(),
+      inventoryNotificationProcessor(),
+      { error: jest.fn() } as unknown as StructuredLoggerService
+    );
+    Object.assign(runtime, { queue: { clean } });
+
+    await runtime.enforceRetention();
+
+    expect(clean).toHaveBeenNthCalledWith(
+      1,
+      COMPLETED_JOB_RETENTION_SECONDS * 1_000,
+      QUEUE_RETENTION_BATCH_SIZE,
+      'completed'
+    );
+    expect(clean).toHaveBeenNthCalledWith(
+      2,
+      FAILED_JOB_RETENTION_SECONDS * 1_000,
+      QUEUE_RETENTION_BATCH_SIZE,
+      'failed'
+    );
+    expect(clean).toHaveBeenCalledTimes(2);
+  });
   it('enqueues a reference job with tenant identity from server context', async () => {
     const addReferenceJob = jest.fn().mockResolvedValue({ id: '42' } as never);
     const runtime = { addReferenceJob } as unknown as QueueRuntimeService;
