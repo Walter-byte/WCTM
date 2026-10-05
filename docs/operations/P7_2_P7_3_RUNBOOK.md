@@ -1,10 +1,12 @@
 # P7.2/P7.3 Production Operations Runbook
 
-Status: P7.2 production validation PASS on authoritative `waltpack` at reviewed
-revision `034b2f565fd6b2fc50d6942ff1a40ca16598703c` (2026-10-05). P7.3
-backup/off-site/restore checks passed, but its scheduled systemd service failed;
-P7.3 remains open pending a successful live scheduler proof. D-033 is proposed,
-not accepted. Phase 7 remains incomplete.
+Status: P7.2 and P7.3 production validation PASS on authoritative `waltpack`
+(2026-10-05). P7.2 deployed reviewed revision
+`034b2f565fd6b2fc50d6942ff1a40ca16598703c`. P7.3 passed backup,
+off-site verification, isolated restore, and corrected live scheduled service
+execution; the daily timer is enabled. D-033 is Accepted. Phase 7 is paused
+before P7.4 and remains incomplete; Private Pilot Readiness is the next active
+initiative.
 
 ## Production validation record
 
@@ -34,9 +36,37 @@ health/readiness, restricted role, backend/bot, PostgreSQL/Redis, and synchroniz
 pattern log scans were clean. The first live `systemctl start
 wctm-backup.service` failed with `open /srv/wctm/.env: permission denied`:
 Docker Compose tried to parse the entire application environment as service
-user `wctm`. That account could read/write its rclone config, write the backup
-directory, and access Docker. The timer was not enabled. The repository
-scheduler correction below still requires live proof; P7.3 is not complete.
+user `wctm`. The timer was not enabled at that point. The corrected scheduled
+path was then installed and passed live validation:
+
+- Service-account prerequisites passed: `wctm` could read and write its
+  protected rclone config, write the backup directory, and access Docker.
+  `/srv/wctm/.env` remained inaccessible to that account.
+- `wctm-backup.service` completed with `SERVICE_RC=0` and
+  `scheduled backup: PASS`. The journal recorded a custom-format production
+  backup with 16 migrations, successful OneDrive transfer of all three
+  artifacts, remote content SHA-256 PASS via `streamed-sha256`, and
+  `retention: PASS`. The service exited successfully; inactive/dead afterward
+  is expected for its `Type=oneshot` configuration.
+- The scheduled backup `wctm-postgres-20261005T151246Z-unknown.dump`
+  (2,404,925 bytes) was verified. Its
+  `.dump`, `.dump.json`, and `.dump.sha256` artifacts were present in OneDrive
+  and content SHA-256 verification passed. A journal secret-pattern scan had
+  no findings; no production application secret was exposed.
+- `wctm-backup.timer` was enabled and active (waiting), with a future
+  invocation confirmed. The initial next invocation was
+  `2026-10-06 02:18:28 UTC` under the reviewed daily schedule with randomized
+  delay.
+
+Operational follow-ups, neither a P7.3 integrity or closure blocker: the
+scheduled filename's revision component was `unknown` because hardened systemd
+execution did not resolve Git revision metadata. The backup remained valid,
+checksummed, timestamped, custom-format, and off-site verified. Retention
+warned while inspecting some older manually/root-created sets whose relative
+checksum sidecars differed from the retention validation context; the new
+scheduled backup was valid, retention returned PASS, and no set was incorrectly
+removed. Revision metadata and legacy-set cleanup can be considered in a
+separately approved operational task.
 
 The earlier real `hetz` to `waltpack` server migration also showed successful
 custom-format PostgreSQL restore, Redis state transfer, separate recreation of
@@ -282,7 +312,10 @@ systemctl list-timers wctm-backup.timer
 journalctl -u wctm-backup.service
 ```
 
-These are instructions for A; C does not install or enable them. The unit
+This sequence passed on `waltpack` on 2026-10-05; the commands remain the
+procedure for future reinstalls or recovery.
+
+These are instructions for A; C did not install or enable them. The unit
 contains no secret. `/etc/wctm/backup.conf` holds paths and the optional remote
 name; `RCLONE_CONFIG` is a path only. Provider credentials remain in the
 operator's protected rclone configuration.

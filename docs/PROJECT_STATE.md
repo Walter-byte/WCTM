@@ -12,13 +12,13 @@ operationally validated under accepted D-028. M17–M22 and all approved MVP
 Telegram product features are complete; Persian/English manager UX and backend-
 authoritative basic entitlement enforcement are operational. Phase 4 and
 M1–M16 remain complete and unchanged. D-029 advanced the project into Phase 7 —
-Production Readiness before Phase 6. P7.1 and P7.2 — Production Migration &
-Deployment Path are complete. P7.3 — Backup, Restore & Disaster Recovery has
-passed live backup/off-site/restore validation but remains open after the
-scheduled systemd backup failed to read `/srv/wctm/.env` through Docker Compose.
-The timer was not enabled. D-033 and Private Pilot Readiness remain proposed
-until the corrected scheduler passes live proof. Phase 7 is incomplete;
-P7.4–P7.8 and Phase 6 remain deferred/unstarted.
+Production Readiness before Phase 6. P7.1, P7.2 — Production Migration &
+Deployment Path, and P7.3 — Backup, Restore & Disaster Recovery are complete
+and production-validated. The corrected scheduled backup passed live systemd
+execution on `waltpack`, and the daily timer is enabled. D-033 is Accepted:
+Phase 7 is intentionally paused and incomplete before P7.4; P7.4–P7.8 and
+Phase 6 remain deferred/unstarted. Private Pilot Readiness is the next active
+initiative, with engineering frozen except for pilot-blocking defects.
 Unrestricted public launch is not approved.
 
 ---
@@ -27,12 +27,12 @@ Current Task
 
 P7.2 production validation passed on authoritative `waltpack` at reviewed
 revision `034b2f565fd6b2fc50d6942ff1a40ca16598703c`. P7.3 backup,
-OneDrive off-site SHA-256, and isolated restore passed, but the first live
-systemd scheduler start failed with `.env` permission denied as `wctm`. The
-timer was not enabled. This task removes the scheduled backup's unintended
-Compose `.env` dependency in the repository; A-owned live scheduler proof is
-still required before P7.3 or D-033 closes. The earlier migration from `hetz`
-succeeded; its WCTM deployment was removed and is not a rollback host.
+OneDrive off-site SHA-256, isolated restore, and corrected live scheduled
+service all passed. `wctm-backup.service` completed as `wctm` with
+`SERVICE_RC=0`; the daily timer is enabled and active. This documentation
+closure records the accepted D-033 pivot to Private Pilot Readiness. The
+earlier migration from `hetz` succeeded; its WCTM deployment was removed and
+is not a rollback host.
 
 ---
 
@@ -815,25 +815,24 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-P7.3 scheduled-backup production proof remains open. Public launch also remains
-gated by unstarted P7.4–P7.8 and a separate A decision. Four historical
-implementation-provenance findings remain unresolved for A's separate history-
-remediation decision and the P7.8 final release audit; current tracked content
-is clean and Git history was not rewritten.
+Public launch remains gated by unstarted P7.4–P7.8 and a separate A decision.
+Four historical implementation-provenance findings remain unresolved for A's
+separate history-remediation decision and the P7.8 final release audit; current
+tracked content is clean and Git history was not rewritten.
 
 ---
 
 Next Milestone
 
-The next gate is A-owned P7.3 systemd scheduler proof. D-033 proposes Private
-Pilot Readiness afterward; P7.4–P7.8 remain deferred/unstarted.
+Private Pilot Readiness is the next active initiative under accepted D-033.
+P7.4–P7.8 remain deferred/unstarted and require a separate resumption decision.
 
 ---
 
 Last Completed
 
-P7.2 — Production Migration & Deployment Path is production-complete. P7.3 and
-Phase 7 remain incomplete.
+P7.2 — Production Migration & Deployment Path and P7.3 — Backup, Restore &
+Disaster Recovery are production-complete. Phase 7 remains paused/incomplete.
 
 ---
 
@@ -885,8 +884,8 @@ P7.1 Closure State
 - A has formally accepted D-030. Its staged architecture and history remain
   unchanged. A completed the protected production execution and validation;
   P7.1 is closed.
-- D-029 remains Accepted. D-033 proposes a Phase 7 pause and Private Pilot
-  Readiness after P7.3 scheduler proof; P7.4 and later remain unstarted.
+- D-029 remains Accepted. D-033 accepts the Phase 7 pause before P7.4 and
+  makes Private Pilot Readiness active; P7.4 and later remain unstarted.
 - Production configuration rejects committed development and test secret
   placeholders, short bot service credentials, pilot mode, debug/verbose log
   levels, and unrelated cross-boundary secret reuse without reporting values.
@@ -978,8 +977,8 @@ P7.1 Closure State
   Redis reconciliation while retaining `wctm_runtime` for backend runtime.
   D-032 provides verified custom-format backup, retention, off-host transfer,
   daily scheduling templates, isolated restore, and DR procedures. Its live
-  backup/off-site/restore gates passed, but scheduled systemd execution failed
-  on `.env` access and P7.3 remains pending.
+  backup/off-site/restore gates and corrected scheduled systemd execution passed;
+  P7.3 is production-complete.
 - P7.4–P7.8, Phase 6, and product expansion remain deferred/unstarted. Monitoring stays
   P7.4, DATE-001 P7.5, network/runtime resilience P7.6, AuditLog structural
   immutability P7.7, and historical provenance/final launch gate P7.8. The
@@ -987,7 +986,7 @@ P7.1 Closure State
 
 ---
 
-P7.2 Closed / P7.3 Scheduled Proof Pending
+P7.2 and P7.3 Production-Validated / Phase 7 Paused
 
 - P7.2 implementation commit:
   `91e16fd5933ffa4e6386d649f21f9e2592833ed5 chore(ops): establish production
@@ -995,9 +994,8 @@ migration and deployment path`.
 - P7.3 implementation commit:
   `ddde3c705b249a29a131a3bfc96763f17b6e9cbc chore(ops): add production backup
 and recovery path`.
-- D-031/P7.2 are production-validated. D-032 remains accepted for repository
-  implementation while P7.3 awaits scheduler proof. D-029/D-030 remain
-  accepted; D-033 is proposed, not accepted.
+- D-031/P7.2 and D-032/P7.3 are production-validated. D-029/D-030 remain
+  accepted; D-033 is Accepted after the live scheduler proof.
 - `migrate` is an operations-profile Compose service built from a dedicated
   backend Dockerfile target. It runs non-root/read-only, contains the exact
   checked-out Prisma CLI/migrations, accepts a distinct credential only for one
@@ -1034,21 +1032,31 @@ and recovery path`.
   credential, restricted `wctm_runtime` verification, all-PASS config audit,
   immutable PostgreSQL/Redis references and preserved named volumes/data,
   `deployment path: PASS`, local/public health/readiness, and bounded product
-  smoke. P7.3 partial evidence: verified 2,392,191-byte custom dump
+  smoke. P7.3 evidence: verified 2,392,191-byte custom dump
   `wctm-postgres-20261005T133652Z-034b2f565fd6.dump`, OneDrive three-artifact
   copy with streamed remote SHA-256 PASS, isolated network-none restore with
   16 migrations/21 tables and checked critical counts, cleanup, and clean final
-  service/security scans. The live systemd service start then failed when
-  Docker Compose attempted to read `/srv/wctm/.env` as `wctm`; the timer was not
-  enabled. Exact evidence is in the combined operations runbook.
+  service/security scans. The initial live systemd start failed when Docker
+  Compose attempted to read `/srv/wctm/.env` as `wctm`. After the repository
+  scheduler correction, the service completed with `SERVICE_RC=0`, streamed
+  OneDrive SHA-256 verification, `retention: PASS`, and secret-safe journal.
+  The daily timer was enabled and active. Exact evidence is in the combined
+  operations runbook.
 - Scheduled backup now discovers the sole running PostgreSQL container through
   reviewed Compose labels with Docker directly, then passes its ID to the
   existing backup script. Protected external configuration supplies only the
   non-secret project label, backup path/retention, off-site destination, and
-  `RCLONE_CONFIG` path. This repository correction was not run on production by C.
-- P7.2 is complete; P7.3 remains pending live scheduler proof. Phase 7 remains
-  incomplete, P7.4–P7.8 and Phase 6 remain deferred, and D-033/Private Pilot
-  Readiness remain proposed.
+  `RCLONE_CONFIG` path. A installed and validated this correction on production;
+  C made no production change. The protected `.env` remains inaccessible to
+  `wctm`.
+- The scheduled backup `wctm-postgres-20261005T151246Z-unknown.dump` was
+  2,404,925 bytes and its three artifacts were verified off-site. The `unknown`
+  revision is metadata-quality polish. Retention warned on some older
+  manually/root-created sets with relative checksum sidecars but returned PASS
+  and removed no set incorrectly. Neither observation reopens P7.3.
+- P7.2 and P7.3 are complete. Phase 7 remains paused/incomplete; P7.4–P7.8 and
+  Phase 6 remain deferred; D-033 is Accepted and Private Pilot Readiness is
+  active. No public-launch claim or pilot implementation is made here.
 
 ---
 
