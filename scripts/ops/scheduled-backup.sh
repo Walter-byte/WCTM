@@ -4,6 +4,7 @@ umask 077
 
 : "${WCTM_BACKUP_DIRECTORY:?WCTM_BACKUP_DIRECTORY is required}"
 retention_count=${WCTM_BACKUP_RETENTION_COUNT:-14}
+offsite_retention_days=${WCTM_OFFSITE_RETENTION_DAYS:-30}
 compose_project=${WCTM_COMPOSE_PROJECT:-}
 [[ "$compose_project" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || {
   echo >&2 'scheduled backup refused: WCTM_COMPOSE_PROJECT must name the reviewed Compose project'
@@ -16,6 +17,12 @@ if [[ -n "${WCTM_OFFSITE_DESTINATION:-}" ]]; then
     exit 66
   }
   export RCLONE_CONFIG=$rclone_config
+  key_file=${WCTM_BACKUP_CRYPTO_KEY_FILE:-}
+  [[ "$key_file" = /* && -f "$key_file" && -r "$key_file" ]] || {
+    echo >&2 'scheduled backup refused: protected backup encryption key file is required for off-site copy'
+    exit 66
+  }
+  export WCTM_BACKUP_CRYPTO_KEY_FILE=$key_file
 fi
 container_id=$(docker ps --no-trunc \
   --filter "label=com.docker.compose.project=$compose_project" \
@@ -37,6 +44,7 @@ backup=$(cat "$result_file")
 
 if [[ -n "${WCTM_OFFSITE_DESTINATION:-}" ]]; then
   scripts/ops/offsite-rclone.sh "$backup" "$backup.sha256" "$backup.json" "$WCTM_OFFSITE_DESTINATION"
+  scripts/ops/offsite-retention.sh "$WCTM_OFFSITE_DESTINATION" "$offsite_retention_days"
 fi
 
 scripts/ops/backup-retention.sh --directory "$WCTM_BACKUP_DIRECTORY" --keep "$retention_count" --apply

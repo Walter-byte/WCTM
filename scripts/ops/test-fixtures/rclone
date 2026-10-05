@@ -18,7 +18,7 @@ case "$command_name" in
     target_path=$(remote_path "${2:?}")
     mkdir -p -- "$(dirname "$target_path")"
     cp -- "$source_path" "$target_path"
-    if [[ ${WCTM_TEST_RCLONE_CORRUPT_DUMP:-false} = true && "$target_path" = *.dump ]]; then
+    if [[ ${WCTM_TEST_RCLONE_CORRUPT_DUMP:-false} = true && "$target_path" = *.dump.enc ]]; then
       first_byte=$(od -An -tu1 -N1 "$target_path" | tr -d ' ')
       replacement='X'
       [[ "$first_byte" = 88 ]] && replacement='Y'
@@ -40,6 +40,15 @@ case "$command_name" in
   cat)
     target_path=$(remote_path "${1:?}")
     cat -- "$target_path"
+    ;;
+  lsf)
+    [[ ${1:-} = '--files-only' ]] || exit 64
+    target_path=$(remote_path "${2:?}")
+    find "$target_path" -maxdepth 1 -type f -print | sed 's@.*/@@' | LC_ALL=C sort
+    ;;
+  deletefile)
+    target_path=$(remote_path "${1:?}")
+    rm -- "$target_path"
     ;;
   *)
     echo >&2 'test rclone received an unsupported command'

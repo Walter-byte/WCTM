@@ -6,7 +6,8 @@ workspace=$(mktemp -d)
 trap 'chmod 0600 "$workspace/rclone.conf" "$workspace/.env" 2>/dev/null || true; rm -rf -- "$workspace"' EXIT
 mkdir -p "$workspace/scripts/ops" "$workspace/bin" "$workspace/backups"
 cp scripts/ops/scheduled-backup.sh scripts/ops/backup-postgres.sh \
-  scripts/ops/offsite-rclone.sh "$workspace/scripts/ops/"
+  scripts/ops/offsite-rclone.sh scripts/ops/offsite-retention.sh \
+  scripts/ops/backup-crypto.mjs scripts/ops/select-offsite-expired.mjs "$workspace/scripts/ops/"
 
 cat >"$workspace/scripts/ops/backup-retention.sh" <<'SH'
 #!/usr/bin/env bash
@@ -82,6 +83,9 @@ export PATH="$workspace/bin:$PATH"
 printf '[testremote]\ntype = local\n' >"$TEST_EXPECTED_CONFIG"
 chmod 0600 "$TEST_EXPECTED_CONFIG"
 export RCLONE_CONFIG=$TEST_EXPECTED_CONFIG
+openssl rand 32 >"$workspace/backup.key"
+chmod 0600 "$workspace/backup.key"
+export WCTM_BACKUP_CRYPTO_KEY_FILE="$workspace/backup.key"
 printf 'unreadable production env sentinel\n' >"$workspace/.env"
 chmod 000 "$workspace/.env"
 [[ ! -r "$workspace/.env" ]] || {
@@ -101,7 +105,8 @@ dump=$(find "$workspace/backups" -maxdepth 1 -name 'wctm-postgres-*.dump' -print
 (cd "$(dirname "$dump")" && sha256sum -c "$(basename "$dump").sha256") >/dev/null
 grep -q '"format": "postgresql-custom"' "$dump.json"
 grep -q '"completedMigrationCount": 16' "$dump.json"
-[[ -f "$workspace/native/$(basename "$dump")" && -f "$workspace/native/$(basename "$dump").json" && -f "$workspace/native/$(basename "$dump").sha256" ]]
+[[ -f "$workspace/native/$(basename "$dump").enc" && -f "$workspace/native/$(basename "$dump").enc.json" && -f "$workspace/native/$(basename "$dump").enc.sha256" ]]
+[[ ! -e "$workspace/native/$(basename "$dump")" ]]
 if grep -q '^compose ' "$workspace/docker.log"; then
   echo >&2 'test failed: backup required Docker Compose and its .env'
   exit 1
@@ -120,8 +125,8 @@ if WCTM_TEST_RCLONE_NATIVE_HASH=unavailable WCTM_TEST_RCLONE_CORRUPT_DUMP=true \
   exit 1
 fi
 dump=$(find "$workspace/backups" -maxdepth 1 -name 'wctm-postgres-*.dump' -print)
-[[ $(wc -c <"$workspace/corrupt/$(basename "$dump")" | tr -d ' ') = $(wc -c <"$dump" | tr -d ' ') ]]
-grep -q 'remote dump SHA-256 mismatch' "$workspace/corrupt.log"
+[[ -s "$workspace/corrupt/$(basename "$dump").enc" ]]
+grep -q 'remote encrypted dump SHA-256 mismatch' "$workspace/corrupt.log"
 
 docker_calls=$(wc -l <"$workspace/docker.log" | tr -d ' ')
 WCTM_BACKUP_DIRECTORY='' run_scheduled >"$workspace/missing-backup-directory.log" 2>&1 && {
