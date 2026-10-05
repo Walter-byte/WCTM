@@ -43,7 +43,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-033)
+## 3. Architectural Decisions (D-001–D-034)
 
 | ID    | Decision                                                                                                                                                                                                                   | Status   |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -80,8 +80,9 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-031 | P7.2 separates restricted backend runtime from an ephemeral explicit Prisma migration identity and defines revision-locked fail-fast deployment plus volume-preserving immutable data-service reconciliation               | Accepted |
 | D-032 | P7.3 establishes atomic verified PostgreSQL backups, explicit retention, verified provider-neutral off-host copy, daily systemd scheduling, isolated guarded restore, DR dependencies, and target-only RPO/RTO             | Accepted |
 | D-033 | Pause incomplete Phase 7 after production-validated P7.2/P7.3; make Private Pilot Readiness active while Phase 6/P7.4–P7.8 remain deferred                                                                                 | Accepted |
+| D-034 | Lock WCTM public identity and license only the WordPress connector GPL-2.0-or-later; keep the SaaS service separately owned                                                                                                | Accepted |
 
-Next decision number: **D-034**, if a future task produces a genuine
+Next decision number: **D-035**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -1274,8 +1275,8 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current closure branch: `docs/p7.2-p7.3-production-closure` from main
-`034b2f565fd6b2fc50d6942ff1a40ca16598703c`.
+Current implementation branch: `feat/ppr1-privacy-security-licensing` from
+`main` `2754958a6b45fdb7c8ecb2849fd4b4c4e54986ca`.
 
 ---
 
@@ -1295,12 +1296,18 @@ scheduled service checks passed on authoritative `waltpack` at `/srv/wctm`;
 the daily timer is enabled and active. The earlier migration from `hetz`
 succeeded; its WCTM deployment was removed and is not a rollback host. Phase 7
 is intentionally paused/incomplete before P7.4; P7.4–P7.8 and Phase 6 remain
-deferred/unstarted. Accepted D-033 makes Private Pilot Readiness the next active
+deferred/unstarted. Accepted D-033 makes Private Pilot Readiness the current active
 initiative: privacy/data-flow audit and merchant disclosures, licensing/legal
 baseline, WordPress connector admin UI polish, `wctm.walterbyte.com`
 onboarding/product-surface polish, focused security/quality QA, and controlled
 private merchant pilots. Engineering is frozen except for pilot-blocking
-defects. No pilot implementation or broad public launch is authorized here.
+defects. PPR-1 is the current bounded task: `docs/privacy/` inventories the
+actual data flow and merchant disclosure; the connector adds Privacy Policy
+Guide text, local uninstall cleanup, WCTM/Walterbyte identity and GPL-2.0-or-
+later licensing under D-034. Full webhook/order snapshot minimization,
+service-side deletion and retention, WordPress-local credential controls, and
+off-site backup confidentiality remain explicit pilot blockers. No real-
+merchant pilot or broad public launch is authorized by this work.
 
 ### Last completed product milestone: M22
 

@@ -1,9 +1,13 @@
 <?php
 /**
- * Plugin Name: WC Telegram Connector
- * Description: Lightweight connector between WooCommerce stores and WCTM.
- * Version: 0.3.0
- * Author: WC-Telegram-SaaS
+ * Plugin Name: WCTM — Telegram Store Manager for WooCommerce
+ * Plugin URI: https://wctm.walterbyte.com
+ * Description: Connects a WooCommerce store to the WCTM Telegram store manager by Walterbyte. Not affiliated with WooCommerce.
+ * Version: 0.3.1
+ * Author: Walter / Walterbyte
+ * Author URI: https://walterbyte.com
+ * License: GPL-2.0-or-later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Update URI: https://wctm.walterbyte.com/plugins/wc-telegram-connector/
  * Requires PHP: 8.0
  * Text Domain: wc-telegram-connector
@@ -11,7 +15,7 @@
 
 defined('ABSPATH') || exit;
 
-define('WC_TELEGRAM_CONNECTOR_VERSION', '0.3.0');
+define('WC_TELEGRAM_CONNECTOR_VERSION', '0.3.1');
 define('WC_TELEGRAM_CONNECTOR_FILE', __FILE__);
 define('WC_TELEGRAM_CONNECTOR_MENU_SLUG', 'wc-telegram-connector');
 define('WC_TELEGRAM_CONNECTOR_OPTION_PREFIX', 'wc_telegram_connector_');
@@ -29,7 +33,7 @@ function wc_telegram_connector_check_dependencies(): void
     add_action('admin_notices', static function (): void {
         if (current_user_can('activate_plugins')) {
             echo '<div class="notice notice-error"><p>';
-            echo esc_html__('WC Telegram Connector requires WooCommerce to be installed and active.', 'wc-telegram-connector');
+            echo esc_html__('WCTM requires WooCommerce to be installed and active.', 'wc-telegram-connector');
             echo '</p></div>';
         }
     });
@@ -47,6 +51,53 @@ function wc_telegram_connector_deactivate(): void
     // Persistent connector material is intentionally retained for reactivation.
 }
 register_deactivation_hook(__FILE__, 'wc_telegram_connector_deactivate');
+
+function wc_telegram_connector_privacy_policy_content(): void
+{
+    if (!function_exists('wp_add_privacy_policy_content')) {
+        return;
+    }
+
+    wp_add_privacy_policy_content(
+        __('WCTM — Telegram Store Manager for WooCommerce', 'wc-telegram-connector'),
+        '<p>' . esc_html__(
+            'When this store is connected to WCTM by Walterbyte, WooCommerce sends order and product webhook data to the external WCTM service. Order data may include customer names, contact details, addresses, items, totals and notes. WCTM stores operational records and may send selected order and inventory details to authorized store managers through Telegram. Telegram is an external platform. The connector stores its store identifier and connection/webhook credentials in WordPress options and WooCommerce webhooks. Deactivation does not disconnect the store or erase WCTM service data. Contact the store operator for privacy and deletion requests.',
+            'wc-telegram-connector'
+        ) . '</p>'
+    );
+}
+add_action('admin_init', 'wc_telegram_connector_privacy_policy_content');
+
+function wc_telegram_connector_uninstall(): void
+{
+    $endpoint_key = wc_telegram_connector_read_option('webhook_endpoint_key');
+    $secret = wc_telegram_connector_read_option('webhook_secret');
+    // Match the saved route and secret; never remove another integration's hook.
+    if (is_string($endpoint_key) && $endpoint_key !== '' &&
+        is_string($secret) && $secret !== '') {
+        try {
+            foreach (wc_telegram_connector_load_webhooks() as $webhook) {
+                $data = $webhook->get_data();
+                $topic = is_array($data) ? ($data['topic'] ?? null) : null;
+                $route = is_array($data) && is_string($data['delivery_url'] ?? null)
+                    ? wp_parse_url($data['delivery_url'], PHP_URL_PATH) : null;
+                if (is_string($topic) && in_array($topic, wc_telegram_connector_required_topics(), true) &&
+                    ($data['name'] ?? null) === wc_telegram_connector_webhook_name($topic) &&
+                    $route === '/api/webhooks/woocommerce/' . $endpoint_key &&
+                    is_string($data['secret'] ?? null) && hash_equals($secret, $data['secret'])) {
+                    $webhook->delete(true);
+                }
+            }
+        } catch (Throwable $error) {
+            // WooCommerce may already be inactive. Local secrets are still removed below.
+        }
+    }
+
+    foreach (array('version', 'plugin_credential', 'store_id', 'webhook_secret', 'webhook_endpoint_key') as $name) {
+        delete_option(wc_telegram_connector_option_name($name));
+    }
+}
+register_uninstall_hook(__FILE__, 'wc_telegram_connector_uninstall');
 
 function wc_telegram_connector_option_name(string $name): string
 {

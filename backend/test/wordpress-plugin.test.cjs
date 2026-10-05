@@ -93,6 +93,56 @@ test('connector declares a private Update URI without implementing an updater', 
   assert.doesNotMatch(plugin, /plugins_api/);
 });
 
+test('connector identity, GPL license, and privacy hook are explicit', () => {
+  const readme = readFileSync(
+    join(__dirname, '../../wp-content/plugins/README.txt'),
+    'utf8'
+  );
+  const license = readFileSync(
+    join(__dirname, '../../wp-content/plugins/LICENSE.txt'),
+    'utf8'
+  );
+  assert.match(
+    plugin,
+    /Plugin Name: WCTM — Telegram Store Manager for WooCommerce/
+  );
+  assert.match(plugin, /Author: Walter \/ Walterbyte/);
+  assert.match(plugin, /Author URI: https:\/\/walterbyte\.com/);
+  assert.match(plugin, /Plugin URI: https:\/\/wctm\.walterbyte\.com/);
+  assert.match(plugin, /License: GPL-2\.0-or-later/);
+  assert.match(readme, /License: GPL-2\.0-or-later/);
+  assert.match(license, /GNU GENERAL PUBLIC LICENSE\s+Version 2, June 1991/);
+  assert.match(
+    plugin,
+    /add_action\('admin_init', 'wc_telegram_connector_privacy_policy_content'\)/
+  );
+  assert.doesNotMatch(plugin, /wp_privacy_personal_data_(?:exporter|eraser)/);
+  assert.match(
+    plugin,
+    /register_uninstall_hook\(__FILE__, 'wc_telegram_connector_uninstall'\)/
+  );
+  const privacyAndUninstall = plugin.match(
+    /function wc_telegram_connector_privacy_policy_content\(\): void[\s\S]*?register_uninstall_hook\(__FILE__, 'wc_telegram_connector_uninstall'\)/
+  )?.[0];
+  assert.ok(privacyAndUninstall);
+  assert.doesNotMatch(
+    privacyAndUninstall,
+    /wp_(?:safe_)?remote_|curl_|file_get_contents/
+  );
+  assert.match(
+    privacyAndUninstall,
+    /hash_equals\(\$secret, \$data\['secret'\]\)/
+  );
+  for (const option of [
+    'plugin_credential',
+    'store_id',
+    'webhook_secret',
+    'webhook_endpoint_key',
+  ]) {
+    assert.match(privacyAndUninstall, new RegExp(`'${option}'`));
+  }
+});
+
 const php = spawnSync('php', ['-v'], { encoding: 'utf8' });
 test(
   'retry enumerates proxied hooks, collapses duplicates, and restores the persisted M8 secret',

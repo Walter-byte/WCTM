@@ -305,7 +305,7 @@ Milestones, in order:
 P7.1–P7.3 are complete. P7.3 passed local/off-site backup, isolated restore,
 and corrected scheduled systemd execution on `waltpack`; the daily timer is
 enabled and active. D-033 accepts the Phase 7 pause before P7.4 and makes
-Private Pilot Readiness the next active initiative. P7.4–P7.8 and Phase 6
+Private Pilot Readiness the current active initiative. P7.4–P7.8 and Phase 6
 remain deferred/unstarted; historical provenance review stays assigned to P7.8.
 No feature expansion or unrestricted public launch is authorized.
 
@@ -315,8 +315,14 @@ Status: 🔵 Active under accepted D-033. Its bounded scope is privacy/data-flow
 audit and merchant disclosures, licensing/legal baseline, WordPress connector
 admin UI polish, `wctm.walterbyte.com` onboarding/product-surface polish,
 focused security/quality QA, and controlled private merchant pilots with real
-users. Engineering remains frozen except for pilot-blocking defects. No pilot
-implementation begins in this branch.
+users. Engineering remains frozen except for pilot-blocking defects.
+
+**PPR-1 — Privacy, Security & Licensing Foundation:** current bounded task.
+The code-backed inventory, merchant notice, WordPress privacy integration and
+GPL-2.0-or-later plugin license are in `docs/privacy/`. Full webhook/order
+snapshot minimization, service-side deletion and retention, WordPress-host
+credential controls, and off-site backup confidentiality remain pilot blockers.
+This task does not authorize a merchant pilot or resume Phase 7.
 
 ---
 

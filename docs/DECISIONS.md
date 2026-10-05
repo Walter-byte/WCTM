@@ -1298,4 +1298,34 @@ Accepted on 2026-10-05 after P7.3 scheduled-backup production proof passed.
 
 ---
 
-Next decision number: D-034.
+## D-034
+
+Date
+
+2026-10-05
+
+Decision
+
+The public product identity is **WCTM — Telegram Store Manager for WooCommerce,
+by Walterbyte** (`https://walterbyte.com`). WooCommerce is an integration and
+compatibility reference, not a claim of ownership or affiliation. Existing
+internal `wctm` technical identifiers remain unchanged. The WordPress plugin
+is licensed `GPL-2.0-or-later` with author `Walter / Walterbyte`; this decision
+does not license or relicense the separately owned/proprietary WCTM
+backend/SaaS/Telegram service.
+
+Reason
+
+A approved the identity and plugin-specific licensing for Private Pilot
+Readiness PPR-1. The code-backed privacy inventory and unresolved pilot
+blockers are recorded in `docs/privacy/PPR1_DATA_FLOW.md` rather than making
+unsupported privacy or launch claims.
+
+Status
+
+Accepted for PPR-1. Phase 7 remains paused; P7.4–P7.8 and Phase 6 remain
+deferred/unstarted under D-033.
+
+---
+
+Next decision number: D-035.
