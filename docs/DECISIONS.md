@@ -1207,8 +1207,7 @@ a new deployment platform or automatic schema mutation.
 
 Status
 
-Accepted for repository implementation. Production acceptance remains pending
-A-owned live validation.
+Accepted. A-owned P7.2 production validation passed on 2026-10-05.
 
 ---
 
@@ -1256,9 +1255,42 @@ new application table, public endpoint, provider lock-in, or multi-region HA.
 
 Status
 
-Accepted for repository implementation. Production scheduling, destination,
-restore exercise, and milestone acceptance remain pending A-owned validation.
+Accepted. A-owned P7.3 production validation passed on 2026-10-05.
 
 ---
 
-Next decision number: D-033.
+## D-033
+
+Date
+
+2026-10-05
+
+Decision
+
+P7.2 and P7.3 are production-complete following A-owned validation on
+authoritative host `waltpack`. Phase 7 remains incomplete and is deliberately
+paused before P7.4. P7.4–P7.8 remain unstarted and available for later
+resumption when merchant/pilot evidence justifies them; historical provenance
+review remains assigned to P7.8. Phase 6 remains deferred and unstarted.
+
+Private Pilot Readiness is the next active initiative. Its bounded sequence is
+privacy/data-flow audit and merchant-facing disclosures; licensing/legal
+baseline; WordPress connector admin UI polish; `wctm.walterbyte.com` onboarding
+and product-surface polish; focused security/quality QA; and a private merchant
+pilot with real users. Engineering is frozen except for pilot-blocking defects.
+No new feature expansion or unrestricted public launch is approved. Each pilot
+task requires separate authorization; this decision implements none of them.
+
+Reason
+
+The validated deployment and recovery path supports a controlled private pilot.
+Real merchant usage and payment evidence should guide further infrastructure
+and product investment before resuming the remaining Phase 7 or Phase 6 work.
+
+Status
+
+Accepted.
+
+---
+
+Next decision number: D-034.

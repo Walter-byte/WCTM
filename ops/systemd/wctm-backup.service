@@ -15,7 +15,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/backups/wctm
+ReadWritePaths=/var/backups/wctm /var/lib/wctm/rclone
 
 [Install]
 WantedBy=multi-user.target

@@ -11,29 +11,27 @@ Phase 5 Closure is fully implemented, reviewed, merged, migrated, deployed, and
 operationally validated under accepted D-028. M17–M22 and all approved MVP
 Telegram product features are complete; Persian/English manager UX and backend-
 authoritative basic entitlement enforcement are operational. Phase 4 and
-M1–M16 remain complete and unchanged. By explicit A decision D-029, the current
-phase is Phase 7 — Production Readiness, which executes before Phase 6. P7.1 —
-Production Security Baseline is complete after successful A-owned production
-validation. Phase 7 is not complete. P7.2 — Production Migration & Deployment
-Path and P7.3 — Backup, Restore & Disaster Recovery are repository-implemented
-but remain open pending their supported A-owned production-validation runbook
-on `waltpack`.
-P7.4 is next only after both are accepted. Phase 6 commercial SaaS work remains
-deferred and unstarted until Phase 7 completes and A separately authorizes it.
+M1–M16 remain complete and unchanged. D-029 advanced the project into Phase 7 —
+Production Readiness before Phase 6. P7.1,
+P7.2 — Production Migration & Deployment Path, and P7.3 — Backup, Restore &
+Disaster Recovery are production-complete after A-owned validation on `waltpack`.
+Under D-033, Phase 7 is paused and incomplete before P7.4. P7.4–P7.8 and
+Phase 6 remain deferred/unstarted. Private Pilot Readiness is the next active
+initiative; engineering is frozen except for pilot-blocking defects.
 Unrestricted public launch is not approved.
 
 ---
 
 Current Task
 
-P7.1 — Production Security Baseline is complete. P7.2 and P7.3 repository work
-is implemented. Production migrated successfully from `hetz` to the authoritative
-`waltpack` host at `/srv/wctm`; the old `hetz` WCTM deployment was removed and
-is not a rollback host. The migration is operational evidence, not final P7.2/
-P7.3 acceptance. Both await their supported production-validation runbook on
-`waltpack`. Neither is production-complete. P7.4 remains unstarted and is
-next only after both acceptances. No product feature work is active. Do not
-begin P7.4+, Phase 6, or product expansion without separate approval.
+P7.1–P7.3 are complete. The supported P7.2/P7.3 production-validation runbook
+passed on authoritative `waltpack` at reviewed revision
+`034b2f565fd6b2fc50d6942ff1a40ca16598703c`. The earlier migration from
+`hetz` succeeded; its WCTM deployment was removed and is not a rollback host.
+Private Pilot Readiness is next: privacy/data-flow and merchant disclosures,
+licensing/legal baseline, connector admin UI and `wctm.walterbyte.com` polish,
+focused QA, and a real-user private merchant pilot. No pilot implementation is
+authorized by this closure branch. P7.4–P7.8 and Phase 6 remain deferred.
 
 ---
 
@@ -45,8 +43,8 @@ Project Version
 
 Repository
 
-Current work branch: `fix/p7.2-production-build-baseline` from main
-`75913223c214214829452d5ac7740b3a9576a218`.
+Current closure branch: `docs/p7.2-p7.3-production-closure` from main
+`034b2f565fd6b2fc50d6942ff1a40ca16598703c`.
 
 M22 implementation commit:
 `35f9e72335c8ed0c6a039497d92bed763dc68fb5 feat(entitlements): add MVP tenant
@@ -786,7 +784,7 @@ WooCommerce Webhooks
 
 Current Branch
 
-chore/p7.2-p7.3-production-operations
+docs/p7.2-p7.3-production-closure
 
 ---
 
@@ -804,7 +802,7 @@ updatable timestamp. A future approved decision must define enforcement.
 
 The normal production backend image intentionally omits the Prisma CLI. P7.2
 adds a separate ephemeral operations image with exact Prisma tooling and
-migration state; live validation of that path remains pending A.
+migration state; A-owned live validation of that path passed on `waltpack`.
 
 ---
 
@@ -816,8 +814,8 @@ AuditLog immutability enforcement is deferred to a future approved task.
 
 Current Blockers
 
-No open Phase-5 or P7.1 blocker remains. Public launch remains gated by pending
-P7.2/P7.3 production acceptance and unstarted P7.4–P7.8. Four historical
+No open Phase-5 or P7.1–P7.3 blocker remains. Public launch remains gated by
+unstarted P7.4–P7.8 and a separate A decision. Four historical
 implementation-provenance findings remain unresolved for A's separate history-
 remediation decision and the P7.8 final release audit; current tracked content
 is clean and Git history was not rewritten.
@@ -826,15 +824,16 @@ is clean and Git history was not rewritten.
 
 Next Milestone
 
-P7.2 and P7.3 require B review and one A-owned combined live validation session.
-After both are accepted, P7.4 — Monitoring & Alerting is next but unstarted.
+Private Pilot Readiness is next under D-033. P7.4 — Monitoring & Alerting and
+the remaining Phase 7 milestones are deferred until merchant/pilot evidence
+supports resumption.
 
 ---
 
 Last Completed
 
-P7.1 — Production Security Baseline is the last operationally closed milestone.
-P7.2/P7.3 are repository-complete only. Phase 7 remains in progress.
+P7.2 — Production Migration & Deployment Path and P7.3 — Backup, Restore &
+Disaster Recovery are production-complete. Phase 7 remains paused/incomplete.
 
 ---
 
@@ -846,7 +845,7 @@ Excellent
 
 Last Updated
 
-2026-09-16
+2026-10-05
 
 ---
 
@@ -886,9 +885,8 @@ P7.1 Closure State
 - A has formally accepted D-030. Its staged architecture and history remain
   unchanged. A completed the protected production execution and validation;
   P7.1 is closed.
-- D-029 is Accepted. Phase 7 runs P7.1 through P7.8 before deferred Phase 6.
-  P7.2/P7.3 now await review and live validation; P7.4 and later remain
-  unstarted.
+- D-029 is Accepted as the earlier sequence. D-033 pauses Phase 7 after
+  production-complete P7.2/P7.3; P7.4 and later remain unstarted.
 - Production configuration rejects committed development and test secret
   placeholders, short bot service credentials, pilot mode, debug/verbose log
   levels, and unrelated cross-boundary secret reuse without reporting values.
@@ -974,21 +972,21 @@ P7.1 Closure State
   projection and exactly one correct Telegram notification/callback, and final
   health/readiness. Recent permission and secret-pattern/log-leak scans were
   clean. One isolated ordinary HTTP 404 was non-blocking.
-- P7.2/P7.3 repository implementation is complete and ready for B review, but
-  neither milestone is production-complete. D-031 provides explicit ephemeral
+- P7.2/P7.3 repository implementation and A-owned production validation are
+  complete. D-031 provides explicit ephemeral
   privileged migration plus deterministic deployment and immutable PostgreSQL/
   Redis reconciliation while retaining `wctm_runtime` for backend runtime.
   D-032 provides verified custom-format backup, retention, off-host transfer,
-  daily scheduling templates, isolated restore, and DR procedures. A must run
-  the combined production-validation gates before acceptance.
-- P7.4–P7.8, Phase 6, and product expansion remain unstarted. Monitoring stays
+  daily scheduling templates, isolated restore, and DR procedures. The combined
+  production-validation gates passed on `waltpack`.
+- P7.4–P7.8, Phase 6, and product expansion remain deferred/unstarted. Monitoring stays
   P7.4, DATE-001 P7.5, network/runtime resilience P7.6, AuditLog structural
   immutability P7.7, and historical provenance/final launch gate P7.8. The
   provenance findings remain unresolved.
 
 ---
 
-P7.2/P7.3 Repository Implementation State
+P7.2/P7.3 Production Closure
 
 - P7.2 implementation commit:
   `91e16fd5933ffa4e6386d649f21f9e2592833ed5 chore(ops): establish production
@@ -996,8 +994,8 @@ migration and deployment path`.
 - P7.3 implementation commit:
   `ddde3c705b249a29a131a3bfc96763f17b6e9cbc chore(ops): add production backup
 and recovery path`.
-- D-031 and D-032 are Accepted for repository implementation; D-029 and D-030
-  remain Accepted and unchanged.
+- D-031 and D-032 are Accepted and production-validated; D-029 and D-030
+  remain Accepted and unchanged. D-033 records the subsequent Phase 7 pause.
 - `migrate` is an operations-profile Compose service built from a dedicated
   backend Dockerfile target. It runs non-root/read-only, contains the exact
   checked-out Prisma CLI/migrations, accepts a distinct credential only for one
@@ -1027,10 +1025,24 @@ and recovery path`.
   only for a historical controlled rotation-window backup, any necessary
   previous key. JWT/callback/internal/bot/database secrets restore their own
   trust boundaries and do not decrypt stored ciphertext.
-- Repository implementation is ready for B review. Neither P7.2 nor P7.3 is
-  production-complete until A performs and accepts live validation. No VPS,
-  production, secret, database, deployment, schema, migration, or product
-  mutation occurred during repository implementation.
+- A-owned production validation on `waltpack` at
+  `034b2f565fd6b2fc50d6942ff1a40ca16598703c` passed. P7.2: fresh
+  backend/bot/migration images, separate migration identity, 16 applied Prisma
+  migrations with safe second execution, removed privileged container and
+  credential, restricted `wctm_runtime` verification, all-PASS config audit,
+  immutable PostgreSQL/Redis references and preserved named volumes/data,
+  `deployment path: PASS`, local/public health/readiness, and bounded product
+  smoke. P7.3: verified 2,392,191-byte custom dump
+  `wctm-postgres-20261005T133652Z-034b2f565fd6.dump`, OneDrive three-artifact
+  copy with streamed remote SHA-256 PASS, isolated network-none restore with
+  16 migrations/21 tables and checked critical counts, cleanup, and clean final
+  service/security scans. Exact evidence is in the combined operations runbook.
+- The scheduled off-site path now requires an explicit readable `RCLONE_CONFIG`
+  from protected external configuration; this repository-only correction was
+  not executed on the production host by C.
+- P7.2 and P7.3 are production-complete. Phase 7 is paused/incomplete before
+  P7.4 under D-033. Private Pilot Readiness is next, with engineering frozen
+  except for pilot-blocking defects. P7.4–P7.8 and Phase 6 remain deferred.
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Generated:** 2026-07-19
 
-**Updated:** 2026-10-04
+**Updated:** 2026-10-05
 
 **Reason:** Maintaining implementation continuity
 
@@ -43,7 +43,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-032)
+## 3. Architectural Decisions (D-001–D-033)
 
 | ID    | Decision                                                                                                                                                                                                                   | Status   |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
@@ -79,8 +79,9 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-030 | P7.1 uses a temporary decrypt-only previous key, current-key-only writes, and a trusted-shell row-transactional rotation command for the exact five encrypted database fields                                              | Accepted |
 | D-031 | P7.2 separates restricted backend runtime from an ephemeral explicit Prisma migration identity and defines revision-locked fail-fast deployment plus volume-preserving immutable data-service reconciliation               | Accepted |
 | D-032 | P7.3 establishes atomic verified PostgreSQL backups, explicit retention, verified provider-neutral off-host copy, daily systemd scheduling, isolated guarded restore, DR dependencies, and target-only RPO/RTO             | Accepted |
+| D-033 | P7.2/P7.3 production closure pauses incomplete Phase 7 before P7.4; Private Pilot Readiness becomes the next active initiative while Phase 6 and P7.4–P7.8 remain deferred                                                 | Accepted |
 
-Next decision number: **D-033**, if a future task produces a genuine
+Next decision number: **D-034**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -1031,7 +1032,7 @@ Final closure evidence:
 
 ---
 
-### Phase 7 — Production Readiness (current)
+### Phase 7 — Production Readiness (paused after P7.3)
 
 #### P7.1 — Production Security Baseline (complete; production validated)
 
@@ -1181,7 +1182,7 @@ Dependency and automated evidence:
   missing or excessive privileges across all 20 application tables, while the
   existing privileged owner remains available for Prisma migration execution.
 
-#### P7.2 — Production Migration & Deployment Path (repository complete; awaiting validation)
+#### P7.2 — Production Migration & Deployment Path (production complete)
 
 - Implementation commit:
   `91e16fd5933ffa4e6386d649f21f9e2592833ed5 chore(ops): establish production
@@ -1202,10 +1203,14 @@ migration and deployment path`.
   continuity and exact image configuration, and leaves apps stopped for cutover.
 - Failure guidance distinguishes safe application-image restoration from
   irreversible/forward-only schema effects and hands database recovery to P7.3.
-  Repository implementation is ready for B review; production acceptance is
-  pending A's combined runbook.
+- A-owned production validation on `waltpack` passed at reviewed revision
+  `034b2f565fd6b2fc50d6942ff1a40ca16598703c`: fresh backend/bot/migration
+  builds, distinct migration identity, 16 applied migrations with safe repeat,
+  removed credential/container, restricted `wctm_runtime`, preserved immutable
+  PostgreSQL/Redis and named volumes, `deployment path: PASS`, local/public
+  health/readiness, and bounded functional smoke. P7.2 is complete.
 
-#### P7.3 — Backup, Restore & Disaster Recovery (repository complete; awaiting validation)
+#### P7.3 — Backup, Restore & Disaster Recovery (production complete)
 
 - Implementation commit:
   `ddde3c705b249a29a131a3bfc96763f17b6e9cbc chore(ops): add production backup
@@ -1234,9 +1239,19 @@ and recovery path`.
   app deployment; bounded smoke; post-deployment backup; isolated restore; and
   final permission/migration/backup/secret/health scans.
 
-This repository cycle performs no VPS, production, secret, live database,
-deployment, schema, migration, or product mutation. P7.2 and P7.3 are not
-production-complete. P7.4+, Phase 6, and product work remain unstarted.
+- A-owned production validation passed: verified custom dump
+  `wctm-postgres-20261005T133652Z-034b2f565fd6.dump` (2,392,191 bytes,
+  16 migrations), OneDrive three-artifact copy with streamed SHA-256 PASS,
+  isolated network-none restore with 16 migrations/21 public tables and
+  critical counts `tenants=7`, `users=6`, `stores=2`, `orders=54`, cleanup,
+  and clean final health/role/permission/secret scans. P7.3 is complete.
+
+This closure branch performs no VPS, production, secret, live database,
+deployment, schema, migration, or product mutation. Phase 7 is paused and
+incomplete; P7.4–P7.8 and Phase 6 remain deferred/unstarted. Private Pilot
+Readiness is the next active initiative under D-033. The scheduled off-site
+path requires an explicit protected `RCLONE_CONFIG` file readable by the
+service account; the repository correction has not run on production here.
 
 ## 5. Current Repository Structure
 
@@ -1245,15 +1260,15 @@ NestJS API, `telegram-bot/` for the grammY process, and `wp-content/plugins/` fo
 the lightweight connector. The larger `apps/`, `packages/`, and
 `infrastructure/` layout remains a planned target rather than current structure.
 
-Current work branch: `fix/p7.2-production-build-baseline` from main
-`75913223c214214829452d5ac7740b3a9576a218`.
+Current closure branch: `docs/p7.2-p7.3-production-closure` from main
+`034b2f565fd6b2fc50d6942ff1a40ca16598703c`.
 
 ---
 
 ## 6. Current Blockers
 
-No open Phase-5 or P7.1 blocker remains. Public launch remains gated by
-P7.2/P7.3 production acceptance and unstarted P7.4–P7.8. Historical provenance
+No open Phase-5 or P7.1–P7.3 blocker remains. Public launch remains gated by
+unstarted P7.4–P7.8 and a separate A decision. Historical provenance
 remains unresolved and assigned to P7.8. Monitoring remains P7.4, DATE-001
 P7.5, network/runtime resilience P7.6, and AuditLog structural immutability
 P7.7.
@@ -1262,12 +1277,14 @@ P7.7.
 
 ## 7. Current Task
 
-P7.1 is complete. Production migrated successfully from `hetz` to authoritative
-`waltpack` at `/srv/wctm`; the old `hetz` WCTM deployment was removed and is not
-a rollback host. This is operational evidence, not final P7.2/P7.3 acceptance.
-Both still await their supported A-owned production-validation runbook on
-`waltpack` and remain open. P7.4 is next only after both acceptances and remains
-unstarted. Do not start P7.4+, Phase 6, or product expansion.
+P7.1–P7.3 are complete. A-owned P7.2/P7.3 production validation passed on
+authoritative `waltpack` at `/srv/wctm`. The earlier migration from `hetz`
+succeeded; its WCTM deployment was removed and is not a rollback host. Under
+D-033, Phase 7 is paused/incomplete before P7.4. P7.4–P7.8 and Phase 6 remain
+deferred/unstarted. Private Pilot Readiness is next: privacy/data-flow and
+merchant disclosures, licensing/legal baseline, connector admin UI and
+`wctm.walterbyte.com` polish, focused QA, and a real-user private merchant
+pilot. No pilot implementation begins in this closure branch.
 
 ### Last completed product milestone: M22
 

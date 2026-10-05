@@ -4,6 +4,14 @@ umask 077
 
 : "${WCTM_BACKUP_DIRECTORY:?WCTM_BACKUP_DIRECTORY is required}"
 retention_count=${WCTM_BACKUP_RETENTION_COUNT:-14}
+if [[ -n "${WCTM_OFFSITE_DESTINATION:-}" ]]; then
+  rclone_config=${RCLONE_CONFIG:-}
+  [[ "$rclone_config" = /* && -f "$rclone_config" && -r "$rclone_config" ]] || {
+    echo >&2 'scheduled backup refused: RCLONE_CONFIG must be an absolute path to a readable regular file for off-site copy'
+    exit 66
+  }
+  export RCLONE_CONFIG=$rclone_config
+fi
 result_file=$(mktemp)
 trap 'rm -f -- "$result_file"' EXIT HUP INT TERM
 
