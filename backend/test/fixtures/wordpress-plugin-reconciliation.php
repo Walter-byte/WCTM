@@ -27,10 +27,19 @@ $GLOBALS['wctm_health_calls'] = 0;
 $GLOBALS['wctm_health_before_reconciliation'] = false;
 $GLOBALS['wctm_create_calls'] = 0;
 $GLOBALS['wctm_delete_calls'] = 0;
+$GLOBALS['wctm_privacy_text'] = '';
+$GLOBALS['wctm_load_failure'] = false;
 
 function add_action(): void {}
 function register_activation_hook(): void {}
 function register_deactivation_hook(): void {}
+function register_uninstall_hook(): void {}
+function __($text): string { return $text; }
+function esc_html__($text): string { return $text; }
+function wp_add_privacy_policy_content(string $name, string $text): void
+{
+    $GLOBALS['wctm_privacy_text'] = $name . ' ' . $text;
+}
 function apply_filters(string $name, $value)
 {
     return $name === 'wc_telegram_connector_api_base_url'
@@ -38,7 +47,7 @@ function apply_filters(string $name, $value)
         : $value;
 }
 function untrailingslashit(string $value): string { return rtrim($value, '/'); }
-function wp_parse_url(string $value) { return parse_url($value); }
+function wp_parse_url(string $value, int $component = -1) { return parse_url($value, $component); }
 function get_option(string $name, $default = false)
 {
     return $GLOBALS['wctm_options'][$name] ?? $default;
@@ -51,6 +60,11 @@ function add_option(string $name, $value): bool
 function update_option(string $name, $value): bool
 {
     $GLOBALS['wctm_options'][$name] = $value;
+    return true;
+}
+function delete_option(string $name): bool
+{
+    unset($GLOBALS['wctm_options'][$name]);
     return true;
 }
 function absint($value): int { return abs((int) $value); }
@@ -107,6 +121,9 @@ final class WC_Data_Store
 
     public static function load(string $name): self
     {
+        if ($GLOBALS['wctm_load_failure']) {
+            throw new RuntimeException('WooCommerce APIs unavailable');
+        }
         if ($name !== 'webhook') {
             throw new RuntimeException('Unexpected data store');
         }
@@ -272,6 +289,29 @@ if (!wc_telegram_connector_install_and_confirm_webhooks() ||
     $after_first_retry !== $GLOBALS['wctm_webhooks'] || $GLOBALS['wctm_create_calls'] !== 0 ||
     $GLOBALS['wctm_delete_calls'] !== 16 || $GLOBALS['wctm_health_calls'] !== 2) {
     throw new RuntimeException('Second Retry changed webhook count or identity');
+}
+
+$before_privacy_calls = $GLOBALS['wctm_health_calls'];
+wc_telegram_connector_privacy_policy_content();
+if (!str_contains($GLOBALS['wctm_privacy_text'], 'Telegram is an external platform') ||
+    !str_contains($GLOBALS['wctm_privacy_text'], 'customer names')) {
+    throw new RuntimeException('Privacy policy text does not disclose external data flow');
+}
+wc_telegram_connector_deactivate();
+if (count($GLOBALS['wctm_options']) !== 4 || count($GLOBALS['wctm_webhooks']) !== 12) {
+    throw new RuntimeException('Deactivation unexpectedly changed connector material');
+}
+wc_telegram_connector_uninstall();
+if ($GLOBALS['wctm_options'] !== array() || $GLOBALS['wctm_webhooks'] !== $unrelated ||
+    $GLOBALS['wctm_health_calls'] !== $before_privacy_calls) {
+    throw new RuntimeException('Uninstall did not remove only local connector material');
+}
+
+$GLOBALS['wctm_options']['wc_telegram_connector_plugin_credential'] = 'fixture-only';
+$GLOBALS['wctm_load_failure'] = true;
+wc_telegram_connector_uninstall();
+if ($GLOBALS['wctm_options'] !== array()) {
+    throw new RuntimeException('Uninstall failed to remove local secrets without WooCommerce APIs');
 }
 
 echo "PASS\n";
