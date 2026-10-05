@@ -43,46 +43,47 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 
 ---
 
-## 3. Architectural Decisions (D-001–D-034)
+## 3. Architectural Decisions (D-001–D-035)
 
-| ID    | Decision                                                                                                                                                                                                                   | Status   |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| D-001 | Develop as production SaaS                                                                                                                                                                                                 | Accepted |
-| D-002 | NestJS for backend (alt: Fastify standalone)                                                                                                                                                                               | Accepted |
-| D-003 | PostgreSQL as database                                                                                                                                                                                                     | Accepted |
-| D-004 | Redis mandatory (cache, queues, sessions, rate-limiting)                                                                                                                                                                   | Accepted |
-| D-005 | BullMQ for async jobs                                                                                                                                                                                                      | Accepted |
-| D-006 | WooCommerce via REST API + Webhooks                                                                                                                                                                                        | Accepted |
-| D-007 | Telegram is primary management UI                                                                                                                                                                                          | Accepted |
-| D-008 | n8n excluded from production                                                                                                                                                                                               | Accepted |
-| D-009 | WordPress plugin stays lightweight                                                                                                                                                                                         | Accepted |
-| D-010 | Simplicity-first; no overengineering, no premature optimization                                                                                                                                                            | Accepted |
-| D-011 | Prisma ORM + Prisma Migrate; `schema.prisma` is single source of truth; all models have `created_at`/`updated_at`; soft-delete on Tenant, Store, Membership                                                                | Accepted |
-| D-012 | PrismaService uses Prisma's official PostgreSQL driver adapter                                                                                                                                                             | Accepted |
-| D-013 | Global typed configuration uses `@nestjs/config` with Joi validation                                                                                                                                                       | Accepted |
-| D-014 | One in-process BullMQ operations worker with three exponential-backoff attempts                                                                                                                                            | Accepted |
-| D-015 | Fail-closed WooCommerce credential validation with bounded REST retries, timeouts, and secret-safe normalized errors                                                                                                       | Accepted |
-| D-016 | WooCommerce-REST-only plugin registration verification, reissue-and-rotate recovery, and endpoint-scoped Redis limiting                                                                                                    | Accepted |
-| D-017 | Dedicated encrypted webhook secrets, routing-only endpoint keys, raw-body HMAC authentication, recoverable idempotent persist/enqueue, and OWNER/ADMIN rotation                                                            | Accepted |
-| D-018 | Store-scoped Order projection with timestamp/fingerprint ordering, processing-lease recovery, bounded single-order reconciliation, and verified delete/restore handling                                                    | Accepted |
-| D-019 | Backend-owned one-time Telegram linking, bot-key internal API, private-chat-only authorization, update idempotency, exact-one context resolution, and soft unlinking                                                       | Accepted |
-| D-020 | Read-only M9 Order access with bounded keyset pagination, `lastSyncedAt` freshness, and expiring HMAC-authenticated callback references bound to current Telegram context                                                  | Accepted |
-| D-021 | OWNER/ADMIN Telegram order-status writes using server-derived targets, single-effect HMAC references, durable idempotency, one WooCommerce dispatch, and authoritative/lost-response reconciliation                        | Accepted |
-| D-022 | Private-pilot setup/readiness tooling with no reset or force path, hidden JWT internals, a public Caddy HTTPS gate, manual synthetic-order creation, and no public onboarding claim                                        | Accepted |
-| D-023 | Backend-owned durable new-order notification delivery with existing M10/M11 authorization, M11/M12 actions, deterministic M5 jobs, conservative ambiguous outcomes, and stateless bot-only transport                       | Accepted |
-| D-024 | Tenant-owned timezone/language, Store-owned threshold/category/recipient policy, Membership-selected recipients under M10 authority, M13-only filtering, and stateless bot settings references                             | Accepted |
-| D-025 | WooCommerce-authoritative narrow inventory projection, core product-webhook updates, Store threshold policy, stock-owning item semantics, incident delivery, M18/M10 recipients, and no stock writes                       | Accepted |
-| D-026 | Store-scoped projection-only exact/prefix Order/inventory search and on-demand Tenant-local projected operational daily report, with no live Woo reads, analytics platform, or scheduler                                   | Accepted |
-| D-027 | Tenant-authoritative typed Persian/English Telegram presentation, RTL/bidi and Tenant-timezone calendar formatting, and semantic M13/M19 notification rendering without delivery-policy changes                            | Accepted |
-| D-028 | One backend-authoritative Tenant ACTIVE/SUSPENDED lifecycle with derived expiry, operator-only mutation, explicit product gates, continued projections, terminal notification suppression, and no commercial billing scope | Accepted |
-| D-029 | Phase 7 production readiness precedes deferred Phase 6; P7.1 establishes the bounded repository security baseline while host changes, credential rotation, deployment, and P7.2+ remain separately controlled              | Accepted |
-| D-030 | P7.1 uses a temporary decrypt-only previous key, current-key-only writes, and a trusted-shell row-transactional rotation command for the exact five encrypted database fields                                              | Accepted |
-| D-031 | P7.2 separates restricted backend runtime from an ephemeral explicit Prisma migration identity and defines revision-locked fail-fast deployment plus volume-preserving immutable data-service reconciliation               | Accepted |
-| D-032 | P7.3 establishes atomic verified PostgreSQL backups, explicit retention, verified provider-neutral off-host copy, daily systemd scheduling, isolated guarded restore, DR dependencies, and target-only RPO/RTO             | Accepted |
-| D-033 | Pause incomplete Phase 7 after production-validated P7.2/P7.3; make Private Pilot Readiness active while Phase 6/P7.4–P7.8 remain deferred                                                                                 | Accepted |
-| D-034 | Lock WCTM public identity and license only the WordPress connector GPL-2.0-or-later; keep the SaaS service separately owned                                                                                                | Accepted |
+| ID    | Decision                                                                                                                                                                                                                   | Status                                                |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| D-001 | Develop as production SaaS                                                                                                                                                                                                 | Accepted                                              |
+| D-002 | NestJS for backend (alt: Fastify standalone)                                                                                                                                                                               | Accepted                                              |
+| D-003 | PostgreSQL as database                                                                                                                                                                                                     | Accepted                                              |
+| D-004 | Redis mandatory (cache, queues, sessions, rate-limiting)                                                                                                                                                                   | Accepted                                              |
+| D-005 | BullMQ for async jobs                                                                                                                                                                                                      | Accepted                                              |
+| D-006 | WooCommerce via REST API + Webhooks                                                                                                                                                                                        | Accepted                                              |
+| D-007 | Telegram is primary management UI                                                                                                                                                                                          | Accepted                                              |
+| D-008 | n8n excluded from production                                                                                                                                                                                               | Accepted                                              |
+| D-009 | WordPress plugin stays lightweight                                                                                                                                                                                         | Accepted                                              |
+| D-010 | Simplicity-first; no overengineering, no premature optimization                                                                                                                                                            | Accepted                                              |
+| D-011 | Prisma ORM + Prisma Migrate; `schema.prisma` is single source of truth; all models have `created_at`/`updated_at`; soft-delete on Tenant, Store, Membership                                                                | Accepted                                              |
+| D-012 | PrismaService uses Prisma's official PostgreSQL driver adapter                                                                                                                                                             | Accepted                                              |
+| D-013 | Global typed configuration uses `@nestjs/config` with Joi validation                                                                                                                                                       | Accepted                                              |
+| D-014 | One in-process BullMQ operations worker with three exponential-backoff attempts                                                                                                                                            | Accepted                                              |
+| D-015 | Fail-closed WooCommerce credential validation with bounded REST retries, timeouts, and secret-safe normalized errors                                                                                                       | Accepted                                              |
+| D-016 | WooCommerce-REST-only plugin registration verification, reissue-and-rotate recovery, and endpoint-scoped Redis limiting                                                                                                    | Accepted                                              |
+| D-017 | Dedicated encrypted webhook secrets, routing-only endpoint keys, raw-body HMAC authentication, recoverable idempotent persist/enqueue, and OWNER/ADMIN rotation                                                            | Accepted                                              |
+| D-018 | Store-scoped Order projection with timestamp/fingerprint ordering, processing-lease recovery, bounded single-order reconciliation, and verified delete/restore handling                                                    | Accepted                                              |
+| D-019 | Backend-owned one-time Telegram linking, bot-key internal API, private-chat-only authorization, update idempotency, exact-one context resolution, and soft unlinking                                                       | Accepted                                              |
+| D-020 | Read-only M9 Order access with bounded keyset pagination, `lastSyncedAt` freshness, and expiring HMAC-authenticated callback references bound to current Telegram context                                                  | Accepted                                              |
+| D-021 | OWNER/ADMIN Telegram order-status writes using server-derived targets, single-effect HMAC references, durable idempotency, one WooCommerce dispatch, and authoritative/lost-response reconciliation                        | Accepted                                              |
+| D-022 | Private-pilot setup/readiness tooling with no reset or force path, hidden JWT internals, a public Caddy HTTPS gate, manual synthetic-order creation, and no public onboarding claim                                        | Accepted                                              |
+| D-023 | Backend-owned durable new-order notification delivery with existing M10/M11 authorization, M11/M12 actions, deterministic M5 jobs, conservative ambiguous outcomes, and stateless bot-only transport                       | Accepted                                              |
+| D-024 | Tenant-owned timezone/language, Store-owned threshold/category/recipient policy, Membership-selected recipients under M10 authority, M13-only filtering, and stateless bot settings references                             | Accepted                                              |
+| D-025 | WooCommerce-authoritative narrow inventory projection, core product-webhook updates, Store threshold policy, stock-owning item semantics, incident delivery, M18/M10 recipients, and no stock writes                       | Accepted                                              |
+| D-026 | Store-scoped projection-only exact/prefix Order/inventory search and on-demand Tenant-local projected operational daily report, with no live Woo reads, analytics platform, or scheduler                                   | Accepted                                              |
+| D-027 | Tenant-authoritative typed Persian/English Telegram presentation, RTL/bidi and Tenant-timezone calendar formatting, and semantic M13/M19 notification rendering without delivery-policy changes                            | Accepted                                              |
+| D-028 | One backend-authoritative Tenant ACTIVE/SUSPENDED lifecycle with derived expiry, operator-only mutation, explicit product gates, continued projections, terminal notification suppression, and no commercial billing scope | Accepted                                              |
+| D-029 | Phase 7 production readiness precedes deferred Phase 6; P7.1 establishes the bounded repository security baseline while host changes, credential rotation, deployment, and P7.2+ remain separately controlled              | Accepted                                              |
+| D-030 | P7.1 uses a temporary decrypt-only previous key, current-key-only writes, and a trusted-shell row-transactional rotation command for the exact five encrypted database fields                                              | Accepted                                              |
+| D-031 | P7.2 separates restricted backend runtime from an ephemeral explicit Prisma migration identity and defines revision-locked fail-fast deployment plus volume-preserving immutable data-service reconciliation               | Accepted                                              |
+| D-032 | P7.3 establishes atomic verified PostgreSQL backups, explicit retention, verified provider-neutral off-host copy, daily systemd scheduling, isolated guarded restore, DR dependencies, and target-only RPO/RTO             | Accepted                                              |
+| D-033 | Pause incomplete Phase 7 after production-validated P7.2/P7.3; make Private Pilot Readiness active while Phase 6/P7.4–P7.8 remain deferred                                                                                 | Accepted                                              |
+| D-034 | Lock WCTM public identity and license only the WordPress connector GPL-2.0-or-later; keep the SaaS service separately owned                                                                                                | Accepted                                              |
+| D-035 | Use PPR-2 field minimization, protected Store-scoped lifecycle and erasure replay, explicit retention, WordPress credential encryption and encrypted off-site backups                                                      | Accepted for implementation; pilot validation pending |
 
-Next decision number: **D-035**, if a future task produces a genuine
+Next decision number: **D-036**, if a future task produces a genuine
 architectural or product decision.
 
 ---
@@ -1301,13 +1302,13 @@ initiative: privacy/data-flow audit and merchant disclosures, licensing/legal
 baseline, WordPress connector admin UI polish, `wctm.walterbyte.com`
 onboarding/product-surface polish, focused security/quality QA, and controlled
 private merchant pilots. Engineering is frozen except for pilot-blocking
-defects. PPR-1 is the current bounded task: `docs/privacy/` inventories the
-actual data flow and merchant disclosure; the connector adds Privacy Policy
-Guide text, local uninstall cleanup, WCTM/Walterbyte identity and GPL-2.0-or-
-later licensing under D-034. Full webhook/order snapshot minimization,
-service-side deletion and retention, WordPress-local credential controls, and
-off-site backup confidentiality remain explicit pilot blockers. No real-
-merchant pilot or broad public launch is authorized by this work.
+defects. PPR-1 is complete and merged to canonical `main`; `docs/privacy/`
+contains its inventory, disclosure, WordPress privacy integration and GPL
+plugin licensing under D-034. PPR-2 is the active data-protection implementation
+task from `f5903fd99c999912a1bbbe69f28ecb0c42693581`. See
+`docs/privacy/PPR2_DATA_PROTECTION.md` for exact Store-scoped controls,
+retention values, backup key/recovery boundaries and remaining pilot gates.
+No real-merchant pilot or broad public launch is authorized by this work.
 
 ### Last completed product milestone: M22
 

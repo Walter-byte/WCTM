@@ -1328,4 +1328,41 @@ deferred/unstarted under D-033.
 
 ---
 
-Next decision number: D-035.
+## D-035
+
+Date
+
+2026-10-05
+
+Decision
+
+PPR-2 uses explicit order/product webhook field allowlists and a separate
+trusted, quiesced, Store-scoped operator process for verified disconnect,
+export and erasure. Erasure preserves narrow referential and security evidence;
+an external encrypted ledger is replayed after older-backup restore. WCTM-owned
+WordPress connector secrets use authenticated encryption derived from host-side
+WordPress installation salts. New OneDrive database backups are encrypted
+locally with separately held key material before upload; legacy plaintext sets
+require a reviewed disposal decision. The pilot retention defaults are 24 hours
+for completed BullMQ jobs, 7 days for failed jobs, 1 day after expiry for
+transient PostgreSQL tokens/text, 30/90 days for completed/failed webhook
+payloads, 365 days for security audit rows, 14 validated local backup sets,
+and 30 days for new encrypted off-site sets with the newest two protected.
+
+Reason
+
+PPR-1 identified unnecessary persistent customer information, unclear
+processing cessation and erasure, plaintext WordPress-owned connector secrets,
+and plaintext off-site database dumps. These controls reduce exposure while
+preserving existing WooCommerce/Telegram behavior and recovery evidence. The
+repository cannot prove host log/AOF physical retention or production execution;
+whole-account deletion and legacy plaintext disposal also need separate review.
+
+Status
+
+Accepted for PPR-2 implementation. Production validation and real-merchant
+pilot acceptance remain pending; see `docs/privacy/PPR2_DATA_PROTECTION.md`.
+
+---
+
+Next decision number: D-036.

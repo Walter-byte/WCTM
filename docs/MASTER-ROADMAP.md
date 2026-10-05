@@ -317,12 +317,16 @@ admin UI polish, `wctm.walterbyte.com` onboarding/product-surface polish,
 focused security/quality QA, and controlled private merchant pilots with real
 users. Engineering remains frozen except for pilot-blocking defects.
 
-**PPR-1 — Privacy, Security & Licensing Foundation:** current bounded task.
-The code-backed inventory, merchant notice, WordPress privacy integration and
-GPL-2.0-or-later plugin license are in `docs/privacy/`. Full webhook/order
-snapshot minimization, service-side deletion and retention, WordPress-host
-credential controls, and off-site backup confidentiality remain pilot blockers.
-This task does not authorize a merchant pilot or resume Phase 7.
+**PPR-1 — Privacy, Security & Licensing Foundation:** complete and merged to
+canonical `main`. The code-backed inventory, merchant notice, WordPress privacy
+integration and GPL-2.0-or-later plugin license are in `docs/privacy/`.
+
+**PPR-2 — Pilot Data Protection Controls:** active implementation task. The
+branch adds minimized webhook/order persistence, a trusted Store-scoped
+disconnect/export/erasure workflow, explicit logical retention, WordPress-owned
+credential encryption and encrypted off-site backups. The exact limits and
+remaining pilot gates are in `docs/privacy/PPR2_DATA_PROTECTION.md`. This work
+does not authorize a real-merchant pilot or resume Phase 7.
 
 ---
 

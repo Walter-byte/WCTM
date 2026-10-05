@@ -18,9 +18,10 @@ and production-validated. The corrected scheduled backup passed live systemd
 execution on `waltpack`, and the daily timer is enabled. D-033 is Accepted:
 Phase 7 is intentionally paused and incomplete before P7.4; P7.4–P7.8 and
 Phase 6 remain deferred/unstarted. Private Pilot Readiness is the current active
-initiative. PPR-1 audits privacy/security and establishes the WordPress
-licensing and disclosure baseline. Unresolved data minimization, deletion,
-retention and backup-access findings block real-merchant pilot onboarding.
+initiative. PPR-1 is complete on canonical `main`; PPR-2 is the active
+implementation task for pilot data protection. New minimization, operator
+lifecycle, retention and backup encryption controls are under local validation.
+Remaining operational and account-deletion gates block real-merchant onboarding.
 Engineering remains frozen except for pilot-blocking defects.
 Unrestricted public launch is not approved.
 
@@ -32,11 +33,10 @@ P7.2 production validation passed on authoritative `waltpack` at reviewed
 revision `034b2f565fd6b2fc50d6942ff1a40ca16598703c`. P7.3 backup,
 OneDrive off-site SHA-256, isolated restore, and corrected live scheduled
 service all passed. `wctm-backup.service` completed as `wctm` with
-`SERVICE_RC=0`; the daily timer is enabled and active. PPR-1 is the current task
-from `main` `2754958`: code-backed data-flow audit and merchant notice,
-WordPress privacy-policy text and local uninstall cleanup, and a
-GPL-2.0-or-later plugin under the locked WCTM/Walterbyte identity (D-034).
-Findings and pilot blockers are in `docs/privacy/PPR1_DATA_FLOW.md`. The
+`SERVICE_RC=0`; the daily timer is enabled and active. PPR-1 is merged in
+canonical `main` `f5903fd99c999912a1bbbe69f28ecb0c42693581`. PPR-2 is
+implementing the approved protection controls; the exact controls and
+remaining pilot gates are in `docs/privacy/PPR2_DATA_PROTECTION.md`. The
 earlier migration from `hetz` succeeded; its WCTM deployment was removed and
 is not a rollback host.
 
@@ -50,8 +50,8 @@ Project Version
 
 Repository
 
-Current implementation branch: `feat/ppr1-privacy-security-licensing` from
-`main` `2754958a6b45fdb7c8ecb2849fd4b4c4e54986ca`.
+Current implementation branch: `feat/ppr2-pilot-data-protection` from
+canonical `main` `f5903fd99c999912a1bbbe69f28ecb0c42693581`.
 
 M22 implementation commit:
 `35f9e72335c8ed0c6a039497d92bed763dc68fb5 feat(entitlements): add MVP tenant
@@ -832,8 +832,8 @@ Next Milestone
 
 Private Pilot Readiness is the current active initiative under accepted D-033.
 P7.4–P7.8 remain deferred/unstarted and require a separate resumption decision.
-PPR-1 is in review, with pilot blockers in `docs/privacy/PPR1_DATA_FLOW.md`;
-the private merchant pilot has not started.
+PPR-1 is complete. PPR-2 is active, with remaining pilot gates in
+`docs/privacy/PPR2_DATA_PROTECTION.md`; the private merchant pilot has not started.
 
 ---
 

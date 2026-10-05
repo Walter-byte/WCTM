@@ -1,5 +1,13 @@
 # P7.2/P7.3 Production Operations Runbook
 
+> PPR-2 implementation note: new off-site sets are encrypted before upload and
+> require `WCTM_BACKUP_CRYPTO_KEY_FILE` plus a host Node runtime in the scheduled
+> service. This change has **not** been production validated. For any restore of
+> an older backup, keep the application stopped and replay the external erasure
+> ledger before it becomes authoritative. See
+> `docs/privacy/PPR2_DATA_PROTECTION.md` for the key, legacy plaintext and
+> erasure boundaries. The P7.3 evidence below remains historical.
+
 Status: P7.2 and P7.3 production validation PASS on authoritative `waltpack`
 (2026-10-05). P7.2 deployed reviewed revision
 `034b2f565fd6b2fc50d6942ff1a40ca16598703c`. P7.3 passed backup,
