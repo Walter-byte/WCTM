@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 define('ABSPATH', __DIR__);
 define('WC_TELEGRAM_CONNECTOR_API_BASE_URL', 'https://unused.example.com');
+define('AUTH_KEY', str_repeat('A', 48));
+define('SECURE_AUTH_KEY', str_repeat('B', 48));
 
 $GLOBALS['wctm_options'] = array(
-    'wc_telegram_connector_plugin_credential' => 'plg_' . str_repeat('p', 40),
+    'wc_telegram_connector_plugin_credential' => 'plg_' . str_repeat('p', 43),
     'wc_telegram_connector_store_id' => 'sto_fixture',
-    'wc_telegram_connector_webhook_secret' => 'persisted-m8-secret-' . str_repeat('s', 32),
+    'wc_telegram_connector_webhook_secret' => str_repeat('s', 43),
     'wc_telegram_connector_webhook_endpoint_key' => 'whk_' . str_repeat('e', 32),
 );
 $GLOBALS['wctm_runtime_base_url'] = 'https://connector.wctm.walterbyte.com';
@@ -78,7 +80,7 @@ function wp_safe_remote_post(string $url, array $args): array
     ++$GLOBALS['wctm_health_calls'];
     $expected_url = $GLOBALS['wctm_runtime_base_url'] . '/api/webhooks/woocommerce/' .
         $GLOBALS['wctm_options']['wc_telegram_connector_webhook_endpoint_key'];
-    $expected_secret = $GLOBALS['wctm_options']['wc_telegram_connector_webhook_secret'];
+    $expected_secret = wc_telegram_connector_read_secret('webhook_secret');
     foreach ($GLOBALS['wctm_topics'] as $topic) {
         $matches = array_filter(
             $GLOBALS['wctm_webhooks'],
@@ -249,6 +251,13 @@ if (method_exists($proxy, 'get_webhooks_ids') || count($proxy->get_webhooks_ids(
 
 require dirname(__DIR__, 3) . '/wp-content/plugins/wc-telegram-connector.php';
 
+if (wc_telegram_connector_read_secret('plugin_credential') !== 'plg_' . str_repeat('p', 43) ||
+    wc_telegram_connector_read_secret('webhook_secret') !== str_repeat('s', 43) ||
+    !str_starts_with($GLOBALS['wctm_options']['wc_telegram_connector_plugin_credential'], 'wctm1:') ||
+    !str_starts_with($GLOBALS['wctm_options']['wc_telegram_connector_webhook_secret'], 'wctm1:')) {
+    throw new RuntimeException('Plaintext credentials did not migrate to authenticated encryption');
+}
+
 if (count(wc_telegram_connector_load_webhooks()) !== 28) {
     throw new RuntimeException('Connector loader did not enumerate through the WooCommerce proxy');
 }
@@ -259,7 +268,7 @@ if (!wc_telegram_connector_install_and_confirm_webhooks()) {
 
 $expected_url = 'https://connector.wctm.walterbyte.com/api/webhooks/woocommerce/' .
     $GLOBALS['wctm_options']['wc_telegram_connector_webhook_endpoint_key'];
-$expected_secret = $GLOBALS['wctm_options']['wc_telegram_connector_webhook_secret'];
+$expected_secret = wc_telegram_connector_read_secret('webhook_secret');
 foreach ($GLOBALS['wctm_topics'] as $topic) {
     $matches = array_filter(
         $GLOBALS['wctm_webhooks'],
@@ -291,10 +300,18 @@ if (!wc_telegram_connector_install_and_confirm_webhooks() ||
     throw new RuntimeException('Second Retry changed webhook count or identity');
 }
 
+$saved_credential = $GLOBALS['wctm_options']['wc_telegram_connector_plugin_credential'];
+$GLOBALS['wctm_options']['wc_telegram_connector_plugin_credential'] = substr($saved_credential, 0, -2) . 'AA';
+if (wc_telegram_connector_read_secret('plugin_credential') !== '' ||
+    wc_telegram_connector_has_material()) {
+    throw new RuntimeException('Tampered ciphertext did not fail closed');
+}
+$GLOBALS['wctm_options']['wc_telegram_connector_plugin_credential'] = $saved_credential;
+
 $before_privacy_calls = $GLOBALS['wctm_health_calls'];
 wc_telegram_connector_privacy_policy_content();
-if (!str_contains($GLOBALS['wctm_privacy_text'], 'Telegram is an external platform') ||
-    !str_contains($GLOBALS['wctm_privacy_text'], 'customer names')) {
+if (!str_contains($GLOBALS['wctm_privacy_text'], 'Telegram, an external platform') ||
+    !str_contains($GLOBALS['wctm_privacy_text'], 'customer name')) {
     throw new RuntimeException('Privacy policy text does not disclose external data flow');
 }
 wc_telegram_connector_deactivate();

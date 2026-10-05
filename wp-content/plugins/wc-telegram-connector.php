@@ -19,6 +19,7 @@ define('WC_TELEGRAM_CONNECTOR_VERSION', '0.3.1');
 define('WC_TELEGRAM_CONNECTOR_FILE', __FILE__);
 define('WC_TELEGRAM_CONNECTOR_MENU_SLUG', 'wc-telegram-connector');
 define('WC_TELEGRAM_CONNECTOR_OPTION_PREFIX', 'wc_telegram_connector_');
+define('WC_TELEGRAM_CONNECTOR_SECRET_PREFIX', 'wctm1:');
 
 if (!defined('WC_TELEGRAM_CONNECTOR_API_BASE_URL')) {
     define('WC_TELEGRAM_CONNECTOR_API_BASE_URL', '');
@@ -61,7 +62,7 @@ function wc_telegram_connector_privacy_policy_content(): void
     wp_add_privacy_policy_content(
         __('WCTM — Telegram Store Manager for WooCommerce', 'wc-telegram-connector'),
         '<p>' . esc_html__(
-            'When this store is connected to WCTM by Walterbyte, WooCommerce sends order and product webhook data to the external WCTM service. Order data may include customer names, contact details, addresses, items, totals and notes. WCTM stores operational records and may send selected order and inventory details to authorized store managers through Telegram. Telegram is an external platform. The connector stores its store identifier and connection/webhook credentials in WordPress options and WooCommerce webhooks. Deactivation does not disconnect the store or erase WCTM service data. Contact the store operator for privacy and deletion requests.',
+            'When this store is connected to WCTM by Walterbyte, WooCommerce sends order and product webhook data to the external WCTM service. WCTM stores selected order identity, totals, customer name and shipping address, item and stock fields needed for store management; it discards webhook notes, customer phone/email and arbitrary metadata from its new persistence path. Earlier records and backups may retain fuller data until operator cleanup or expiry. WCTM may send selected order and inventory details to authorized store managers through Telegram, an external platform. The connector stores its store identifier and encrypted WCTM-owned connection/webhook credentials in WordPress options; WooCommerce also stores its own webhook secret. Deactivation does not disconnect the store or erase WCTM service data. Contact the store operator for privacy and deletion requests.',
             'wc-telegram-connector'
         ) . '</p>'
     );
@@ -71,7 +72,7 @@ add_action('admin_init', 'wc_telegram_connector_privacy_policy_content');
 function wc_telegram_connector_uninstall(): void
 {
     $endpoint_key = wc_telegram_connector_read_option('webhook_endpoint_key');
-    $secret = wc_telegram_connector_read_option('webhook_secret');
+    $secret = wc_telegram_connector_read_secret('webhook_secret');
     // Match the saved route and secret; never remove another integration's hook.
     if (is_string($endpoint_key) && $endpoint_key !== '' &&
         is_string($secret) && $secret !== '') {
@@ -124,6 +125,78 @@ function wc_telegram_connector_store_option(string $name, $value): bool
 function wc_telegram_connector_read_option(string $name, $default = '')
 {
     return get_option(wc_telegram_connector_option_name($name), $default);
+}
+
+/** Derive a connector-only key from host-side wp-config.php constants, never wp_options. */
+function wc_telegram_connector_secret_key(): ?string
+{
+    if (!defined('AUTH_KEY') || !defined('SECURE_AUTH_KEY') ||
+        !is_string(AUTH_KEY) || !is_string(SECURE_AUTH_KEY) ||
+        strlen(AUTH_KEY) < 32 || strlen(SECURE_AUTH_KEY) < 32 ||
+        !function_exists('hash_hkdf') || !function_exists('openssl_encrypt')) {
+        return null;
+    }
+
+    return hash_hkdf('sha256', AUTH_KEY . SECURE_AUTH_KEY, 32,
+        'WCTM WordPress connector option encryption v1');
+}
+
+function wc_telegram_connector_store_secret(string $name, string $value): bool
+{
+    if (!in_array($name, array('plugin_credential', 'webhook_secret'), true) ||
+        $value === '' || !function_exists('openssl_encrypt')) {
+        return false;
+    }
+    $key = wc_telegram_connector_secret_key();
+    if ($key === null) {
+        return false;
+    }
+    try {
+        $nonce = random_bytes(12);
+    } catch (Throwable $error) {
+        return false;
+    }
+    $tag = '';
+    $ciphertext = openssl_encrypt($value, 'aes-256-gcm', $key, OPENSSL_RAW_DATA,
+        $nonce, $tag, 'WCTM:' . $name, 16);
+    if (!is_string($ciphertext) || strlen($tag) !== 16) {
+        return false;
+    }
+    return wc_telegram_connector_store_option($name,
+        WC_TELEGRAM_CONNECTOR_SECRET_PREFIX . base64_encode($nonce . $tag . $ciphertext));
+}
+
+/** Legacy plaintext is accepted only in the exact generated credential shape. */
+function wc_telegram_connector_read_secret(string $name): string
+{
+    if (!in_array($name, array('plugin_credential', 'webhook_secret'), true)) {
+        return '';
+    }
+    $stored = wc_telegram_connector_read_option($name);
+    if (!is_string($stored) || $stored === '') {
+        return '';
+    }
+    if (str_starts_with($stored, WC_TELEGRAM_CONNECTOR_SECRET_PREFIX)) {
+        $encoded = substr($stored, strlen(WC_TELEGRAM_CONNECTOR_SECRET_PREFIX));
+        $bytes = base64_decode($encoded, true);
+        $key = wc_telegram_connector_secret_key();
+        if (!is_string($bytes) || strlen($bytes) < 29 || $key === null ||
+            !function_exists('openssl_decrypt')) {
+            return '';
+        }
+        $plaintext = openssl_decrypt(substr($bytes, 28), 'aes-256-gcm', $key,
+            OPENSSL_RAW_DATA, substr($bytes, 0, 12), substr($bytes, 12, 16),
+            'WCTM:' . $name);
+        return is_string($plaintext) ? $plaintext : '';
+    }
+    $pattern = $name === 'plugin_credential'
+        ? '/\Aplg_[A-Za-z0-9_-]{43}\z/D'
+        : '/\A[A-Za-z0-9_-]{43}\z/D';
+    if (preg_match($pattern, $stored) !== 1 ||
+        !wc_telegram_connector_store_secret($name, $stored)) {
+        return '';
+    }
+    return $stored;
 }
 
 function wc_telegram_connector_api_base_url(): string
@@ -229,7 +302,9 @@ function wc_telegram_connector_render_admin_page(): void
 function wc_telegram_connector_has_material(): bool
 {
     foreach (array('plugin_credential', 'store_id', 'webhook_secret', 'webhook_endpoint_key') as $name) {
-        $value = wc_telegram_connector_read_option($name);
+        $value = in_array($name, array('plugin_credential', 'webhook_secret'), true)
+            ? wc_telegram_connector_read_secret($name)
+            : wc_telegram_connector_read_option($name);
         if (!is_string($value) || $value === '') {
             return false;
         }
@@ -263,7 +338,7 @@ function wc_telegram_connector_handle_connect(): void
     $same_store = is_string($store_id) && is_string($existing_store_id) &&
         hash_equals($existing_store_id, $store_id);
     $webhook_secret = $result['webhookSecret'] ??
-        ($same_store ? wc_telegram_connector_read_option('webhook_secret') : null);
+        ($same_store ? wc_telegram_connector_read_secret('webhook_secret') : null);
     $endpoint_key = $result['webhookEndpointKey'] ??
         ($same_store ? wc_telegram_connector_read_option('webhook_endpoint_key') : null);
 
@@ -274,9 +349,9 @@ function wc_telegram_connector_handle_connect(): void
         wc_telegram_connector_safe_redirect('registration_error');
     }
 
-    $persisted = wc_telegram_connector_store_option('plugin_credential', $plugin_credential) &&
+    $persisted = wc_telegram_connector_store_secret('plugin_credential', $plugin_credential) &&
         wc_telegram_connector_store_option('store_id', $store_id) &&
-        wc_telegram_connector_store_option('webhook_secret', $webhook_secret) &&
+        wc_telegram_connector_store_secret('webhook_secret', $webhook_secret) &&
         wc_telegram_connector_store_option('webhook_endpoint_key', $endpoint_key);
 
     $plugin_credential = $webhook_secret = $endpoint_key = '';
@@ -424,7 +499,7 @@ function wc_telegram_connector_webhook_has_expected_state(
 
 function wc_telegram_connector_install_and_confirm_webhooks(): bool
 {
-    $secret = wc_telegram_connector_read_option('webhook_secret');
+    $secret = wc_telegram_connector_read_secret('webhook_secret');
     $delivery_url = wc_telegram_connector_delivery_url();
     if (!is_string($secret) || $secret === '' || $delivery_url === '') {
         return false;
@@ -477,7 +552,7 @@ function wc_telegram_connector_install_and_confirm_webhooks(): bool
 function wc_telegram_connector_required_webhooks_are_healthy(): bool
 {
     $delivery_url = wc_telegram_connector_delivery_url();
-    $secret = wc_telegram_connector_read_option('webhook_secret');
+    $secret = wc_telegram_connector_read_secret('webhook_secret');
     if ($delivery_url === '' || !is_string($secret) || $secret === '') {
         return false;
     }
@@ -502,7 +577,7 @@ function wc_telegram_connector_required_webhooks_are_healthy(): bool
 function wc_telegram_connector_confirm_health(): bool
 {
     $base_url = wc_telegram_connector_api_base_url();
-    $credential = wc_telegram_connector_read_option('plugin_credential');
+    $credential = wc_telegram_connector_read_secret('plugin_credential');
     if ($base_url === '' || !is_string($credential) || $credential === '') {
         return false;
     }
