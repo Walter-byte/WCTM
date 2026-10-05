@@ -74,12 +74,12 @@ export function mapWooCommerceOrder(payload: unknown): OrderProjection {
       totals[field] = value;
     }
 
-    const billing = requireRecord(
+    const billingSource = requireRecord(
       record['billing'],
       'malformed-order-customer',
       wcOrderId
     );
-    const shipping = requireRecord(
+    const shippingSource = requireRecord(
       record['shipping'],
       'malformed-order-customer',
       wcOrderId
@@ -101,6 +101,20 @@ export function mapWooCommerceOrder(payload: unknown): OrderProjection {
       );
     }
 
+    const billing = pickDisplayFields(billingSource, [
+      'first_name',
+      'last_name',
+      'company',
+    ]);
+    const shipping = pickDisplayFields(shippingSource, [
+      'company',
+      'address_1',
+      'address_2',
+      'city',
+      'state',
+      'postcode',
+      'country',
+    ]);
     const projection: Omit<OrderProjection, 'projectionFingerprint'> = {
       wcOrderId,
       orderNumber: requireDisplayString(
@@ -120,11 +134,17 @@ export function mapWooCommerceOrder(payload: unknown): OrderProjection {
       ),
       totals: canonicalizeJson(totals) as Prisma.InputJsonObject,
       customerSnapshot: canonicalizeJson({
-        customer_id: normalizeCustomerId(record['customer_id']),
         billing,
         shipping,
       }) as Prisma.InputJsonObject,
-      lineItemsSnapshot: canonicalizeJson(lineItems) as Prisma.InputJsonArray,
+      lineItemsSnapshot: canonicalizeJson(
+        lineItems.map((item) =>
+          pickDisplayFields(
+            requireRecord(item, 'malformed-order-line-items', wcOrderId),
+            ['name', 'quantity', 'total']
+          )
+        )
+      ) as Prisma.InputJsonArray,
       paymentSnapshot: canonicalizeJson({
         method: normalizeOptionalString(record['payment_method'], wcOrderId),
         method_title: normalizeOptionalString(
@@ -329,16 +349,23 @@ function requireGmtDate(value: unknown, code: string, wcOrderId: string): Date {
   return parsed;
 }
 
-function normalizeCustomerId(value: unknown): Prisma.InputJsonValue | null {
-  if (
-    value === null ||
-    (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) ||
-    (typeof value === 'string' && /^\d+$/.test(value))
-  ) {
-    return value;
+function pickDisplayFields(
+  record: Record<string, unknown>,
+  fields: readonly string[]
+): Record<string, string | number> {
+  const result: Record<string, string | number> = {};
+
+  for (const field of fields) {
+    const value = record[field];
+    if (
+      typeof value === 'string' ||
+      (typeof value === 'number' && Number.isFinite(value))
+    ) {
+      result[field] = value;
+    }
   }
 
-  throw new OrderPayloadMappingError('malformed-order-customer');
+  return result;
 }
 
 function normalizeOptionalString(
