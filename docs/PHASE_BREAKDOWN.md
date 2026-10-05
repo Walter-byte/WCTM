@@ -715,10 +715,11 @@ M22 final decision: PASS. Phase 5 final decision: COMPLETE. M17–M22 and all
 approved MVP Telegram product features are complete, Persian/English manager UX
 and backend-authoritative entitlement enforcement are operational, and no open
 Phase-5 feature blocker remains. Phase 6 commercial SaaS work has not started;
-Phase 7 production-readiness is now current by D-029, and unrestricted public
-launch is not approved.
+Phase 7 production-readiness was started by D-029. P7.3 remains open pending
+scheduled-backup proof, so the D-033 pause is proposed, not accepted;
+unrestricted public launch is not approved.
 
-## Phase 7 — Production Readiness 🔵 Current
+## Phase 7 — Production Readiness 🔵 In progress / incomplete
 
 ### P7.1 — Production Security Baseline ✅ Complete / Production Validated
 
@@ -760,7 +761,7 @@ production identity was replaced for backend runtime by the validated
 restricted role. Historical release-provenance findings remain without history
 rewrite and are still assigned to P7.8.
 
-### P7.2 — Production Migration & Deployment Path 🟡 Repository Complete / Awaiting Validation
+### P7.2 — Production Migration & Deployment Path ✅ Complete / Production Validated
 
 - D-031 establishes an ephemeral, non-root Compose migration job containing the
   exact checked-out Prisma migration state. A distinct protected migration URL
@@ -772,10 +773,13 @@ rewrite and are still assigned to P7.8.
 - Guarded PostgreSQL/Redis reconciliation requires a verified backup and exact
   named-volume confirmation, preserves volumes, recreates only those services
   on the reviewed immutable references, and verifies health/data continuity.
-- Repository implementation is ready for B review. Production validation and
-  A acceptance remain required; P7.2 is not production-complete.
+- A-owned production validation on `waltpack` passed: fresh images, distinct
+  migration identity, 16 applied migrations with an idempotent repeat, removed
+  ephemeral credential/container, restricted `wctm_runtime`, preserved named
+  volumes/data, corrected deployment PASS, local/public health/readiness, and
+  bounded product smoke. P7.2 is production-complete.
 
-### P7.3 — Backup, Restore & Disaster Recovery 🟡 Repository Complete / Awaiting Validation
+### P7.3 — Backup, Restore & Disaster Recovery 🟡 Scheduled Proof Pending
 
 - D-032 establishes atomic PostgreSQL custom-format backups, SHA-256 and
   readability verification, non-secret metadata, explicit 14-valid-set default
@@ -787,12 +791,17 @@ rewrite and are still assigned to P7.8.
 - The DR runbook covers application/container, deployment, database, and total
   VPS loss; distinguishes APP-key decryption dependency from other service
   credentials; and sets target-only 24-hour RPO/eight-hour RTO objectives.
-- Repository implementation is ready for B review. A must choose the off-host
-  destination, install/enable scheduling, and execute the combined live backup,
-  deployment and isolated-restore runbook. P7.3 is not production-complete.
+- A-owned production validation passed: custom dump and local SHA-256, OneDrive
+  three-artifact transfer with streamed remote SHA-256, isolated network-none
+  restore with 16 migrations/21 public tables and checked critical counts,
+  cleanup, and healthy final service/security scans. Scheduled systemd backup
+  then failed because Docker Compose attempted to read `/srv/wctm/.env` as
+  `wctm`; the timer was not enabled. P7.3 remains open until the corrected
+  scheduler passes live proof. Scheduled off-site execution retains the
+  explicit protected `RCLONE_CONFIG` path.
 
-P7.4 remains next only after P7.2/P7.3 production acceptance. P7.4 through
-P7.8 are unstarted. Phase 7 is not complete.
+P7.4–P7.8 remain unstarted/deferred. Phase 7 is incomplete; D-033 proposes a
+pause after P7.3 closure. Historical provenance review remains assigned to P7.8.
 
 ### Approved Phase 7 order
 
@@ -805,11 +814,23 @@ P7.8 are unstarted. Phase 7 is not complete.
 7. P7.7 — Audit & Operational Integrity
 8. P7.8 — Final Launch Readiness Gate
 
+## Private Pilot Readiness ⬜ Proposed next initiative
+
+- Privacy/data-flow audit and merchant-facing disclosures
+- Licensing/legal baseline
+- WordPress connector admin UI polish
+- `wctm.walterbyte.com` onboarding/product-surface polish
+- Focused security/quality QA
+- Private merchant pilot with real users and usage/payment evidence
+
+D-033 proposes the engineering freeze except for pilot-blocking defects after
+P7.3 closes. No pilot implementation is authorized in this task.
+
 ## Phase 6 — SaaS Platform ⬜ Deferred / unstarted
 
 - Subscriptions, plans, billing, dashboard, tenant administration, and usage
-  limits remain deferred until Phase 7 completes and A separately authorizes
-  Phase 6.
+  limits remain deferred until merchant/pilot evidence supports a separate A
+  decision to authorize Phase 6.
 
 ## Phase 8 — Public Launch ⬜ Planned
 

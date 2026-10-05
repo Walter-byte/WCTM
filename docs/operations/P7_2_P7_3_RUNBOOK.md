@@ -1,7 +1,47 @@
 # P7.2/P7.3 Production Operations Runbook
 
-Status: repository implementation ready for review and A-owned production
-validation. Nothing in this document marks P7.2 or P7.3 production-complete.
+Status: P7.2 production validation PASS on authoritative `waltpack` at reviewed
+revision `034b2f565fd6b2fc50d6942ff1a40ca16598703c` (2026-10-05). P7.3
+backup/off-site/restore checks passed, but its scheduled systemd service failed;
+P7.3 remains open pending a successful live scheduler proof. D-033 is proposed,
+not accepted. Phase 7 remains incomplete.
+
+## Production validation record
+
+P7.2 PASS: `waltpack` built fresh backend, bot, and migration images; the
+privileged migration used a distinct non-runtime identity, found all 16 Prisma
+migrations applied with none pending, and remained idempotent on a second run.
+The ephemeral migration container and protected credential file were removed.
+Backend identity remained exactly `wctm_runtime`: `elevatedFlags=false`,
+`schemaUsage=true`, `schemaCreate=false`, `databaseTemp=false`,
+`migrationTableDml=false`, `ownedObjects=0`, `passed=true`. Production config
+audit was all PASS. PostgreSQL and Redis were already on the reviewed immutable
+references, retained `wctm_postgres_data` and `wctm_redis_data`, reported
+PostgreSQL ready/Redis PONG, and passed data-continuity checks. The corrected
+deployment returned `deployment path: PASS`; local and public health/readiness
+passed. Bounded smoke passed web login, Tenant/account read, Telegram `/status`,
+`/orders` plus detail, `/search`, `/report`, `/stock`, and Store/connector health.
+
+P7.3 completed checks: custom-format backup
+`wctm-postgres-20261005T133652Z-034b2f565fd6.dump` was 2,392,191 bytes,
+recorded 16 migrations, and passed local checksum verification. OneDrive held
+the `.dump`, `.dump.json`, and `.dump.sha256` artifacts; remote content SHA-256
+passed by `streamed-sha256`. An isolated PostgreSQL restore with `network=none`
+passed with 16 migrations, 21 public tables, and critical rows `tenants=7`,
+`users=6`, `stores=2`, `orders=54`; generated resources were removed. Final
+health/readiness, restricted role, backend/bot, PostgreSQL/Redis, and synchronized
+`origin/main` checks passed; permission/database/migration error and secret-
+pattern log scans were clean. The first live `systemctl start
+wctm-backup.service` failed with `open /srv/wctm/.env: permission denied`:
+Docker Compose tried to parse the entire application environment as service
+user `wctm`. That account could read/write its rclone config, write the backup
+directory, and access Docker. The timer was not enabled. The repository
+scheduler correction below still requires live proof; P7.3 is not complete.
+
+The earlier real `hetz` to `waltpack` server migration also showed successful
+custom-format PostgreSQL restore, Redis state transfer, separate recreation of
+cluster-level `wctm_runtime`, and public readiness/Telegram `/status` after
+cutover. The old `hetz` WCTM deployment was removed and is not a rollback host.
 
 ## Safety and identity boundary
 
@@ -178,12 +218,51 @@ the newest valid backup are never deleted. Nothing schedules deletion unless
 the operator explicitly installs the scheduled wrapper or runs `--apply`.
 
 The repository templates provide a daily Ubuntu systemd timer. Review paths,
-service account, Docker access, and off-host destination before installation:
+service account, Docker access, and off-host destination before installation.
+Set the non-secret `WCTM_COMPOSE_PROJECT` to the exact reviewed
+`com.docker.compose.project` label of the running PostgreSQL container. The
+scheduled script uses `docker ps` with both that project label and
+`com.docker.compose.service=postgres`, requires exactly one running full
+container ID, and passes it to the existing backup script. It does not invoke
+Docker Compose or read `/srv/wctm/.env`, and needs no PostgreSQL username,
+password, or application environment in `/etc/wctm/backup.conf`. Preserve the
+production `.env` permissions and do not duplicate it. Set
+`WCTM_OFFSITE_DESTINATION` and replace the example `RCLONE_CONFIG` placeholder
+with the real absolute path to a readable regular rclone config in the external
+`/etc/wctm/backup.conf`. The service runs as `wctm` with `ProtectHome=true`, so
+Walter's interactive `/home/walter/.config/rclone/rclone.conf` is not accessible
+inside the unit. Provision a separate service config from protected storage at
+`/var/lib/wctm/rclone/rclone.conf`: directory owned by `wctm:wctm` at `0700`,
+file owned by `wctm:wctm` at `0600`. Set `RCLONE_CONFIG` to that path. OAuth
+remotes such as OneDrive must be able to save refreshed tokens, so both the
+file and its parent directory must be writable by `wctm`; the unit grants write
+access only to this protected directory and the backup directory. A different
+config location requires a matching reviewed `ReadWritePaths` allowance. Keep
+OAuth tokens in the external config, never in the unit, backup environment
+file, or Git. Check access as the service account before starting the timer. A
+missing or unreadable configured path makes scheduled off-site backup fail
+non-zero before creating a new backup, without printing config content or
+credentials.
+
+Docker socket access already grants the `wctm` account broad control over
+containers and can expose container secrets. This correction avoids widening
+direct filesystem access to `.env`; it does not make Docker access a narrow
+capability. Keep the account dedicated to this operation and review its Docker
+access separately. No new filesystem secret grant is required here.
+
+Install the example, provision the protected rclone config, replace its path
+placeholder in the external environment file, then start the units:
 
 ```bash
 sudo install -d -o root -g wctm -m 0750 /etc/wctm
+sudo install -d -o wctm -g wctm -m 0700 /var/lib/wctm/rclone
 sudo install -o root -g wctm -m 0640 \
   ops/systemd/backup.conf.example /etc/wctm/backup.conf
+# Provision /var/lib/wctm/rclone/rclone.conf from protected storage at 0600.
+sudoedit /etc/wctm/backup.conf
+sudo -u wctm test -r /var/lib/wctm/rclone/rclone.conf
+sudo -u wctm test -w /var/lib/wctm/rclone/rclone.conf
+sudo -u wctm test -w /var/lib/wctm/rclone
 sudo install -o root -g root -m 0644 \
   ops/systemd/wctm-backup.service /etc/systemd/system/wctm-backup.service
 sudo install -o root -g root -m 0644 \
@@ -191,6 +270,13 @@ sudo install -o root -g root -m 0644 \
 sudo systemctl daemon-reload
 sudo systemctl start wctm-backup.service
 sudo systemctl status wctm-backup.service
+```
+
+Require the one-shot service to finish successfully, including off-site
+content SHA-256 verification, before enabling the timer. Stop on any failure.
+Then:
+
+```bash
 sudo systemctl enable --now wctm-backup.timer
 systemctl list-timers wctm-backup.timer
 journalctl -u wctm-backup.service
@@ -198,7 +284,8 @@ journalctl -u wctm-backup.service
 
 These are instructions for A; C does not install or enable them. The unit
 contains no secret. `/etc/wctm/backup.conf` holds paths and the optional remote
-name; provider credentials use the operator's protected rclone configuration.
+name; `RCLONE_CONFIG` is a path only. Provider credentials remain in the
+operator's protected rclone configuration.
 The service's non-zero exit and journal entry make backup/copy/retention
 failures observable. Confirm the `wctm` account can access Docker without
 broadening unrelated host privileges before enabling the timer.

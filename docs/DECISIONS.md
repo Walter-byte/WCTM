@@ -1207,8 +1207,7 @@ a new deployment platform or automatic schema mutation.
 
 Status
 
-Accepted for repository implementation. Production acceptance remains pending
-A-owned live validation.
+Accepted. A-owned P7.2 production validation passed on 2026-10-05.
 
 ---
 
@@ -1256,9 +1255,48 @@ new application table, public endpoint, provider lock-in, or multi-region HA.
 
 Status
 
-Accepted for repository implementation. Production scheduling, destination,
-restore exercise, and milestone acceptance remain pending A-owned validation.
+Accepted for repository implementation. A-owned local/off-site backup and
+isolated restore validation passed on 2026-10-05, but scheduled systemd backup
+failed because Docker Compose attempted to read `/srv/wctm/.env` as `wctm`.
+P7.3 production acceptance remains pending a successful live scheduler proof.
 
 ---
 
-Next decision number: D-033.
+## D-033
+
+Date
+
+2026-10-05
+
+Decision
+
+Proposed after P7.3 closure: P7.2 is production-complete, while P7.3 still
+requires a successful scheduled-backup systemd proof on authoritative
+`waltpack`. Once P7.3 passes, Phase 7 would remain incomplete and pause before
+P7.4. P7.4–P7.8 would remain unstarted and available for later resumption when
+merchant/pilot evidence justifies them; historical provenance review would
+remain assigned to P7.8. Phase 6 remains deferred and unstarted.
+
+Private Pilot Readiness is proposed as the next active initiative after P7.3
+closure. Its bounded sequence is
+privacy/data-flow audit and merchant-facing disclosures; licensing/legal
+baseline; WordPress connector admin UI polish; `wctm.walterbyte.com` onboarding
+and product-surface polish; focused security/quality QA; and a private merchant
+pilot with real users. Engineering is frozen except for pilot-blocking defects.
+No new feature expansion or unrestricted public launch is approved. Each pilot
+task requires separate authorization; this decision implements none of them.
+
+Reason
+
+The deployment and recovery evidence can support a controlled private pilot
+after the scheduled-backup path passes live validation.
+Real merchant usage and payment evidence should guide further infrastructure
+and product investment before resuming the remaining Phase 7 or Phase 6 work.
+
+Status
+
+Proposed; not accepted until P7.3 scheduled-backup production proof passes.
+
+---
+
+Next decision number: D-034.

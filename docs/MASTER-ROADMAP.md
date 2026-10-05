@@ -284,7 +284,7 @@ readiness work, or authorize unrestricted public launch.
 ## Phase 7 — Production Readiness
 
 Status:
-🔵 Current phase — next after Phase 5, by explicit A decision D-029
+🔵 In progress through P7.3; Phase 7 remains incomplete
 
 Phase 7 executes before Phase 6. It is production hardening and readiness only;
 it does not include pricing, billing, subscriptions, plan differentiation,
@@ -294,30 +294,37 @@ commercial/product expansion.
 Milestones, in order:
 
 - P7.1 — Production Security Baseline — ✅ Complete
-- P7.2 — Production Migration & Deployment Path — 🟡 Repository implemented;
-  awaiting B review and A-owned production validation
-- P7.3 — Backup, Restore & Disaster Recovery — 🟡 Repository implemented;
-  awaiting B review and A-owned production validation
-- P7.4 — Monitoring & Alerting
-- P7.5 — Data & Time Correctness
-- P7.6 — Network & Runtime Reliability
-- P7.7 — Audit & Operational Integrity
-- P7.8 — Final Launch Readiness Gate
+- P7.2 — Production Migration & Deployment Path — ✅ Complete / production validated
+- P7.3 — Backup, Restore & Disaster Recovery — 🟡 Backup/off-site/restore
+  validated; scheduled systemd backup proof pending
+- P7.4 — Monitoring & Alerting — ⬜ Deferred / unstarted
+- P7.5 — Data & Time Correctness — ⬜ Deferred / unstarted
+- P7.6 — Network & Runtime Reliability — ⬜ Deferred / unstarted
+- P7.7 — Audit & Operational Integrity — ⬜ Deferred / unstarted
+- P7.8 — Final Launch Readiness Gate — ⬜ Deferred / unstarted
 
-P7.1 is complete following accepted production validation. P7.2 and P7.3 now
-have repository-side implementation for explicit least-privilege migration,
-deterministic deployment, immutable database/cache image reconciliation,
-verified backup/off-host retention/scheduling, isolated restore, and disaster
-recovery. Both remain open pending B review and A-owned live validation; neither
-is production-complete. P7.4 is next only after both are accepted. P7.4–P7.8
-and Phase 6 remain unstarted; Phase 7 is not complete.
+P7.1 and P7.2 are complete. P7.3 local/off-site backup and isolated restore
+passed, but the scheduled service failed when Docker Compose attempted to read
+`/srv/wctm/.env` as `wctm`. The corrected scheduler awaits live systemd proof;
+the timer remains disabled. D-033 proposes pausing Phase 7 before P7.4 and
+making Private Pilot Readiness next only after P7.3 closure. P7.4–P7.8 and
+Phase 6 remain deferred/unstarted; historical provenance review stays assigned
+to P7.8. No feature expansion or unrestricted public launch is authorized.
+
+## Private Pilot Readiness — Proposed Next Initiative
+
+Status: ⬜ Proposed under D-033, pending P7.3 scheduled-backup proof and a
+separate acceptance. Its proposed scope remains privacy/data-flow and merchant
+disclosures, legal/licensing baseline, connector admin UI and
+`wctm.walterbyte.com` polish, focused QA, then a real-user private merchant
+pilot. No pilot implementation begins in this branch.
 
 ---
 
 ## Phase 6 — SaaS Platform
 
 Status:
-⬜ Deferred / unstarted until Phase 7 completes and A separately authorizes it
+⬜ Deferred / unstarted; requires a separate A decision after pilot evidence
 
 Deliverables
 

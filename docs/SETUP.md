@@ -1088,10 +1088,23 @@ scripts/ops/backup-retention.sh --directory /var/backups/wctm --keep 14
 scripts/ops/backup-retention.sh --directory /var/backups/wctm --keep 14 --apply
 ```
 
-Daily systemd templates are under `ops/systemd/`; they are not installed or
-enabled by repository implementation. A must review the service user, checkout
-and backup paths, Docker access, and provider-neutral rclone destination before
-following the installation commands in the operations runbook.
+Daily systemd templates are under `ops/systemd/`; repository implementation
+does not install or enable them. For off-site scheduling, set the real absolute
+`RCLONE_CONFIG` path in protected `/etc/wctm/backup.conf`. The `wctm` service
+also needs the reviewed non-secret `WCTM_COMPOSE_PROJECT` label. Scheduled
+backup selects one running PostgreSQL container through Docker labels and
+passes its ID to the existing backup script, so it does not parse Compose or
+read `/srv/wctm/.env`. Do not relax `.env` permissions or copy it into the
+backup configuration. The `wctm` service account must read the separate
+protected rclone config. OneDrive/OAuth remotes also
+need `wctm` write access to the file and its parent directory for token
+refreshes; the service allows `/var/lib/wctm/rclone` for a `0600` config under
+a `0700` directory. `ProtectHome=true` blocks the interactive user's
+home-directory config. The scheduled script rejects a
+missing/unreadable path before backup, and rclone inherits the configured path.
+Keep credentials outside Git and unit files. A must review the service user,
+checkout and backup paths, Docker access, and destination before following the
+installation commands in the operations runbook.
 
 Restore testing always uses a generated, non-networked PostgreSQL 16.15
 container and volume and exposes no production-target option:
