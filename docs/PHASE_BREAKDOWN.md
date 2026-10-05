@@ -715,10 +715,11 @@ M22 final decision: PASS. Phase 5 final decision: COMPLETE. M17–M22 and all
 approved MVP Telegram product features are complete, Persian/English manager UX
 and backend-authoritative entitlement enforcement are operational, and no open
 Phase-5 feature blocker remains. Phase 6 commercial SaaS work has not started;
-Phase 7 production-readiness was started by D-029 and is paused after P7.3 by
-D-033; unrestricted public launch is not approved.
+Phase 7 production-readiness was started by D-029. P7.3 remains open pending
+scheduled-backup proof, so the D-033 pause is proposed, not accepted;
+unrestricted public launch is not approved.
 
-## Phase 7 — Production Readiness ⏸ Paused / incomplete
+## Phase 7 — Production Readiness 🔵 In progress / incomplete
 
 ### P7.1 — Production Security Baseline ✅ Complete / Production Validated
 
@@ -778,7 +779,7 @@ rewrite and are still assigned to P7.8.
   volumes/data, corrected deployment PASS, local/public health/readiness, and
   bounded product smoke. P7.2 is production-complete.
 
-### P7.3 — Backup, Restore & Disaster Recovery ✅ Complete / Production Validated
+### P7.3 — Backup, Restore & Disaster Recovery 🟡 Scheduled Proof Pending
 
 - D-032 establishes atomic PostgreSQL custom-format backups, SHA-256 and
   readability verification, non-secret metadata, explicit 14-valid-set default
@@ -793,12 +794,14 @@ rewrite and are still assigned to P7.8.
 - A-owned production validation passed: custom dump and local SHA-256, OneDrive
   three-artifact transfer with streamed remote SHA-256, isolated network-none
   restore with 16 migrations/21 public tables and checked critical counts,
-  cleanup, and healthy final service/security scans. P7.3 is
-  production-complete. Scheduled off-site execution requires an explicit
-  readable `RCLONE_CONFIG` path in protected external configuration.
+  cleanup, and healthy final service/security scans. Scheduled systemd backup
+  then failed because Docker Compose attempted to read `/srv/wctm/.env` as
+  `wctm`; the timer was not enabled. P7.3 remains open until the corrected
+  scheduler passes live proof. Scheduled off-site execution retains the
+  explicit protected `RCLONE_CONFIG` path.
 
-P7.4–P7.8 remain unstarted and deferred by D-033. Phase 7 is incomplete and
-paused. Historical provenance review remains assigned to P7.8 if resumed.
+P7.4–P7.8 remain unstarted/deferred. Phase 7 is incomplete; D-033 proposes a
+pause after P7.3 closure. Historical provenance review remains assigned to P7.8.
 
 ### Approved Phase 7 order
 
@@ -811,7 +814,7 @@ paused. Historical provenance review remains assigned to P7.8 if resumed.
 7. P7.7 — Audit & Operational Integrity
 8. P7.8 — Final Launch Readiness Gate
 
-## Private Pilot Readiness 🔵 Next active initiative
+## Private Pilot Readiness ⬜ Proposed next initiative
 
 - Privacy/data-flow audit and merchant-facing disclosures
 - Licensing/legal baseline
@@ -820,8 +823,8 @@ paused. Historical provenance review remains assigned to P7.8 if resumed.
 - Focused security/quality QA
 - Private merchant pilot with real users and usage/payment evidence
 
-Engineering is frozen except for pilot-blocking defects. No implementation of
-these items is included in the P7.2/P7.3 closure task.
+D-033 proposes the engineering freeze except for pilot-blocking defects after
+P7.3 closes. No pilot implementation is authorized in this task.
 
 ## Phase 6 — SaaS Platform ⬜ Deferred / unstarted
 

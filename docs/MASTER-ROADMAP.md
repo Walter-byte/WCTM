@@ -284,7 +284,7 @@ readiness work, or authorize unrestricted public launch.
 ## Phase 7 — Production Readiness
 
 Status:
-⏸ Paused after P7.3 by explicit A decision D-033; Phase 7 remains incomplete
+🔵 In progress through P7.3; Phase 7 remains incomplete
 
 Phase 7 executes before Phase 6. It is production hardening and readiness only;
 it does not include pricing, billing, subscriptions, plan differentiation,
@@ -295,26 +295,29 @@ Milestones, in order:
 
 - P7.1 — Production Security Baseline — ✅ Complete
 - P7.2 — Production Migration & Deployment Path — ✅ Complete / production validated
-- P7.3 — Backup, Restore & Disaster Recovery — ✅ Complete / production validated
+- P7.3 — Backup, Restore & Disaster Recovery — 🟡 Backup/off-site/restore
+  validated; scheduled systemd backup proof pending
 - P7.4 — Monitoring & Alerting — ⬜ Deferred / unstarted
 - P7.5 — Data & Time Correctness — ⬜ Deferred / unstarted
 - P7.6 — Network & Runtime Reliability — ⬜ Deferred / unstarted
 - P7.7 — Audit & Operational Integrity — ⬜ Deferred / unstarted
 - P7.8 — Final Launch Readiness Gate — ⬜ Deferred / unstarted
 
-P7.1–P7.3 passed production validation. D-033 pauses Phase 7 before P7.4;
-P7.4–P7.8 remain available for later evidence-led resumption, with historical
-provenance review retained under P7.8. The next active initiative is Private
-Pilot Readiness: privacy/data-flow and merchant disclosures, legal/licensing
-baseline, connector admin UI and `wctm.walterbyte.com` polish, focused QA, then
-a private merchant pilot. Engineering is frozen except for pilot-blocking
-defects. No feature expansion or unrestricted public launch is authorized.
+P7.1 and P7.2 are complete. P7.3 local/off-site backup and isolated restore
+passed, but the scheduled service failed when Docker Compose attempted to read
+`/srv/wctm/.env` as `wctm`. The corrected scheduler awaits live systemd proof;
+the timer remains disabled. D-033 proposes pausing Phase 7 before P7.4 and
+making Private Pilot Readiness next only after P7.3 closure. P7.4–P7.8 and
+Phase 6 remain deferred/unstarted; historical provenance review stays assigned
+to P7.8. No feature expansion or unrestricted public launch is authorized.
 
-## Private Pilot Readiness — Current Initiative
+## Private Pilot Readiness — Proposed Next Initiative
 
-Status: 🔵 Active for planning and separately approved narrow work; no pilot
-implementation begins in this closure branch. Seek real merchant usage/payment
-evidence before further infrastructure or feature expansion.
+Status: ⬜ Proposed under D-033, pending P7.3 scheduled-backup proof and a
+separate acceptance. Its proposed scope remains privacy/data-flow and merchant
+disclosures, legal/licensing baseline, connector admin UI and
+`wctm.walterbyte.com` polish, focused QA, then a real-user private merchant
+pilot. No pilot implementation begins in this branch.
 
 ---
 

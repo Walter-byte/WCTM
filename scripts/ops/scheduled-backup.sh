@@ -4,6 +4,11 @@ umask 077
 
 : "${WCTM_BACKUP_DIRECTORY:?WCTM_BACKUP_DIRECTORY is required}"
 retention_count=${WCTM_BACKUP_RETENTION_COUNT:-14}
+compose_project=${WCTM_COMPOSE_PROJECT:-}
+[[ "$compose_project" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || {
+  echo >&2 'scheduled backup refused: WCTM_COMPOSE_PROJECT must name the reviewed Compose project'
+  exit 64
+}
 if [[ -n "${WCTM_OFFSITE_DESTINATION:-}" ]]; then
   rclone_config=${RCLONE_CONFIG:-}
   [[ "$rclone_config" = /* && -f "$rclone_config" && -r "$rclone_config" ]] || {
@@ -12,6 +17,18 @@ if [[ -n "${WCTM_OFFSITE_DESTINATION:-}" ]]; then
   }
   export RCLONE_CONFIG=$rclone_config
 fi
+container_id=$(docker ps --no-trunc \
+  --filter "label=com.docker.compose.project=$compose_project" \
+  --filter 'label=com.docker.compose.service=postgres' \
+  --format '{{.ID}}') || {
+  echo >&2 'scheduled backup failed: PostgreSQL container discovery failed'
+  exit 1
+}
+[[ "$container_id" =~ ^[0-9a-f]{64}$ ]] || {
+  echo >&2 'scheduled backup refused: expected exactly one running PostgreSQL container for the reviewed Compose project'
+  exit 1
+}
+export WCTM_POSTGRES_CONTAINER=$container_id
 result_file=$(mktemp)
 trap 'rm -f -- "$result_file"' EXIT HUP INT TERM
 

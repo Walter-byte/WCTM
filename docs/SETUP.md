@@ -1091,7 +1091,12 @@ scripts/ops/backup-retention.sh --directory /var/backups/wctm --keep 14 --apply
 Daily systemd templates are under `ops/systemd/`; repository implementation
 does not install or enable them. For off-site scheduling, set the real absolute
 `RCLONE_CONFIG` path in protected `/etc/wctm/backup.conf`. The `wctm` service
-account must read that separate protected file. OneDrive/OAuth remotes also
+also needs the reviewed non-secret `WCTM_COMPOSE_PROJECT` label. Scheduled
+backup selects one running PostgreSQL container through Docker labels and
+passes its ID to the existing backup script, so it does not parse Compose or
+read `/srv/wctm/.env`. Do not relax `.env` permissions or copy it into the
+backup configuration. The `wctm` service account must read the separate
+protected rclone config. OneDrive/OAuth remotes also
 need `wctm` write access to the file and its parent directory for token
 refreshes; the service allows `/var/lib/wctm/rclone` for a `0600` config under
 a `0700` directory. `ProtectHome=true` blocks the interactive user's
