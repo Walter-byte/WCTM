@@ -79,7 +79,7 @@ n8n is **NOT** part of the production architecture (D-008, prototype only).
 | D-030 | P7.1 uses a temporary decrypt-only previous key, current-key-only writes, and a trusted-shell row-transactional rotation command for the exact five encrypted database fields                                              | Accepted |
 | D-031 | P7.2 separates restricted backend runtime from an ephemeral explicit Prisma migration identity and defines revision-locked fail-fast deployment plus volume-preserving immutable data-service reconciliation               | Accepted |
 | D-032 | P7.3 establishes atomic verified PostgreSQL backups, explicit retention, verified provider-neutral off-host copy, daily systemd scheduling, isolated guarded restore, DR dependencies, and target-only RPO/RTO             | Accepted |
-| D-033 | Proposed Phase 7 pause after P7.3 scheduled-backup proof, with Private Pilot Readiness next and Phase 6/P7.4–P7.8 deferred                                                                                                 | Proposed |
+| D-033 | Pause incomplete Phase 7 after production-validated P7.2/P7.3; make Private Pilot Readiness active while Phase 6/P7.4–P7.8 remain deferred                                                                                 | Accepted |
 
 Next decision number: **D-034**, if a future task produces a genuine
 architectural or product decision.
@@ -1032,7 +1032,7 @@ Final closure evidence:
 
 ---
 
-### Phase 7 — Production Readiness (P7.3 scheduler proof pending)
+### Phase 7 — Production Readiness (paused after production-validated P7.3)
 
 #### P7.1 — Production Security Baseline (complete; production validated)
 
@@ -1210,7 +1210,7 @@ migration and deployment path`.
   PostgreSQL/Redis and named volumes, `deployment path: PASS`, local/public
   health/readiness, and bounded functional smoke. P7.2 is complete.
 
-#### P7.3 — Backup, Restore & Disaster Recovery (scheduled proof pending)
+#### P7.3 — Backup, Restore & Disaster Recovery (production complete)
 
 - Implementation commit:
   `ddde3c705b249a29a131a3bfc96763f17b6e9cbc chore(ops): add production backup
@@ -1244,17 +1244,28 @@ and recovery path`.
   16 migrations), OneDrive three-artifact copy with streamed SHA-256 PASS,
   isolated network-none restore with 16 migrations/21 public tables and
   critical counts `tenants=7`, `users=6`, `stores=2`, `orders=54`, cleanup,
-  and clean final health/role/permission/secret scans. The live systemd service
-  then failed with `/srv/wctm/.env` permission denied as `wctm`; the timer was
-  not enabled. P7.3 remains open until the corrected scheduler passes live.
+  and clean final health/role/permission/secret scans. The first live systemd
+  start failed on `/srv/wctm/.env` access as `wctm`; the corrected scheduler
+  then completed through `wctm-backup.service` with `SERVICE_RC=0`, 16
+  migrations, OneDrive three-artifact transfer, streamed SHA-256 PASS,
+  `retention: PASS`, and a secret-safe journal. The one-shot service exited
+  successfully and the daily timer was enabled and active, with its initial
+  next invocation confirmed for `2026-10-06 02:18:28 UTC`.
+- The scheduled backup `wctm-postgres-20261005T151246Z-unknown.dump`
+  (2,404,925 bytes) was
+  timestamped, checksum-valid and off-site verified. The `unknown` revision is
+  metadata-quality polish. Retention warned on some older manually/root-created
+  sets with relative checksum sidecars, but returned PASS and removed no set
+  incorrectly. These are future operational follow-ups, not P7.3 blockers.
 
-This closure branch performs no VPS, production, secret, live database,
-deployment, schema, migration, or product mutation. Phase 7 remains incomplete;
-P7.4–P7.8 and Phase 6 remain deferred/unstarted. D-033 and Private Pilot
-Readiness are proposed pending P7.3 closure. Scheduled backup now selects the
-sole PostgreSQL container via Docker Compose labels without parsing the full
-app `.env`; `RCLONE_CONFIG` remains in protected external configuration. This
-repository correction has not run on production here.
+This documentation closure performs no VPS, production, secret, live database,
+deployment, schema, migration, or product mutation. Phase 7 remains paused and
+incomplete; P7.4–P7.8 and Phase 6 remain deferred/unstarted. D-033 is Accepted
+and Private Pilot Readiness is active. Scheduled backup selects the sole
+PostgreSQL container via Docker Compose labels without parsing the full
+app `.env`; `RCLONE_CONFIG` remains in protected external configuration. A
+installed and validated the repository correction on `waltpack`; the protected
+`.env` remains inaccessible to the service account.
 
 ## 5. Current Repository Structure
 
@@ -1270,23 +1281,26 @@ Current closure branch: `docs/p7.2-p7.3-production-closure` from main
 
 ## 6. Current Blockers
 
-P7.3 scheduled-backup production proof remains open. Public launch also remains
-gated by unstarted P7.4–P7.8 and a separate A decision. Historical provenance
-remains unresolved and assigned to P7.8. Monitoring remains P7.4, DATE-001
-P7.5, network/runtime resilience P7.6, and AuditLog structural immutability
-P7.7.
+Public launch remains gated by unstarted P7.4–P7.8 and a separate A decision.
+Historical provenance remains unresolved and assigned to P7.8. Monitoring
+remains P7.4, DATE-001 P7.5, network/runtime resilience P7.6, and AuditLog
+structural immutability P7.7.
 
 ---
 
 ## 7. Current Task
 
-P7.1 and P7.2 are complete. A-owned P7.3 backup/off-site/restore checks passed
-on authoritative `waltpack` at `/srv/wctm`, but the scheduled service failed
-on `.env` access as `wctm` and its timer was not enabled. The earlier migration
-from `hetz` succeeded; its WCTM deployment was removed and is not a rollback
-host. P7.3 requires live scheduler proof. Phase 7 remains incomplete;
-P7.4–P7.8 and Phase 6 are deferred/unstarted. D-033 proposes Private Pilot
-Readiness next after P7.3 closure; no pilot implementation begins here.
+P7.1–P7.3 are production-complete. A-owned backup/off-site/restore and corrected
+scheduled service checks passed on authoritative `waltpack` at `/srv/wctm`;
+the daily timer is enabled and active. The earlier migration from `hetz`
+succeeded; its WCTM deployment was removed and is not a rollback host. Phase 7
+is intentionally paused/incomplete before P7.4; P7.4–P7.8 and Phase 6 remain
+deferred/unstarted. Accepted D-033 makes Private Pilot Readiness the next active
+initiative: privacy/data-flow audit and merchant disclosures, licensing/legal
+baseline, WordPress connector admin UI polish, `wctm.walterbyte.com`
+onboarding/product-surface polish, focused security/quality QA, and controlled
+private merchant pilots. Engineering is frozen except for pilot-blocking
+defects. No pilot implementation or broad public launch is authorized here.
 
 ### Last completed product milestone: M22
 
