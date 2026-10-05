@@ -4,7 +4,10 @@
 
 ## 1. Project Identity
 
-**Working name:** WooCommerce Telegram Manager (name may change before launch)
+**Public name:** WCTM — Telegram Store Manager for WooCommerce, by Walterbyte
+(`https://walterbyte.com`). WooCommerce is an integration reference, not
+ownership or affiliation. Internal `wctm` technical identifiers remain
+unchanged (D-034).
 
 **One-line description:** A multi-tenant SaaS that lets WooCommerce store teams operate key daily store workflows from Telegram, without needing to open the WordPress/WooCommerce admin for routine work.
 

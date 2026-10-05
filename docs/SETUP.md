@@ -394,8 +394,8 @@ WordPress environment:
    );
    ```
 
-4. Run `php -l wc-telegram-connector.php`, then activate **WC Telegram
-   Connector** from the Plugins screen.
+4. Run `php -l wc-telegram-connector.php`, then activate **WCTM — Telegram
+   Store Manager for WooCommerce** from the Plugins screen.
 5. Complete account, Tenant, and Store creation at `/onboarding`, issue one M7
    token, then paste only that token into WooCommerce → WCTM Connector.
 
