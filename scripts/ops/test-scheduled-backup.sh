@@ -2,12 +2,17 @@
 set -euo pipefail
 
 fixture=$(realpath scripts/ops/test-fixtures/rclone)
+export TEST_DOCKER_NODE_FIXTURE="$(pwd -P)/scripts/ops/test-fixtures/docker-node-run.sh"
+export TEST_NODE=$(command -v node)
 workspace=$(mktemp -d)
 trap 'chmod 0600 "$workspace/rclone.conf" "$workspace/.env" 2>/dev/null || true; rm -rf -- "$workspace"' EXIT
-mkdir -p "$workspace/scripts/ops" "$workspace/bin" "$workspace/backups"
+mkdir -p "$workspace/scripts/ops" "$workspace/bin" "$workspace/backups" "$workspace/backend"
+cp backend/Dockerfile "$workspace/backend/Dockerfile"
 cp scripts/ops/scheduled-backup.sh scripts/ops/backup-postgres.sh \
   scripts/ops/offsite-rclone.sh scripts/ops/offsite-retention.sh \
-  scripts/ops/backup-crypto.mjs scripts/ops/select-offsite-expired.mjs "$workspace/scripts/ops/"
+  scripts/ops/decrypt-offsite.sh \
+  scripts/ops/run-ops-node.sh scripts/ops/backup-crypto.mjs \
+  scripts/ops/select-offsite-expired.mjs "$workspace/scripts/ops/"
 
 cat >"$workspace/scripts/ops/backup-retention.sh" <<'SH'
 #!/usr/bin/env bash
@@ -54,6 +59,9 @@ case "${1:-}" in
     echo >&2 'test failed: scheduled backup invoked Docker Compose'
     exit 99
     ;;
+  run)
+    exec "$TEST_DOCKER_NODE_FIXTURE" "$@"
+    ;;
   *) exit 99 ;;
 esac
 SH
@@ -72,6 +80,7 @@ set -euo pipefail
 exec "$TEST_RCLONE_FIXTURE" "$@"
 SH
 chmod +x "$workspace"/scripts/ops/*.sh "$workspace"/bin/*
+ln -s "$(command -v sha256sum)" "$workspace/bin/sha256sum"
 
 export TEST_WORKSPACE=$workspace TEST_RCLONE_FIXTURE=$fixture
 export TEST_EXPECTED_CONFIG="$workspace/rclone.conf"
@@ -79,7 +88,8 @@ export TEST_EXPECTED_CONTAINER=$(printf 'a%.0s' {1..64})
 export TEST_SECOND_CONTAINER=$(printf 'b%.0s' {1..64})
 export WCTM_BACKUP_DIRECTORY="$workspace/backups"
 export WCTM_COMPOSE_PROJECT=wctm
-export PATH="$workspace/bin:$PATH"
+export PATH="$workspace/bin:/usr/bin:/bin"
+! command -v node >/dev/null 2>&1
 printf '[testremote]\ntype = local\n' >"$TEST_EXPECTED_CONFIG"
 chmod 0600 "$TEST_EXPECTED_CONFIG"
 export RCLONE_CONFIG=$TEST_EXPECTED_CONFIG
@@ -107,6 +117,12 @@ grep -q '"format": "postgresql-custom"' "$dump.json"
 grep -q '"completedMigrationCount": 16' "$dump.json"
 [[ -f "$workspace/native/$(basename "$dump").enc" && -f "$workspace/native/$(basename "$dump").enc.json" && -f "$workspace/native/$(basename "$dump").enc.sha256" ]]
 [[ ! -e "$workspace/native/$(basename "$dump")" ]]
+mkdir "$workspace/decrypted"
+(cd "$workspace" && scripts/ops/decrypt-offsite.sh \
+  "$workspace/native/$(basename "$dump").enc" \
+  "$workspace/native/$(basename "$dump").enc.json" \
+  "$workspace/decrypted") >"$workspace/decrypt.log" 2>&1
+cmp "$dump" "$workspace/decrypted/$(basename "$dump")"
 if grep -q '^compose ' "$workspace/docker.log"; then
   echo >&2 'test failed: backup required Docker Compose and its .env'
   exit 1
@@ -176,4 +192,4 @@ if grep -q 'scheduled backup: PASS' "$workspace/corrupt.log" "$workspace/missing
   echo >&2 'test failed: unsuccessful backup reported PASS'
   exit 1
 fi
-echo 'scheduled backup: PASS no-compose-env exact-container missing-config rclone-path custom-format SHA-256 offsite-integrity secret-safe-logs'
+echo 'scheduled backup: PASS no-host-node no-compose-env exact-container missing-config rclone-path custom-format SHA-256 offsite-integrity secret-safe-logs'

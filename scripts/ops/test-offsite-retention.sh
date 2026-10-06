@@ -3,13 +3,16 @@ set -euo pipefail
 
 workspace=$(mktemp -d)
 trap 'rm -rf -- "$workspace"' EXIT HUP INT TERM
+export TEST_NODE=$(command -v node)
 mkdir "$workspace/bin" "$workspace/remote"
 cp scripts/ops/test-fixtures/rclone "$workspace/bin/rclone"
-chmod 0700 "$workspace/bin/rclone"
-export PATH="$workspace/bin:$PATH"
+cp scripts/ops/test-fixtures/docker-node-run.sh "$workspace/bin/docker"
+chmod 0700 "$workspace/bin/rclone" "$workspace/bin/docker"
+export PATH="$workspace/bin:/usr/bin:/bin"
+! command -v node >/dev/null 2>&1
 
 stamp() {
-  node -e 'process.stdout.write(new Date(Date.now() - Number(process.argv[1]) * 86400000).toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z")' "$1"
+  "$TEST_NODE" -e 'process.stdout.write(new Date(Date.now() - Number(process.argv[1]) * 86400000).toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z")' "$1"
 }
 create_set() {
   base="wctm-postgres-$(stamp "$1")-deadbeef0000"
@@ -31,4 +34,4 @@ scripts/ops/offsite-retention.sh "testremote:$workspace/remote" 30 >"$workspace/
 [[ -f "$workspace/remote/$legacy" && -f "$workspace/remote/$incomplete" ]]
 [[ $(find "$workspace/remote" -maxdepth 1 -name '*.dump.enc.sha256' | wc -l | tr -d ' ') = 2 ]]
 grep -q 'removed_artifacts=6 legacy_plaintext_untouched=true' "$workspace/result.log"
-echo 'off-site retention: PASS 30-day policy newest-two protected incomplete/legacy preserved'
+echo 'off-site retention: PASS no-host-node 30-day policy newest-two protected incomplete/legacy preserved'

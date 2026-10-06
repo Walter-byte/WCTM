@@ -15,11 +15,12 @@ key_file=${WCTM_BACKUP_CRYPTO_KEY_FILE:-}
   echo >&2 'off-site decrypt refused: encrypted set, protected key and explicit output directory are required'
   exit 66
 }
-command -v node >/dev/null 2>&1 || {
-  echo >&2 'off-site decrypt failed: local Node runtime is unavailable'
+command -v docker >/dev/null 2>&1 || {
+  echo >&2 'off-site decrypt failed: local Docker runtime is unavailable'
   exit 69
 }
 encrypted=$(cd "$(dirname "$encrypted")" && pwd -P)/$(basename "$encrypted")
+metadata=$(cd "$(dirname "$metadata")" && pwd -P)/$(basename "$metadata")
 directory=$(cd "$directory" && pwd -P)
 (cd "$(dirname "$encrypted")" && sha256sum --check --status "$(basename "$encrypted.sha256")") || {
   echo >&2 'off-site decrypt refused: encrypted content checksum mismatch'
@@ -32,7 +33,7 @@ name=$(basename "$encrypted")
   echo >&2 'off-site decrypt refused: backup set names do not match'
   exit 65
 }
-expected=$(node -e '
+expected=$(scripts/ops/run-ops-node.sh --ro "$metadata" -- -e '
 const fs = require("node:fs");
 const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
 if (data.format !== "postgresql-custom" || data.offsiteEncryption?.format !== "WCTMBACKUPAESG1" ||
@@ -50,7 +51,9 @@ dump="$directory/${name%.enc}"
   exit 73
 }
 crypto_script=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/backup-crypto.mjs
-node "$crypto_script" decrypt "$key_file" "$encrypted" "$dump" || {
+scripts/ops/run-ops-node.sh --ro "$crypto_script" --ro "$key_file" \
+  --ro "$encrypted" --rw "$directory" -- \
+  "$crypto_script" decrypt "$key_file" "$encrypted" "$dump" || {
   echo >&2 'off-site decrypt failed: authentication failed'
   exit 1
 }

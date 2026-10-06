@@ -57,7 +57,7 @@ case "$mode" in
 esac
 
 # Expired exports are swept on every operator entry as well as by the hourly timer.
-node scripts/ops/privacy-export-artifacts.mjs sweep "$privacy_directory"
+scripts/ops/privacy-export-artifacts.sh sweep "$privacy_directory"
 
 target_ids() {
   tenant_id=''
@@ -82,7 +82,7 @@ if [[ "$mode" = export ]]; then
     exit 64
   }
   target_ids "$@" || { echo >&2 'privacy export refused: exact target IDs are required'; exit 64; }
-  output=$(node scripts/ops/privacy-export-artifacts.mjs new-path "$privacy_directory" "$tenant_id" "$store_id")
+  output=$(scripts/ops/privacy-export-artifacts.sh new-path "$privacy_directory" "$tenant_id" "$store_id")
   set -- "$@" --output "$output"
 fi
 
@@ -125,7 +125,7 @@ if [[ "$mode" = erase && " $* " = *' --execute '* ]]; then
   scripts/ops/archive-erasure-ledger.sh "$ledger" "${WCTM_OFFSITE_DESTINATION%/}/privacy-erasure-ledger"
   run_privacy erase "$@"
   target_ids "$@"
-  node scripts/ops/privacy-export-artifacts.mjs purge "$privacy_directory" "$tenant_id" "$store_id"
+  scripts/ops/privacy-export-artifacts.sh purge "$privacy_directory" "$tenant_id" "$store_id"
 else
   run_privacy "$mode" "$@"
   if [[ "$mode" = export ]]; then

@@ -1,8 +1,10 @@
 # P7.2/P7.3 Production Operations Runbook
 
 > PPR-2 implementation note: new off-site sets are encrypted before upload and
-> require `WCTM_BACKUP_CRYPTO_KEY_FILE` plus a host Node runtime in the scheduled
-> service. This change has **not** been production validated. For any restore of
+> require `WCTM_BACKUP_CRYPTO_KEY_FILE` plus the locally available, reviewed
+> immutable Node base image for a network-disabled encryption container. A
+> host Node installation is not required. This change has **not** been
+> production validated. For any restore of
 > an older backup, keep the application stopped and replay the external erasure
 > ledger before it becomes authoritative. See
 > `docs/privacy/PPR2_DATA_PROTECTION.md` for the key, legacy plaintext and

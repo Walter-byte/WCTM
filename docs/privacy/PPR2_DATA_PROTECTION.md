@@ -49,7 +49,7 @@ for that Tenant/Store. After a merchant export has been securely delivered,
 the operator runs this scoped cleanup to finish that request:
 
 ```sh
-node scripts/ops/privacy-export-artifacts.mjs purge /var/lib/wctm/privacy TENANT_ID STORE_ID
+scripts/ops/privacy-export-artifacts.sh purge /var/lib/wctm/privacy TENANT_ID STORE_ID
 ```
 
 Delivery
@@ -60,7 +60,9 @@ exports. Install and enable the reviewed
 canonical `/var/lib/wctm/privacy` directory, owned by the `wctm` service
 account with mode 0700. The timer runs under that existing account and does not
 require another account to receive Docker or ledger access; its unit hides the
-Docker socket and production `.env`. Install the two
+Docker socket and production `.env`. Cleanup uses the host's existing Bash,
+coreutils and OpenSSL tools; it needs no host Node, Docker access or network.
+Install the two
 unit files from `ops/systemd/`, reload systemd, enable the timer and verify the
 first one-shot sweep succeeds before using real merchant exports. The hourly
 timer deletes exact export artifacts at
@@ -136,9 +138,13 @@ using a separately stored 32-byte mode-0600 key before rclone upload. OneDrive
 receives only `.dump.enc`, `.dump.enc.json` and `.dump.enc.sha256` for new sets.
 AES-256-GCM authenticates ciphertext; local SHA-256 verifies the original dump,
 and remote content SHA-256 verifies uploaded ciphertext. The key must be owned
-by the dedicated backup account outside Git and OneDrive. The scheduled service
-requires a host Node runtime and a readable key file; these are new deployment
-prerequisites requiring live validation. The decrypted dump is only created in
+by the dedicated backup account outside Git and OneDrive. Encryption, metadata
+selection and restore use a short-lived, network-disabled container from the
+exact reviewed Node 24.20.0 Alpine 3.24 base digest in `backend/Dockerfile`.
+The runtime is local-only (`--pull=never`), read-only and given only the
+explicit input/key/output mounts. Docker access, that locally built base image
+and the readable key file require live validation; no host Node installation is
+needed. The decrypted dump is only created in
 an operator-controlled 0700 directory, then used with the existing isolated
 restore procedure. Encryption does not replace checksum or restore tests.
 

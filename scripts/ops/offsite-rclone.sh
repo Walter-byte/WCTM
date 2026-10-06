@@ -22,8 +22,8 @@ command -v rclone >/dev/null 2>&1 || {
   echo >&2 'off-site copy failed: rclone is unavailable'
   exit 69
 }
-command -v node >/dev/null 2>&1 || {
-  echo >&2 'off-site copy failed: local Node runtime is unavailable for encryption'
+command -v docker >/dev/null 2>&1 || {
+  echo >&2 'off-site copy failed: local Docker runtime is unavailable for encryption'
   exit 69
 }
 key_file=${WCTM_BACKUP_CRYPTO_KEY_FILE:-}
@@ -47,10 +47,14 @@ local_dump_sha256=$(sha256sum "$dump" | awk '{print $1}')
 }
 
 crypto_script=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/backup-crypto.mjs
+dump=$(cd "$(dirname "$dump")" && pwd -P)/$(basename "$dump")
+metadata=$(cd "$(dirname "$metadata")" && pwd -P)/$(basename "$metadata")
 temporary_dir=$(mktemp -d "$(dirname "$dump")/.wctm-offsite.XXXXXXXX")
 trap 'rm -rf -- "$temporary_dir"' EXIT HUP INT TERM
 encrypted="$temporary_dir/$(basename "$dump").enc"
-node "$crypto_script" encrypt "$key_file" "$dump" "$encrypted" || {
+scripts/ops/run-ops-node.sh --ro "$crypto_script" --ro "$key_file" \
+  --ro "$dump" --rw "$temporary_dir" -- \
+  "$crypto_script" encrypt "$key_file" "$dump" "$encrypted" || {
   echo >&2 'off-site copy failed: local backup encryption failed'
   exit 1
 }
@@ -59,7 +63,7 @@ encrypted_sha256=$(sha256sum "$encrypted" | awk '{print $1}')
 printf '%s  %s\n' "$encrypted_sha256" "$(basename "$encrypted")" >"$encrypted_checksum"
 encrypted_metadata="$encrypted.json"
 key_id=$(sha256sum "$key_file" | awk '{print substr($1, 1, 16)}')
-node -e '
+scripts/ops/run-ops-node.sh --ro "$metadata" --rw "$temporary_dir" -- -e '
 const fs = require("node:fs");
 const [source, target, keyId, ciphertextSha256] = process.argv.slice(1);
 const record = JSON.parse(fs.readFileSync(source, "utf8"));

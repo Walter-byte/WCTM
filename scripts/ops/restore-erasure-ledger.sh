@@ -20,13 +20,15 @@ name=$(basename "$encrypted")
   echo >&2 'erasure ledger restore refused: encrypted set name is invalid'
   exit 65
 }
+encrypted=$(cd "$(dirname "$encrypted")" && pwd -P)/$name
+directory=$(cd "$directory" && pwd -P)
 (cd "$(dirname "$encrypted")" && sha256sum --check --status "$name.sha256") || {
   echo >&2 'erasure ledger restore refused: encrypted checksum mismatch'
   exit 1
 }
 key_id=$(sha256sum "$key_file" | awk '{print substr($1, 1, 16)}')
 cipher_sha256=$(sha256sum "$encrypted" | awk '{print $1}')
-expected_plaintext=$(node -e '
+expected_plaintext=$(scripts/ops/run-ops-node.sh --ro "$encrypted.json" -- -e '
 const fs = require("node:fs");
 const value = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
 if (value.format !== "WCTMBACKUPAESG1" || value.keyId !== process.argv[2] ||
@@ -43,7 +45,9 @@ output="$directory/erasure-ledger.jsonl"
   exit 73
 }
 crypto_script=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/backup-crypto.mjs
-node "$crypto_script" decrypt "$key_file" "$encrypted" "$output" || {
+scripts/ops/run-ops-node.sh --ro "$crypto_script" --ro "$key_file" \
+  --ro "$encrypted" --rw "$directory" -- \
+  "$crypto_script" decrypt "$key_file" "$encrypted" "$output" || {
   echo >&2 'erasure ledger restore failed: authentication failed'
   exit 1
 }

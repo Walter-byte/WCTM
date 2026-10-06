@@ -14,10 +14,11 @@ key_file=${WCTM_BACKUP_CRYPTO_KEY_FILE:-}
   echo >&2 'erasure archive refused: protected ledger, key and rclone configuration are required'
   exit 66
 }
-command -v node >/dev/null 2>&1 && command -v rclone >/dev/null 2>&1 || {
+command -v docker >/dev/null 2>&1 && command -v rclone >/dev/null 2>&1 || {
   echo >&2 'erasure archive failed: required local tool is unavailable'
   exit 69
 }
+ledger=$(cd "$(dirname "$ledger")" && pwd -P)/$(basename "$ledger")
 temporary_dir=$(mktemp -d)
 trap 'rm -rf -- "$temporary_dir"' EXIT HUP INT TERM
 timestamp=$(date -u '+%Y%m%dT%H%M%SZ')
@@ -25,7 +26,9 @@ ledger_sha256=$(sha256sum "$ledger" | awk '{print $1}')
 name="erasure-ledger-$timestamp-${ledger_sha256:0:12}.jsonl.enc"
 encrypted="$temporary_dir/$name"
 crypto_script=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/backup-crypto.mjs
-node "$crypto_script" encrypt "$key_file" "$ledger" "$encrypted" || {
+scripts/ops/run-ops-node.sh --ro "$crypto_script" --ro "$key_file" \
+  --ro "$ledger" --rw "$temporary_dir" -- \
+  "$crypto_script" encrypt "$key_file" "$ledger" "$encrypted" || {
   echo >&2 'erasure archive failed: encryption failed'
   exit 1
 }
