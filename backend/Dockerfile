@@ -4,6 +4,21 @@ COPY scripts/ops/install-pinned-openssl.sh /tmp/install-pinned-openssl.sh
 
 RUN sh /tmp/install-pinned-openssl.sh && rm /tmp/install-pinned-openssl.sh
 
+FROM openssl-pinned AS privacy-ops
+
+ENV NODE_ENV=production
+LABEL org.wctm.runtime="privacy-ops"
+
+RUN apk add --repositories-file /dev/null --no-network ca-certificates-bundle \
+  && apk del --repositories-file /dev/null --no-network apk-tools \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    /usr/local/lib/node_modules/corepack /usr/local/bin/corepack \
+    /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-v1.22.22
+
+USER node
+
+ENTRYPOINT ["node"]
+
 FROM openssl-pinned AS dependencies
 
 WORKDIR /app

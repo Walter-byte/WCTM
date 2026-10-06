@@ -11,7 +11,7 @@ days=$2
   echo >&2 'off-site retention refused: max age must be positive whole days'
   exit 64
 }
-command -v rclone >/dev/null 2>&1 && command -v node >/dev/null 2>&1 || {
+command -v rclone >/dev/null 2>&1 && command -v docker >/dev/null 2>&1 || {
   echo >&2 'off-site retention failed: required local tool is unavailable'
   exit 69
 }
@@ -20,7 +20,7 @@ listing=$(rclone lsf --files-only "$destination") || {
   echo >&2 'off-site retention failed: remote listing unavailable'
   exit 1
 }
-selected=$(printf '%s\n' "$listing" | node "$selector" "$days") || {
+selected=$(printf '%s\n' "$listing" | scripts/ops/run-ops-node.sh --ro "$selector" -- "$selector" "$days") || {
   echo >&2 'off-site retention failed: selection unavailable'
   exit 1
 }

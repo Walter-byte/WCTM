@@ -4,6 +4,8 @@ umask 077
 
 workspace=$(mktemp -d)
 trap 'rm -rf -- "$workspace"' EXIT HUP INT TERM
+export TEST_NODE=$(command -v node)
+export TEST_DOCKER_NODE_FIXTURE="$(pwd -P)/scripts/ops/test-fixtures/docker-node-run.sh"
 mkdir -m 0700 "$workspace/privacy" "$workspace/bin" "$workspace/remote"
 printf 'DATABASE_URL=postgresql://owner:fixture-only@postgres/wctm\n' >"$workspace/database.conf"
 printf '{"tenantId":"ten_fixture","storeId":"sto_fixture","baseUrlSha256":"%064d"}\n' 0 \
@@ -14,6 +16,9 @@ cp scripts/ops/test-fixtures/rclone "$workspace/bin/rclone"
 cat >"$workspace/bin/docker" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$TEST_DOCKER_LOG"
+if [[ ${1:-} = run || ( ${1:-} = image && ${2:-} = inspect ) ]]; then
+  exec "$TEST_DOCKER_NODE_FIXTURE" "$@"
+fi
 previous=''
 for argument in "$@"; do
   if [[ "$previous" = --output ]]; then
@@ -28,7 +33,9 @@ if [[ "$*" = 'compose ps --status running -q backend telegram-bot' &&
 fi
 SH
 chmod 0700 "$workspace/bin/docker" "$workspace/bin/rclone"
-export PATH="$workspace/bin:$PATH"
+ln -s "$(command -v sha256sum)" "$workspace/bin/sha256sum"
+export PATH="$workspace/bin:/usr/bin:/bin"
+! command -v node >/dev/null 2>&1
 export TEST_DOCKER_LOG="$workspace/docker.log"
 export TEST_PRIVACY_DIRECTORY="$workspace/privacy"
 export WCTM_BACKUP_CRYPTO_KEY_FILE="$workspace/key"
@@ -74,7 +81,7 @@ if scripts/ops/pilot-privacy.sh --credential-file "$workspace/database.conf" \
   echo >&2 'test failed: erasure proceeded without off-site ledger destination'
   exit 1
 fi
-[[ $(wc -l <"$workspace/docker.log" | tr -d ' ') = 6 ]]
+[[ $(wc -l <"$workspace/docker.log" | tr -d ' ') = 7 ]]
 
 export WCTM_OFFSITE_DESTINATION="testremote:$workspace/remote"
 if TEST_APP_RUNNING=true scripts/ops/pilot-privacy.sh \
@@ -86,4 +93,4 @@ if TEST_APP_RUNNING=true scripts/ops/pilot-privacy.sh \
   exit 1
 fi
 grep -q 'stop backend and bot' "$workspace/running.log"
-echo 'pilot privacy wrapper: PASS protected-config explicit export retention erase cleanup archive-before-erasure fail-closed'
+echo 'pilot privacy wrapper: PASS no-host-node protected-config explicit export retention erase cleanup archive-before-erasure fail-closed'

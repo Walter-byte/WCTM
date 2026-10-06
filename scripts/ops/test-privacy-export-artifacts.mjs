@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   mkdtemp,
   mkdir,
@@ -16,10 +17,18 @@ import { join } from 'node:path';
 const root = await mkdtemp(join(tmpdir(), 'wctm-privacy-export-test-'));
 const directory = join(root, 'privacy');
 const outside = join(root, 'outside');
-const helper = 'scripts/ops/privacy-export-artifacts.mjs';
+const helper = 'scripts/ops/privacy-export-artifacts.sh';
+const noNodeEnvironment = { ...process.env, PATH: '/usr/bin:/bin' };
+assert.notEqual(
+  spawnSync('/bin/bash', ['-c', 'command -v node'], {
+    env: noNodeEnvironment,
+  }).status,
+  0
+);
 const run = (...args) =>
-  execFileSync(process.execPath, [helper, ...args], {
+  execFileSync('/bin/bash', [helper, ...args], {
     encoding: 'utf8',
+    env: noNodeEnvironment,
   }).trim();
 const tenantA = 'ten_fixture_a';
 const storeA = 'sto_fixture_a';
@@ -59,6 +68,10 @@ try {
   }
   const stale = await create(tenantA, storeA, 25);
   const fresh = await create(tenantA, storeA);
+  const expectedScope = createHash('sha256')
+    .update(`${tenantA}\0${storeA}`)
+    .digest('hex');
+  assert.ok(fresh.includes(`wctm-privacy-export-${expectedScope}-`));
   const otherScope = await create(tenantB, storeB, 25);
   const oldMtime = await create(tenantA, storeB);
   const yesterday = new Date(Date.now() - 25 * 3600000);
@@ -88,30 +101,29 @@ try {
     `-${Date.now() - 25 * 3600000}-$1`
   );
   await symlink(outsideFile, symlinkName);
-  const refused = spawnSync(process.execPath, [helper, 'sweep', directory], {
+  const refused = spawnSync('/bin/bash', [helper, 'sweep', directory], {
     encoding: 'utf8',
+    env: noNodeEnvironment,
   });
   assert.notEqual(refused.status, 0);
   assert.equal(await exists(outsideFile), true);
   const escape = spawnSync(
-    process.execPath,
+    '/bin/bash',
     [helper, 'sweep', `${directory}/../outside`],
-    { encoding: 'utf8' }
+    { encoding: 'utf8', env: noNodeEnvironment }
   );
   assert.notEqual(escape.status, 0);
-  const wrongDirectory = spawnSync(
-    process.execPath,
-    [helper, 'sweep', outside],
-    { encoding: 'utf8' }
-  );
+  const wrongDirectory = spawnSync('/bin/bash', [helper, 'sweep', outside], {
+    encoding: 'utf8',
+    env: noNodeEnvironment,
+  });
   assert.notEqual(wrongDirectory.status, 0);
   const linkedDirectory = join(root, 'linked-privacy');
   await symlink(directory, linkedDirectory);
-  const linked = spawnSync(
-    process.execPath,
-    [helper, 'sweep', linkedDirectory],
-    { encoding: 'utf8' }
-  );
+  const linked = spawnSync('/bin/bash', [helper, 'sweep', linkedDirectory], {
+    encoding: 'utf8',
+    env: noNodeEnvironment,
+  });
   assert.notEqual(linked.status, 0);
   assert.equal(await exists(outsideFile), true);
   assert.doesNotMatch(
