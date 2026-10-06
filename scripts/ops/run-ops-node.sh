@@ -6,9 +6,10 @@ fail() {
   exit 1
 }
 
-repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
-image=$(awk 'NR == 1 {print $2}' "$repo_root/backend/Dockerfile")
-[[ $image =~ ^node:24\.20\.0-alpine3\.24@sha256:[0-9a-f]{64}$ ]] || fail
+image_tag=wctm-privacy-ops:node24.20.0-alpine3.24-openssl3.5.9-r0
+image_details=$(docker image inspect --format '{{.Id}} {{index .Config.Labels "org.wctm.runtime"}} {{.Config.User}}' "$image_tag" 2>/dev/null) || fail
+read -r image runtime_label image_user <<<"$image_details"
+[[ $image =~ ^sha256:[0-9a-f]{64}$ && $runtime_label = privacy-ops && $image_user = node ]] || fail
 mounts=()
 while (($#)); do
   case "$1" in
@@ -33,4 +34,4 @@ done
 docker run --rm --interactive --pull=never --network=none --read-only \
   --user "$(id -u):$(id -g)" --cap-drop=ALL \
   --security-opt=no-new-privileges --pids-limit=64 \
-  "${mounts[@]}" --entrypoint node "$image" "$@" || fail
+  ${mounts[@]+"${mounts[@]}"} --entrypoint node "$image" "$@" || fail

@@ -139,10 +139,14 @@ receives only `.dump.enc`, `.dump.enc.json` and `.dump.enc.sha256` for new sets.
 AES-256-GCM authenticates ciphertext; local SHA-256 verifies the original dump,
 and remote content SHA-256 verifies uploaded ciphertext. The key must be owned
 by the dedicated backup account outside Git and OneDrive. Encryption, metadata
-selection and restore use a short-lived, network-disabled container from the
-exact reviewed Node 24.20.0 Alpine 3.24 base digest in `backend/Dockerfile`.
-The runtime is local-only (`--pull=never`), read-only and given only the
-explicit input/key/output mounts. Docker access, that locally built base image
+selection and restore use the dedicated `privacy-ops` target in
+`backend/Dockerfile`. Build it locally before backup or privacy operations:
+`docker build --pull=false --target privacy-ops -t wctm-privacy-ops:node24.20.0-alpine3.24-openssl3.5.9-r0 -f backend/Dockerfile .`.
+It inherits the immutable reviewed Node 24.20.0 / Alpine 3.24 base and the
+SHA-256-verified OpenSSL 3.5.9-r0 package installation, then removes global npm,
+Corepack, Yarn and APK tooling. The runner resolves the reviewed local tag to an immutable
+image ID and uses it with `--pull=never`, no network, a read-only root and only
+explicit input/key/output mounts. Docker access, that locally built ops image
 and the readable key file require live validation; no host Node installation is
 needed. The decrypted dump is only created in
 an operator-controlled 0700 directory, then used with the existing isolated

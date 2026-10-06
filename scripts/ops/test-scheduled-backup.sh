@@ -6,8 +6,7 @@ export TEST_DOCKER_NODE_FIXTURE="$(pwd -P)/scripts/ops/test-fixtures/docker-node
 export TEST_NODE=$(command -v node)
 workspace=$(mktemp -d)
 trap 'chmod 0600 "$workspace/rclone.conf" "$workspace/.env" 2>/dev/null || true; rm -rf -- "$workspace"' EXIT
-mkdir -p "$workspace/scripts/ops" "$workspace/bin" "$workspace/backups" "$workspace/backend"
-cp backend/Dockerfile "$workspace/backend/Dockerfile"
+mkdir -p "$workspace/scripts/ops" "$workspace/bin" "$workspace/backups"
 cp scripts/ops/scheduled-backup.sh scripts/ops/backup-postgres.sh \
   scripts/ops/offsite-rclone.sh scripts/ops/offsite-retention.sh \
   scripts/ops/decrypt-offsite.sh \
@@ -60,6 +59,9 @@ case "${1:-}" in
     exit 99
     ;;
   run)
+    exec "$TEST_DOCKER_NODE_FIXTURE" "$@"
+    ;;
+  image)
     exec "$TEST_DOCKER_NODE_FIXTURE" "$@"
     ;;
   *) exit 99 ;;

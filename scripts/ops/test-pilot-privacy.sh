@@ -16,7 +16,7 @@ cp scripts/ops/test-fixtures/rclone "$workspace/bin/rclone"
 cat >"$workspace/bin/docker" <<'SH'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$TEST_DOCKER_LOG"
-if [[ ${1:-} = run ]]; then
+if [[ ${1:-} = run || ( ${1:-} = image && ${2:-} = inspect ) ]]; then
   exec "$TEST_DOCKER_NODE_FIXTURE" "$@"
 fi
 previous=''
