@@ -1,8 +1,8 @@
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, StoreStatus } from '@prisma/client';
 import { createHash } from 'node:crypto';
-import { open, readFile, stat, writeFile } from 'node:fs/promises';
-import { isAbsolute, resolve } from 'node:path';
+import { lstat, open, readFile, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, resolve } from 'node:path';
 
 import { EncryptionService } from '../common/encryption/encryption.service';
 import type { ApplicationConfigService } from '../config/application-config.service';
@@ -60,8 +60,14 @@ function parse(args: string[]): Options {
   ) {
     throw new Error('exact Tenant, Store and HTTPS base URL are required');
   }
-  if (['export'].includes(mode) && (!output || !isAbsolute(output))) {
+  if (mode === 'export' && (!output || !isAbsolute(output))) {
     throw new Error('export requires an absolute protected output path');
+  }
+  if (mode === 'export' && (!ledger || !isAbsolute(ledger))) {
+    throw new Error('export requires the protected privacy directory');
+  }
+  if (mode === 'export' && !args.includes('--retain-for-delivery')) {
+    throw new Error('export requires explicit delivery retention');
   }
   if (
     ['prepare-erasure', 'erase', 'replay'].includes(mode) &&
@@ -84,6 +90,31 @@ function parse(args: string[]): Options {
 
 function fingerprint(value: string): string {
   return createHash('sha256').update(value).digest('hex');
+}
+
+export async function verifyExportOutput(
+  output: string,
+  ledger: string,
+  target: PilotTarget
+): Promise<void> {
+  const scope = createHash('sha256')
+    .update(`${target.tenantId}\0${target.storeId}`)
+    .digest('hex');
+  if (
+    !new RegExp(
+      `^wctm-privacy-export-${scope}-[0-9]{13}-[0-9a-f]{16}\\.json$`
+    ).test(basename(output)) ||
+    output !== resolve(output) ||
+    resolve(dirname(output)) !== resolve(dirname(ledger))
+  ) {
+    throw new Error(
+      'privacy export path is outside the scoped artifact contract'
+    );
+  }
+  const directory = await lstat(dirname(ledger));
+  if (!directory.isDirectory() || (directory.mode & 0o777) !== 0o700) {
+    throw new Error('privacy export directory must be protected');
+  }
 }
 
 async function verifyLedger(path: string): Promise<void> {
@@ -261,6 +292,7 @@ async function main(): Promise<void> {
         `${JSON.stringify({ target: target.storeId, disconnected: options.execute, remoteWebhookCleanup })}\n`
       );
     } else if (options.mode === 'export') {
+      await verifyExportOutput(options.output!, options.ledger!, target);
       const report = await service.export(target);
       await writeFile(options.output!, `${JSON.stringify(report)}\n`, {
         flag: 'wx',

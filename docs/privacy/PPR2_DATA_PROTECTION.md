@@ -38,7 +38,39 @@ is 0600/0400, and is never committed. The backend runtime DB role is rejected.
 Execution of disconnect/scrub/erase/replay refuses to run while backend or bot
 containers are running. This is an intentional maintenance window, not an API
 that merchant input can invoke. Inspect/export are read-only with respect to
-the database; export creates a new mode-0600 file in the protected directory.
+the database. `export` requires `--retain-for-delivery`; the wrapper generates
+an exact Store-scoped `wctm-privacy-export-<scope-hash>-<millisecond-time>-<nonce>.json`
+name inside the protected directory and the CLI creates it mode 0600. No
+operator-supplied output path is accepted by the wrapper. The hash binds the
+file to the exact Tenant/Store without putting merchant data in its name.
+
+After a successful `erase --execute`, the wrapper removes only matching exports
+for that Tenant/Store. After a merchant export has been securely delivered,
+the operator runs this scoped cleanup to finish that request:
+
+```sh
+node scripts/ops/privacy-export-artifacts.mjs purge /var/lib/wctm/privacy TENANT_ID STORE_ID
+```
+
+Delivery
+outside the protected directory must use an approved protected channel; the
+file is not a long-term archive. Every operator entry also sweeps expired
+exports. Install and enable the reviewed
+`ops/systemd/wctm-privacy-export-retention.service` and `.timer` for the
+canonical `/var/lib/wctm/privacy` directory, owned by the `wctm` service
+account with mode 0700. The timer runs under that existing account and does not
+require another account to receive Docker or ledger access; its unit hides the
+Docker socket and production `.env`. Install the two
+unit files from `ops/systemd/`, reload systemd, enable the timer and verify the
+first one-shot sweep succeeds before using real merchant exports. The hourly
+timer deletes exact export artifacts at
+23 hours, using the earliest valid name/filesystem creation evidence, so an
+operating timer bounds abandoned files to at most 24 hours;
+check timer/service failures during pilot operations. The sweep refuses
+symlinks and non-0600 matching files and never selects the erasure ledger,
+keys, backups or arbitrary operator files. Removal unlinks the file; storage
+snapshots and filesystem remnants remain subject to their own retention and
+access controls.
 
 Disconnect first revokes the connector token, registration token, webhook route
 and secret, replaces the encrypted Woo REST key/secret with unusable random
@@ -73,18 +105,19 @@ retention; they are not rewritten in place.
 
 ## Explicit pilot retention decisions
 
-| Data                                                        | Repository rule                                         | Boundary                                                                                                  |
-| ----------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| BullMQ completed jobs                                       | 24 hours; terminal cleanup hourly, up to 1000 per sweep | Active/waiting/delayed work is never selected. Heavy backlog may take additional sweeps.                  |
-| BullMQ failed jobs                                          | 7 days; same terminal sweep                             | Diagnostic result/IDs persist until then.                                                                 |
-| Redis rate-limit and dedupe state                           | Existing 60-second rate windows; job keys as above      | Redis AOF is persistent and old bytes may remain until compaction; physical data expiry needs live proof. |
-| Link/registration tokens and encrypted callback/search text | Clear 1 day after their expiry; daily sweep             | Existing active TTLs remain unchanged.                                                                    |
-| Completed webhook payload                                   | Clear 30 days after completion; daily sweep             | Event metadata/dedupe stays for operational integrity.                                                    |
-| Failed webhook payload                                      | Clear 90 days after failure; daily sweep                | Pending/active events are untouched.                                                                      |
-| Security audit rows                                         | 365 days; daily sweep                                   | Minimal erasure ledger is held separately for restore safety.                                             |
-| Local PostgreSQL backups                                    | Existing 14 validated sets                              | Newer 14 sets always protected; this is count-based, not a calendar age.                                  |
-| New encrypted OneDrive sets                                 | 30 days, always keep newest 2 complete sets             | Legacy plaintext and incomplete sets are never auto-deleted.                                              |
-| Application and scheduler logs                              | No repository-enforced calendar limit yet               | Host Docker/journald policy and live proof are a pilot gate.                                              |
+| Data                                                        | Repository rule                                             | Boundary                                                                                                                                            |
+| ----------------------------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BullMQ completed jobs                                       | 24 hours; terminal cleanup hourly, up to 1000 per sweep     | Active/waiting/delayed work is never selected. Heavy backlog may take additional sweeps.                                                            |
+| BullMQ failed jobs                                          | 7 days; same terminal sweep                                 | Diagnostic result/IDs persist until then.                                                                                                           |
+| Redis rate-limit and dedupe state                           | Existing 60-second rate windows; job keys as above          | Redis AOF is persistent and old bytes may remain until compaction; physical data expiry needs live proof.                                           |
+| Link/registration tokens and encrypted callback/search text | Clear 1 day after their expiry; daily sweep                 | Existing active TTLs remain unchanged.                                                                                                              |
+| Completed webhook payload                                   | Clear 30 days after completion; daily sweep                 | Event metadata/dedupe stays for operational integrity.                                                                                              |
+| Failed webhook payload                                      | Clear 90 days after failure; daily sweep                    | Pending/active events are untouched.                                                                                                                |
+| Security audit rows                                         | 365 days; daily sweep                                       | Minimal erasure ledger is held separately for restore safety.                                                                                       |
+| Protected Store privacy exports                             | Remove after erasure or confirmed delivery; 24-hour maximum | Exact scoped names only; hourly sweep begins at 23 hours, with a sweep on every operator entry. Timer installation/live proof remains a pilot gate. |
+| Local PostgreSQL backups                                    | Existing 14 validated sets                                  | Newer 14 sets always protected; this is count-based, not a calendar age.                                                                            |
+| New encrypted OneDrive sets                                 | 30 days, always keep newest 2 complete sets                 | Legacy plaintext and incomplete sets are never auto-deleted.                                                                                        |
+| Application and scheduler logs                              | No repository-enforced calendar limit yet                   | Host Docker/journald policy and live proof are a pilot gate.                                                                                        |
 
 ## WordPress and backup confidentiality
 
@@ -135,6 +168,9 @@ retention/deletion decision. Treat them as sensitive until removed.
    promising complete account erasure.
 5. Verify WordPress salt-loss reconnect/rotation and Woo-owned signing-secret
    cleanup on a representative pilot merchant site.
+6. Install and verify the protected privacy-export retention timer on the
+   operator host before processing real merchant exports. Review its service
+   status and confirm the privacy directory ownership and mode.
 
 Until these gates are closed and accepted, PPR-2 remains active and real-merchant
 pilot onboarding remains blocked. No public-launch readiness is claimed.

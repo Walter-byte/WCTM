@@ -21,6 +21,8 @@ Phase 6 remain deferred/unstarted. Private Pilot Readiness is the current active
 initiative. PPR-1 is complete on canonical `main`; PPR-2 is the active
 implementation task for pilot data protection. New minimization, operator
 lifecycle, retention and backup encryption controls are under local validation.
+Store privacy exports now have scoped protected files, completion cleanup and
+an hourly 24-hour retention bound awaiting operator-host validation.
 Remaining operational and account-deletion gates block real-merchant onboarding.
 Engineering remains frozen except for pilot-blocking defects.
 Unrestricted public launch is not approved.

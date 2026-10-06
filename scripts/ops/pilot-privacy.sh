@@ -23,6 +23,7 @@ directory_mode=$(stat -c '%a' "$privacy_directory" 2>/dev/null || stat -f '%Lp' 
   echo >&2 'privacy operation refused: credential must be 0600/0400 and directory 0700'
   exit 65
 }
+privacy_directory=$(cd "$privacy_directory" && pwd -P)
 database_url=''
 count=0
 while IFS= read -r line || [[ -n "$line" ]]; do
@@ -54,6 +55,36 @@ case "$mode" in
   inspect|disconnect|export|erase|scrub|replay) ;;
   *) echo >&2 'privacy operation refused: invalid mode'; exit 64 ;;
 esac
+
+# Expired exports are swept on every operator entry as well as by the hourly timer.
+node scripts/ops/privacy-export-artifacts.mjs sweep "$privacy_directory"
+
+target_ids() {
+  tenant_id=''
+  store_id=''
+  while (($#)); do
+    case "$1" in
+      --tenant-id)
+        [[ -z "$tenant_id" && $# -ge 2 ]] || return 1
+        tenant_id=$2; shift 2 ;;
+      --store-id)
+        [[ -z "$store_id" && $# -ge 2 ]] || return 1
+        store_id=$2; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  [[ -n "$tenant_id" && -n "$store_id" ]]
+}
+
+if [[ "$mode" = export ]]; then
+  [[ " $* " = *' --retain-for-delivery '* && " $* " != *' --output '* ]] || {
+    echo >&2 'privacy export refused: explicit delivery retention is required; output path is managed'
+    exit 64
+  }
+  target_ids "$@" || { echo >&2 'privacy export refused: exact target IDs are required'; exit 64; }
+  output=$(node scripts/ops/privacy-export-artifacts.mjs new-path "$privacy_directory" "$tenant_id" "$store_id")
+  set -- "$@" --output "$output"
+fi
 
 if [[ " $* " = *' --execute '* ]]; then
   case "$mode" in
@@ -93,6 +124,11 @@ if [[ "$mode" = erase && " $* " = *' --execute '* ]]; then
   run_privacy prepare-erasure "$@"
   scripts/ops/archive-erasure-ledger.sh "$ledger" "${WCTM_OFFSITE_DESTINATION%/}/privacy-erasure-ledger"
   run_privacy erase "$@"
+  target_ids "$@"
+  node scripts/ops/privacy-export-artifacts.mjs purge "$privacy_directory" "$tenant_id" "$store_id"
 else
   run_privacy "$mode" "$@"
+  if [[ "$mode" = export ]]; then
+    printf 'privacy export retained for delivery: %s\n' "$output"
+  fi
 fi

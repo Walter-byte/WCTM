@@ -1,10 +1,15 @@
 import { afterEach, describe, expect, it, jest } from '@jest/globals';
 import { PrismaClient, StoreStatus } from '@prisma/client';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { appendLedger, replayLedger } from './pilot-data.cli';
+import {
+  appendLedger,
+  replayLedger,
+  verifyExportOutput,
+} from './pilot-data.cli';
 import type { PilotDataService } from './pilot-data.service';
 
 const target = {
@@ -85,5 +90,44 @@ describe('external erasure ledger replay', () => {
       'does not match'
     );
     expect(service.disconnect).not.toHaveBeenCalled();
+  });
+});
+
+describe('protected privacy export path', () => {
+  it('accepts only the exact Tenant/Store artifact contract beside the ledger', async () => {
+    const ledger = await fixture();
+    const directory = join(ledger, '..');
+    const scope = createHash('sha256')
+      .update(`${target.tenantId}\0${target.storeId}`)
+      .digest('hex');
+    const name = `wctm-privacy-export-${scope}-${Date.now()}-0123456789abcdef.json`;
+    await expect(
+      verifyExportOutput(join(directory, name), ledger, target)
+    ).resolves.toBeUndefined();
+    await expect(
+      verifyExportOutput(
+        join(directory, 'erasure-ledger.jsonl'),
+        ledger,
+        target
+      )
+    ).rejects.toThrow('scoped artifact contract');
+    await expect(
+      verifyExportOutput(join(directory, '..', name), ledger, target)
+    ).rejects.toThrow('scoped artifact contract');
+    await expect(
+      verifyExportOutput(
+        join(directory, name.replace(scope, '0'.repeat(64))),
+        ledger,
+        target
+      )
+    ).rejects.toThrow('scoped artifact contract');
+    const link = join(directory, 'linked');
+    await symlink(directory, link);
+    await expect(
+      verifyExportOutput(join(link, name), ledger, target)
+    ).rejects.toThrow('scoped artifact contract');
+    await expect(
+      verifyExportOutput(`${link}/../${name}`, ledger, target)
+    ).rejects.toThrow('scoped artifact contract');
   });
 });
