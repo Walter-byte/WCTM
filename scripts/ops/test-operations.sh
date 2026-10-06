@@ -7,6 +7,7 @@ suffix="$(date -u '+%Y%m%dT%H%M%SZ')-$$"
 source_container="wctm-ops-test-$suffix"
 source_volume="wctm_ops_test_$suffix"
 source_network="wctm_ops_test_$suffix"
+privacy_volume="wctm_privacy_test_$suffix"
 workspace=$(mktemp -d)
 secret_marker='test-password-must-not-appear'
 
@@ -17,6 +18,9 @@ cleanup() {
   esac
   case "$source_network" in
     wctm_ops_test_*) docker network rm "$source_network" >/dev/null 2>&1 || true ;;
+  esac
+  case "$privacy_volume" in
+    wctm_privacy_test_*) docker volume rm "$privacy_volume" >/dev/null 2>&1 || true ;;
   esac
   rm -rf -- "$workspace"
 }
@@ -31,6 +35,7 @@ done
 bash -n scripts/ops/test-fixtures/rclone
 docker compose config --quiet
 docker compose build migrate >/dev/null
+docker compose build backend >/dev/null
 [[ $(docker run --rm --entrypoint id wctm-migrate:latest -u) = 1000 ]]
 
 if WCTM_MIGRATION_OPERATION=P7_2_EXPLICIT_MIGRATION DATABASE_URL='postgresql://wctm_runtime:sentinel@postgres/db' scripts/ops/run-migrations.sh >"$workspace/migration.log" 2>&1; then
@@ -99,6 +104,9 @@ backup=$(find "$workspace/backups" -maxdepth 1 -name 'wctm-postgres-*.dump' -pri
 [[ -n "$backup" && -f "$backup.sha256" && -f "$backup.json" ]]
 
 mkdir "$workspace/test-bin" "$workspace/offsite-native" "$workspace/offsite-streamed" "$workspace/offsite-corrupt"
+openssl rand 32 >"$workspace/backup.key"
+chmod 0600 "$workspace/backup.key"
+export WCTM_BACKUP_CRYPTO_KEY_FILE="$workspace/backup.key"
 cp scripts/ops/test-fixtures/rclone "$workspace/test-bin/rclone"
 chmod 0700 "$workspace/test-bin/rclone"
 PATH="$workspace/test-bin:$PATH" scripts/ops/offsite-rclone.sh \
@@ -117,16 +125,24 @@ if WCTM_TEST_RCLONE_NATIVE_HASH=unavailable WCTM_TEST_RCLONE_CORRUPT_DUMP=true \
   echo >&2 'test failed: same-size remote corruption was accepted'
   exit 1
 fi
-remote_corrupt="$workspace/offsite-corrupt/$(basename "$backup")"
-[[ $(wc -c <"$remote_corrupt" | tr -d ' ') = $(wc -c <"$backup" | tr -d ' ') ]]
-[[ $(sha256sum "$remote_corrupt" | awk '{print $1}') != $(sha256sum "$backup" | awk '{print $1}') ]]
-grep -q 'remote dump SHA-256 mismatch' "$workspace/offsite-corrupt.log"
+remote_corrupt="$workspace/offsite-corrupt/$(basename "$backup").enc"
+[[ -s "$remote_corrupt" ]]
+grep -q 'remote encrypted dump SHA-256 mismatch' "$workspace/offsite-corrupt.log"
 ! grep -q "$secret_marker" "$workspace/offsite-native.log" "$workspace/offsite-streamed.log" "$workspace/offsite-corrupt.log"
 
 if ! scripts/ops/restore-isolated.sh --backup "$backup" --critical-table tenants --critical-table stores --critical-table operations_probe >"$workspace/restore.log" 2>&1; then
   cat "$workspace/restore.log" >&2
   exit 1
 fi
+mkdir "$workspace/decrypted"
+scripts/ops/decrypt-offsite.sh \
+  "$workspace/offsite-streamed/$(basename "$backup").enc" \
+  "$workspace/offsite-streamed/$(basename "$backup").enc.json" \
+  "$workspace/decrypted" >"$workspace/decrypt.log" 2>&1
+cmp "$backup" "$workspace/decrypted/$(basename "$backup")"
+scripts/ops/restore-isolated.sh --backup "$workspace/decrypted/$(basename "$backup")" \
+  --critical-table operations_probe >"$workspace/restore-offsite.log" 2>&1
+grep -q 'isolated restore: PASS migrations=16' "$workspace/restore-offsite.log"
 grep -q 'isolated restore: PASS migrations=16' "$workspace/restore.log"
 grep -q 'critical table: tenants rows=0' "$workspace/restore.log"
 grep -q 'critical table: stores rows=0' "$workspace/restore.log"
@@ -144,4 +160,57 @@ if scripts/ops/restore-isolated.sh --backup "$corrupt_backup" >"$workspace/corru
   exit 1
 fi
 
-echo 'operations integration: PASS migration-twice backup restore data checksum corruption retention offsite-native-sha256 offsite-streamed-sha256 offsite-same-size-corruption-rejected identity-boundary secret-safe-logs'
+docker exec -i "$source_container" psql -X -v ON_ERROR_STOP=1 -U postgres -d wctm_ops_test >/dev/null <<'SQL'
+INSERT INTO tenants (id, name, updated_at)
+VALUES ('ten_privacy_a', 'Privacy A', now()), ('ten_privacy_b', 'Privacy B', now());
+INSERT INTO stores (id, tenant_id, name, base_url, status, consumer_key_encrypted, consumer_secret_encrypted, updated_at)
+VALUES ('sto_privacy_a', 'ten_privacy_a', 'Store A', 'https://a.example.test', 'ACTIVE', 'fixture', 'fixture', now()),
+       ('sto_privacy_b', 'ten_privacy_b', 'Store B', 'https://b.example.test', 'ACTIVE', 'fixture', 'fixture', now());
+INSERT INTO webhook_events (id, tenant_id, store_id, webhook_id, delivery_id, dedupe_key, topic, payload, status, updated_at)
+VALUES ('evt_privacy_a', 'ten_privacy_a', 'sto_privacy_a', '42', 'delivery-a', 'delivery-a',
+        'order.updated', '{"id":12,"billing":{"email":"fixture@example.test"}}', 'COMPLETED', now());
+SQL
+docker volume create "$privacy_volume" >/dev/null
+docker run --rm --network none --user root --mount "type=volume,source=$privacy_volume,destination=/privacy" \
+  --entrypoint sh wctm-backend:latest -c 'chown node:node /privacy && chmod 0700 /privacy' >/dev/null
+docker run --rm --network none --mount "type=volume,source=$privacy_volume,destination=/privacy" \
+  --entrypoint sh wctm-backend:latest -c 'umask 077; : > /privacy/erasure-ledger.jsonl' >/dev/null
+privacy_database_url="postgresql://postgres:$secret_marker@postgres:5432/wctm_ops_test"
+privacy_key=$(openssl rand -base64 32)
+privacy_cli() {
+  docker run --rm --network "$source_network" \
+    --mount "type=volume,source=$privacy_volume,destination=/privacy" \
+    -e "DATABASE_URL=$privacy_database_url" -e "APP_ENCRYPTION_KEY=$privacy_key" \
+    -e WCTM_PILOT_PRIVACY_OPERATION=operator-approved \
+    --entrypoint node wctm-backend:latest dist/privacy/pilot-data.cli.js "$@"
+}
+privacy_target=(--tenant-id ten_privacy_a --store-id sto_privacy_a --base-url https://a.example.test)
+privacy_cli inspect "${privacy_target[@]}" >"$workspace/privacy-inspect.log" 2>&1
+privacy_cli scrub "${privacy_target[@]}" --execute >"$workspace/privacy-scrub.log" 2>&1
+[[ $(docker exec "$source_container" psql -XAtq -U postgres -d wctm_ops_test -c "select payload ? 'billing' from webhook_events where id='evt_privacy_a'") = t ]]
+[[ $(docker exec "$source_container" psql -XAtq -U postgres -d wctm_ops_test -c "select payload->'billing' ? 'email' from webhook_events where id='evt_privacy_a'") = f ]]
+if privacy_cli erase --tenant-id ten_privacy_b --store-id sto_privacy_a \
+  --base-url https://a.example.test --ledger /privacy/erasure-ledger.jsonl --execute \
+  >"$workspace/privacy-cross-tenant.log" 2>&1; then
+  echo >&2 'test failed: cross-tenant privacy erasure was accepted'
+  exit 1
+fi
+privacy_cli disconnect "${privacy_target[@]}" --execute >"$workspace/privacy-disconnect.log" 2>&1
+privacy_cli prepare-erasure "${privacy_target[@]}" --ledger /privacy/erasure-ledger.jsonl --execute \
+  >"$workspace/privacy-prepare.log" 2>&1
+privacy_cli erase "${privacy_target[@]}" --ledger /privacy/erasure-ledger.jsonl --execute \
+  >"$workspace/privacy-erase.log" 2>&1
+[[ $(docker exec "$source_container" psql -XAtq -U postgres -d wctm_ops_test -c "select base_url from stores where id='sto_privacy_a'") = https://erased.invalid/sto_privacy_a ]]
+[[ $(docker exec "$source_container" psql -XAtq -U postgres -d wctm_ops_test -c "select base_url from stores where id='sto_privacy_b'") = https://b.example.test ]]
+docker exec -i "$source_container" psql -X -v ON_ERROR_STOP=1 -U postgres -d wctm_ops_test >/dev/null <<'SQL'
+UPDATE stores SET name='Store A', base_url='https://a.example.test', status='ACTIVE', deleted_at=NULL
+WHERE id='sto_privacy_a';
+UPDATE webhook_events SET payload='{"id":12,"billing":{"email":"fixture@example.test"}}'
+WHERE id='evt_privacy_a';
+SQL
+privacy_cli replay --ledger /privacy/erasure-ledger.jsonl --execute >"$workspace/privacy-replay.log" 2>&1
+[[ $(docker exec "$source_container" psql -XAtq -U postgres -d wctm_ops_test -c "select base_url from stores where id='sto_privacy_a'") = https://erased.invalid/sto_privacy_a ]]
+[[ $(docker exec "$source_container" psql -XAtq -U postgres -d wctm_ops_test -c "select payload from webhook_events where id='evt_privacy_a'") = '{}' ]]
+! grep -q "$secret_marker" "$workspace"/privacy-*.log
+
+echo 'operations integration: PASS migration-twice backup restore data checksum corruption retention encrypted-offsite-sha256 cross-tenant-erasure privacy-scrub disconnect erasure ledger-replay identity-boundary secret-safe-logs'

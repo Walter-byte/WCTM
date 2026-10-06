@@ -13,6 +13,7 @@ import { StructuredLoggerService } from '../common/logging/structured-logger.ser
 import { PrismaService } from '../prisma/prisma.service';
 import { WooCommerceWebhookJobProducer } from '../queue/woocommerce-webhook-job.producer';
 import type { WebhookRequestHeaders } from './woocommerce-webhook.controller';
+import { minimizeWebhookPayload } from './webhook-payload-minimizer';
 
 const GENERIC_NOT_FOUND_MESSAGE = 'Webhook endpoint was not found';
 const MALFORMED_REQUEST_MESSAGE = 'Webhook request is malformed';
@@ -87,7 +88,10 @@ export class WooCommerceWebhookIngestionService {
       throw new UnauthorizedException(INVALID_SIGNATURE_MESSAGE);
     }
 
-    const payload = this.parsePayload(body);
+    const payload = minimizeWebhookPayload(
+      requiredHeaders.topic,
+      this.parsePayload(body)
+    );
     const event = await this.persistOrFind(store, requiredHeaders, payload);
 
     if (event.status !== WebhookEventStatus.RECEIVED) {

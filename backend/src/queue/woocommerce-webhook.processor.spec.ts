@@ -54,7 +54,7 @@ function setup(
 ) {
   const event = {
     id: 'evt_a',
-    tenantId: 'ten_event_untrusted',
+    tenantId: 'ten_a',
     storeId: 'sto_a',
     topic: 'order.created',
     payload: { id: 101 },
@@ -148,6 +148,7 @@ function setup(
     }
   );
   const findUnique = jest.fn(async () => event);
+  const storeCount = jest.fn(async () => 1);
   const project = jest.fn(async () => undefined);
   const schedule = jest.fn(async () => undefined);
   const projectInventory = jest.fn<
@@ -157,6 +158,7 @@ function setup(
   const processor = new WooCommerceWebhookProcessor(
     {
       webhookEvent: { updateMany, findUnique },
+      store: { count: storeCount },
     } as unknown as PrismaService,
     { project } as unknown as OrderProjectionService,
     {
@@ -174,10 +176,22 @@ function setup(
     schedule,
     scheduleInventory,
     updateMany,
+    storeCount,
   };
 }
 
 describe('WooCommerce order webhook worker lifecycle', () => {
+  it('stops a claimed event if the Store was disconnected before processing', async () => {
+    const fixture = setup();
+    fixture.storeCount.mockResolvedValue(0);
+
+    await expect(fixture.processor.process(webhookJob())).rejects.toThrow(
+      'Store is disconnected'
+    );
+    expect(fixture.project).not.toHaveBeenCalled();
+    expect(fixture.schedule).not.toHaveBeenCalled();
+    expect(fixture.event.status).toBe(WebhookEventStatus.FAILED);
+  });
   it.each([
     [
       'order.created',

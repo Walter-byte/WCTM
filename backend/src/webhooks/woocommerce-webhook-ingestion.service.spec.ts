@@ -274,6 +274,10 @@ function setup(options: { missingSecret?: boolean } = {}) {
     preload,
     publishedJobIds,
     service,
+    disconnectStore() {
+      stores[0]!.status = StoreStatus.DISCONNECTED;
+      stores[0]!.deletedAt = new Date();
+    },
     setEnqueueFailure(value: boolean) {
       enqueueFailure = value;
     },
@@ -282,6 +286,17 @@ function setup(options: { missingSecret?: boolean } = {}) {
 }
 
 describe('WooCommerce webhook ingestion', () => {
+  it('rejects signed delivery after verified Store disconnect without persistence', async () => {
+    const fixture = setup();
+    fixture.disconnectStore();
+    const body = Buffer.from('{"id":101}');
+    await expect(
+      fixture.service.receive(ENDPOINT_A, headers(body), body)
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(fixture.eventCreate).not.toHaveBeenCalled();
+    expect(fixture.addWooCommerceWebhookJob).not.toHaveBeenCalled();
+  });
+
   it('persists and enqueues one valid signed delivery with deterministic job ID', async () => {
     const fixture = setup();
     const body = Buffer.from(JSON.stringify({ id: 101, status: 'processing' }));
@@ -439,7 +454,13 @@ describe('WooCommerce webhook ingestion', () => {
     expect(fixture.events[0]).toMatchObject({
       tenantId: 'ten_a',
       storeId: 'sto_a',
-      payload: { tenantId: 'ten_b', storeId: 'sto_b', id: 1 },
+      payload: {
+        id: 1,
+        billing: {},
+        shipping: {},
+        line_items: [],
+        shipping_lines: [],
+      },
     });
     expect(fixture.storeFindFirst).toHaveBeenCalledWith(
       expect.objectContaining({

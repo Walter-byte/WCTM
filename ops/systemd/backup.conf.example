@@ -1,6 +1,7 @@
 # Install as /etc/wctm/backup.conf with root:wctm ownership and mode 0640.
 WCTM_BACKUP_DIRECTORY=/var/backups/wctm
 WCTM_BACKUP_RETENTION_COUNT=14
+WCTM_OFFSITE_RETENTION_DAYS=30
 # Replace with the reviewed com.docker.compose.project label on the running
 # PostgreSQL container (normally wctm on /srv/wctm). No database secret is needed.
 WCTM_COMPOSE_PROJECT=SET_REVIEWED_COMPOSE_PROJECT
@@ -9,5 +10,8 @@ WCTM_COMPOSE_PROJECT=SET_REVIEWED_COMPOSE_PROJECT
 # persist token refreshes. The service allows /var/lib/wctm/rclone for this.
 # Keep credentials in that separate file, not this env file or the unit.
 RCLONE_CONFIG=SET_ABSOLUTE_READABLE_RCLONE_CONFIG_PATH
+# Required for off-site copy: path only. Keep 32 raw key bytes in a separate
+# wctm-owned mode-0600 file outside Git and outside OneDrive.
+WCTM_BACKUP_CRYPTO_KEY_FILE=SET_ABSOLUTE_PRIVATE_BACKUP_KEY_PATH
 # Optional provider-neutral rclone remote. Requires the path above when enabled.
 # WCTM_OFFSITE_DESTINATION=remote-name:wctm-production

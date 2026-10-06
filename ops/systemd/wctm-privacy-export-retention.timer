@@ -1,0 +1,11 @@
+[Unit]
+Description=Sweep WCTM pilot privacy exports hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+AccuracySec=1s
+Unit=wctm-privacy-export-retention.service
+
+[Install]
+WantedBy=timers.target

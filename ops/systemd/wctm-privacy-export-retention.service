@@ -1,0 +1,16 @@
+[Unit]
+Description=Remove expired WCTM pilot privacy exports
+
+[Service]
+Type=oneshot
+User=wctm
+Group=wctm
+WorkingDirectory=/srv/wctm
+ExecStart=/usr/bin/env node /srv/wctm/scripts/ops/privacy-export-artifacts.mjs sweep /var/lib/wctm/privacy
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/wctm/privacy
+InaccessiblePaths=-/run/docker.sock -/srv/wctm/.env

@@ -41,13 +41,20 @@ test('connector stores sensitive material with autoload disabled and never rende
     'webhook_secret',
     'webhook_endpoint_key',
   ]) {
-    assert.match(plugin, new RegExp(`store_option\\('${option}'`));
+    assert.match(
+      plugin,
+      new RegExp(
+        `${option === 'webhook_endpoint_key' ? 'store_option' : 'store_secret'}\\('${option}'`
+      )
+    );
   }
   assert.doesNotMatch(
     plugin,
     /echo\s+[^;]*(?:plugin_credential|webhook_secret|endpoint_key)/i
   );
   assert.doesNotMatch(plugin, /error_log|trigger_error/);
+  assert.match(plugin, /openssl_encrypt\(\$value, 'aes-256-gcm'/);
+  assert.match(plugin, /hash_hkdf\('sha256', AUTH_KEY \./);
 });
 
 test('connector installs and verifies every required order and inventory webhook before health confirmation', () => {

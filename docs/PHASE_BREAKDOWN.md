@@ -824,8 +824,10 @@ accepted D-033. Historical provenance review remains assigned to P7.8.
 - Focused security/quality QA
 - Private merchant pilot with real users and usage/payment evidence
 
-Accepted D-033 freezes engineering except for pilot-blocking defects. Pilot
-tasks require separate authorization; none is implemented in this branch.
+Accepted D-033 freezes engineering except for pilot-blocking defects. PPR-1 is
+complete on canonical `main`. PPR-2 is the active, separately authorized pilot
+data-protection task; its implementation and remaining gates are recorded in
+`docs/privacy/PPR2_DATA_PROTECTION.md`. Real-merchant pilots have not started.
 
 ## Phase 6 — SaaS Platform ⬜ Deferred / unstarted
 

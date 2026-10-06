@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+umask 077
 
 if (($# != 4)); then
   echo >&2 'usage: offsite-rclone.sh DUMP CHECKSUM METADATA RCLONE_DESTINATION'
@@ -21,6 +22,15 @@ command -v rclone >/dev/null 2>&1 || {
   echo >&2 'off-site copy failed: rclone is unavailable'
   exit 69
 }
+command -v node >/dev/null 2>&1 || {
+  echo >&2 'off-site copy failed: local Node runtime is unavailable for encryption'
+  exit 69
+}
+key_file=${WCTM_BACKUP_CRYPTO_KEY_FILE:-}
+[[ "$key_file" = /* && -f "$key_file" && -r "$key_file" ]] || {
+  echo >&2 'off-site copy refused: protected backup encryption key file is required'
+  exit 66
+}
 
 read -r expected_dump_sha256 expected_dump_name checksum_extra <"$checksum"
 [[ "$expected_dump_sha256" =~ ^[0-9a-fA-F]{64}$ &&
@@ -36,7 +46,32 @@ local_dump_sha256=$(sha256sum "$dump" | awk '{print $1}')
   exit 1
 }
 
-for file in "$dump" "$checksum" "$metadata"; do
+crypto_script=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/backup-crypto.mjs
+temporary_dir=$(mktemp -d "$(dirname "$dump")/.wctm-offsite.XXXXXXXX")
+trap 'rm -rf -- "$temporary_dir"' EXIT HUP INT TERM
+encrypted="$temporary_dir/$(basename "$dump").enc"
+node "$crypto_script" encrypt "$key_file" "$dump" "$encrypted" || {
+  echo >&2 'off-site copy failed: local backup encryption failed'
+  exit 1
+}
+encrypted_checksum="$encrypted.sha256"
+encrypted_sha256=$(sha256sum "$encrypted" | awk '{print $1}')
+printf '%s  %s\n' "$encrypted_sha256" "$(basename "$encrypted")" >"$encrypted_checksum"
+encrypted_metadata="$encrypted.json"
+key_id=$(sha256sum "$key_file" | awk '{print substr($1, 1, 16)}')
+node -e '
+const fs = require("node:fs");
+const [source, target, keyId, ciphertextSha256] = process.argv.slice(1);
+const record = JSON.parse(fs.readFileSync(source, "utf8"));
+if (record.format !== "postgresql-custom" || !/^[0-9a-f]{64}$/.test(record.sha256)) process.exit(1);
+record.offsiteEncryption = { format: "WCTMBACKUPAESG1", keyId, ciphertextSha256 };
+fs.writeFileSync(target, JSON.stringify(record) + "\n", { flag: "wx", mode: 0o600 });
+' "$metadata" "$encrypted_metadata" "$key_id" "$encrypted_sha256" || {
+  echo >&2 'off-site copy failed: encrypted metadata preparation failed'
+  exit 1
+}
+
+for file in "$encrypted" "$encrypted_checksum" "$encrypted_metadata"; do
   name=$(basename "$file")
   rclone copyto -- "$file" "$destination/$name"
   local_size=$(wc -c <"$file" | tr -d ' ')
@@ -47,7 +82,7 @@ for file in "$dump" "$checksum" "$metadata"; do
   }
 done
 
-remote_dump="$destination/$(basename "$dump")"
+remote_dump="$destination/$(basename "$encrypted")"
 remote_dump_sha256=''
 verification_method=''
 if native_hash_output=$(rclone hashsum sha256 "$remote_dump" 2>/dev/null); then
@@ -70,8 +105,8 @@ if [[ -z "$remote_dump_sha256" ]]; then
   verification_method='streamed-sha256'
 fi
 
-[[ "$remote_dump_sha256" = "$expected_dump_sha256" ]] || {
-  echo >&2 'off-site copy failed: remote dump SHA-256 mismatch'
+[[ "$remote_dump_sha256" = "$encrypted_sha256" ]] || {
+  echo >&2 'off-site copy failed: remote encrypted dump SHA-256 mismatch'
   exit 1
 }
 

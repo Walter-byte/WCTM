@@ -16,6 +16,10 @@ import {
   ORDER_NOTIFICATION_JOB_NAME,
   REFERENCE_JOB_ATTEMPTS,
   REFERENCE_JOB_BACKOFF_MS,
+  COMPLETED_JOB_RETENTION_SECONDS,
+  FAILED_JOB_RETENTION_SECONDS,
+  QUEUE_RETENTION_SWEEP_MS,
+  QUEUE_RETENTION_BATCH_SIZE,
   REFERENCE_JOB_NAME,
   WOOCOMMERCE_WEBHOOK_JOB_NAME,
 } from './queue.constants';
@@ -110,6 +114,7 @@ export class QueueRuntimeService
     OperationsJobResult,
     OperationsJobName
   >;
+  private retentionTimer?: NodeJS.Timeout;
 
   constructor(
     private readonly configuration: ApplicationConfigService,
@@ -142,6 +147,8 @@ export class QueueRuntimeService
           type: 'exponential',
           delay: REFERENCE_JOB_BACKOFF_MS,
         },
+        removeOnComplete: { age: COMPLETED_JOB_RETENTION_SECONDS },
+        removeOnFail: { age: FAILED_JOB_RETENTION_SECONDS },
       },
     });
     this.worker = new Worker(
@@ -165,6 +172,31 @@ export class QueueRuntimeService
         QueueRuntimeService.name
       );
     });
+    this.retentionTimer = setInterval(() => {
+      void this.enforceRetention().catch(() => {
+        this.logger.error(
+          'Operations queue retention sweep failed',
+          { queue: OPERATIONS_QUEUE_NAME },
+          QueueRuntimeService.name
+        );
+      });
+    }, QUEUE_RETENTION_SWEEP_MS);
+    this.retentionTimer.unref();
+  }
+
+  /** BullMQ clean only targets terminal states; waiting and active work is retained. */
+  async enforceRetention(): Promise<void> {
+    const queue = this.requiredQueue();
+    await queue.clean(
+      COMPLETED_JOB_RETENTION_SECONDS * 1_000,
+      QUEUE_RETENTION_BATCH_SIZE,
+      'completed'
+    );
+    await queue.clean(
+      FAILED_JOB_RETENTION_SECONDS * 1_000,
+      QUEUE_RETENTION_BATCH_SIZE,
+      'failed'
+    );
   }
 
   addReferenceJob(data: ReferenceJobData): Promise<ReferenceJob> {
@@ -368,6 +400,10 @@ export class QueueRuntimeService
   }
 
   async onApplicationShutdown(): Promise<void> {
+    if (this.retentionTimer) {
+      clearInterval(this.retentionTimer);
+      this.retentionTimer = undefined;
+    }
     const worker = this.worker;
     const queue = this.queue;
 

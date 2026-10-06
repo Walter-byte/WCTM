@@ -47,7 +47,8 @@ describe('WooCommerce order payload mapping', () => {
         total_tax: '2.60',
       },
       customerSnapshot: {
-        customer_id: 7,
+        billing: { first_name: 'Jane', last_name: 'Doe' },
+        shipping: { city: 'Austin', country: 'US' },
       },
       paymentSnapshot: {
         method: 'cod',
@@ -60,9 +61,38 @@ describe('WooCommerce order payload mapping', () => {
       remoteDeletedAt: null,
     });
     expect(mapped.lineItemsSnapshot).toHaveLength(1);
+    expect(mapped.lineItemsSnapshot).toEqual([
+      { name: 'Widget', quantity: 2, total: '20.00' },
+    ]);
+    expect(JSON.stringify(mapped)).not.toContain('customer_id');
     expect(mapped.wcCreatedAt.toISOString()).toBe('2026-07-23T10:00:00.000Z');
     expect(mapped.wcModifiedAt.toISOString()).toBe('2026-07-23T10:05:00.000Z');
     expect(mapped.projectionFingerprint).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('discards contact details, order notes and arbitrary item metadata', () => {
+    const mapped = mapWooCommerceOrder(
+      orderPayload({
+        billing: {
+          first_name: 'Jane',
+          email: 'private@example.test',
+          phone: 'private-phone',
+        },
+        shipping: { city: 'Austin', phone: 'private-phone' },
+        customer_note: 'private-note',
+        line_items: [
+          {
+            name: 'Widget',
+            quantity: 1,
+            total: '10',
+            meta_data: [{ key: 'private', value: 'private-note' }],
+          },
+        ],
+      })
+    );
+
+    const stored = JSON.stringify(mapped);
+    expect(stored).not.toMatch(/private@example|private-phone|private-note/);
   });
 
   it('produces the same fingerprint regardless of source object key order', () => {

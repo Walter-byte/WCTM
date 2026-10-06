@@ -1,5 +1,5 @@
 import { forwardRef, Inject, Injectable } from '@nestjs/common';
-import { WebhookEventStatus } from '@prisma/client';
+import { StoreStatus, WebhookEventStatus } from '@prisma/client';
 import { type Job, UnrecoverableError } from 'bullmq';
 
 import {
@@ -126,6 +126,13 @@ export class WooCommerceWebhookProcessor {
     const claimed = await this.prisma.webhookEvent.updateMany({
       where: {
         id: job.data.webhookEventId,
+        tenantId: job.data.tenantId,
+        storeId: job.data.storeId,
+        store: {
+          status: StoreStatus.ACTIVE,
+          deletedAt: null,
+          tenant: { deletedAt: null },
+        },
         OR: [
           // The persisted job may become runnable before ingestion records its
           // post-enqueue QUEUED acknowledgement.
@@ -154,6 +161,23 @@ export class WooCommerceWebhookProcessor {
       throw new UnrecoverableError(
         'WooCommerce webhook event is unavailable for processing'
       );
+    }
+
+    const stillActive = await this.prisma.store.count({
+      where: {
+        id: job.data.storeId,
+        tenantId: job.data.tenantId,
+        status: StoreStatus.ACTIVE,
+        deletedAt: null,
+        tenant: { deletedAt: null },
+      },
+    });
+    if (stillActive !== 1) {
+      await this.failClaimed(event.id, claimedAt, {
+        category: 'unexpected',
+        message: 'store-disconnected',
+      });
+      throw new UnrecoverableError('Store is disconnected');
     }
 
     try {
