@@ -112,14 +112,88 @@ retention; they are not rewritten in place.
 | BullMQ completed jobs                                       | 24 hours; terminal cleanup hourly, up to 1000 per sweep     | Active/waiting/delayed work is never selected. Heavy backlog may take additional sweeps.                                                            |
 | BullMQ failed jobs                                          | 7 days; same terminal sweep                                 | Diagnostic result/IDs persist until then.                                                                                                           |
 | Redis rate-limit and dedupe state                           | Existing 60-second rate windows; job keys as above          | Redis AOF is persistent and old bytes may remain until compaction; physical data expiry needs live proof.                                           |
-| Link/registration tokens and encrypted callback/search text | Clear 1 day after their expiry; daily sweep                 | Existing active TTLs remain unchanged.                                                                                                              |
-| Completed webhook payload                                   | Clear 30 days after completion; daily sweep                 | Event metadata/dedupe stays for operational integrity.                                                                                              |
-| Failed webhook payload                                      | Clear 90 days after failure; daily sweep                    | Pending/active events are untouched.                                                                                                                |
-| Security audit rows                                         | 365 days; daily sweep                                       | Minimal erasure ledger is held separately for restore safety.                                                                                       |
+| Link/registration tokens and encrypted callback/search text | Clear 1 day after their expiry; daily PostgreSQL oneshot    | Existing active TTLs remain unchanged; backend runtime cannot DELETE.                                                                               |
+| Completed webhook payload                                   | Clear 30 days after completion; daily PostgreSQL oneshot    | Event metadata/dedupe stays for operational integrity.                                                                                              |
+| Failed webhook payload                                      | Clear 90 days after failure; daily PostgreSQL oneshot       | Pending/active events are untouched.                                                                                                                |
+| Security audit rows                                         | 365 days; daily PostgreSQL oneshot                          | Backend audit writes remain append-only; only the separate retention identity may expire old rows. Minimal erasure ledger stays separate.           |
 | Protected Store privacy exports                             | Remove after erasure or confirmed delivery; 24-hour maximum | Exact scoped names only; hourly sweep begins at 23 hours, with a sweep on every operator entry. Timer installation/live proof remains a pilot gate. |
 | Local PostgreSQL backups                                    | Existing 14 validated sets                                  | Newer 14 sets always protected; this is count-based, not a calendar age.                                                                            |
 | New encrypted OneDrive sets                                 | 30 days, always keep newest 2 complete sets                 | Legacy plaintext and incomplete sets are never auto-deleted.                                                                                        |
 | Application and scheduler logs                              | No repository-enforced calendar limit yet                   | Host Docker/journald policy and live proof are a pilot gate.                                                                                        |
+
+### Production-discovered PostgreSQL privilege correction
+
+The live PPR-2 backend sweep failed at `telegram_link_tokens` because
+`wctm_runtime` correctly lacks DELETE; search-reference UPDATE and audit-row
+DELETE also conflict with its approved boundary. The backend no longer schedules
+or executes PostgreSQL retention. The fixed SQL allowlist in
+`scripts/ops/postgres-retention.sql` runs daily as a dedicated `wctm_retention`
+login through `wctm-postgres-retention.service`/`.timer`. Its role has only
+column-specific SELECT/UPDATE on the six listed tables plus table DELETE on
+link tokens and audit rows; the fixed SQL applies the age cutoffs. It has no
+INSERT, migration-table DML, table
+ownership, schema CREATE, database CREATE/TEMP, role inheritance, or elevated
+flags. The normal runtime role gains no grants and remains unable to alter
+audit rows. Each of the seven mutations is capped at 20 batches of 500 rows
+per run, with a transaction advisory lock, five-second lock timeout and
+ten-minute statement timeout. Repeated runs are safe; backlogs drain on later
+runs. A failed statement rolls the transaction back and fails the oneshot.
+
+This is a cluster role, not a Prisma migration or a database-dump object. On a
+fresh cluster, recreate it separately before enabling the timer. An authorized
+operator creates the login interactively with `psql` and `\password`, then
+applies `scripts/ops/postgres-retention-grants.sql` as the database owner and
+runs `scripts/ops/verify-retention-role.sql`. The normal backend receives no
+retention credential. Store its single-entry PostgreSQL password file at the
+externally configured `WCTM_RETENTION_PGPASS_FILE`, owned by `wctm`, mode 0600
+or 0400. Its format is exactly
+`127.0.0.1:5432:<database>:wctm_retention:<password>` (escape `:` or `\` in
+the password using libpq `.pgpass` rules). The non-secret environment example
+is `ops/systemd/postgres-retention.conf.example`; it must name the exact
+Compose project and database. The oneshot selects exactly that project's
+PostgreSQL container, verifies its reviewed immutable image, and launches the
+same local image by ID as a short-lived, read-only, unprivileged `psql` client
+in the PostgreSQL container's network namespace. It mounts only the protected
+password file, sends the fixed SQL on stdin, does not parse `/srv/wctm/.env`,
+and needs neither host Node nor external network access. Docker access by the
+`wctm` service account remains a powerful host capability and must stay
+limited to that dedicated account. The SQL credential is a separate,
+column-limited identity, never the owner/migration or backend runtime secret.
+
+After repository deployment, the authorized production operator may validate
+without displaying credentials:
+
+```sh
+cd /srv/wctm
+pg_container=$(docker compose ps -q postgres)
+docker exec -it "$pg_container" sh -c 'exec psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+# In that interactive psql session: CREATE ROLE wctm_retention LOGIN NOINHERIT;
+# Then: \password wctm_retention; exit with \q.
+docker exec -i "$pg_container" sh -c 'exec psql -X -v ON_ERROR_STOP=1 -v "DBNAME=$POSTGRES_DB" -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <scripts/ops/postgres-retention-grants.sql
+docker exec -i "$pg_container" sh -c 'exec psql -X -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <scripts/ops/verify-retention-role.sql
+sudo install -d -m 0750 -o root -g wctm /etc/wctm
+sudo install -m 0640 -o root -g wctm ops/systemd/postgres-retention.conf.example /etc/wctm/postgres-retention.conf
+sudoedit /etc/wctm/postgres-retention.conf  # replace both placeholders
+# First installation only: refuse to overwrite an existing credential.
+sudo test ! -e /etc/wctm/postgres-retention.pgpass
+sudo install -m 0600 -o wctm -g wctm /dev/null /etc/wctm/postgres-retention.pgpass
+sudoedit /etc/wctm/postgres-retention.pgpass  # enter one local .pgpass line; do not print it
+sudo install -m 0644 ops/systemd/wctm-postgres-retention.service ops/systemd/wctm-postgres-retention.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl start wctm-postgres-retention.service
+sudo systemctl status wctm-postgres-retention.service --no-pager
+sudo journalctl -u wctm-postgres-retention.service -n 30 --no-pager
+scripts/ops/verify-runtime-role.sh
+sudo systemctl enable --now wctm-postgres-retention.timer
+sudo systemctl list-timers wctm-postgres-retention.timer --no-pager
+```
+
+Run the grants/verification as the owner after role recreation on restored
+clusters, but retain the protected runtime role and separate migration identity.
+Do not enable the timer until the role verification and first oneshot PASS. The
+script emits only a start/PASS or non-secret failure message. Live execution,
+role proof, and absence of backend permission errors remain PPR-2 production
+validation gates; real-merchant onboarding stays blocked.
 
 ## WordPress and backup confidentiality
 

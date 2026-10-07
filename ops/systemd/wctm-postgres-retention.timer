@@ -1,0 +1,11 @@
+[Unit]
+Description=Run WCTM pilot PostgreSQL retention daily
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 UTC
+RandomizedDelaySec=15m
+Persistent=true
+Unit=wctm-postgres-retention.service
+
+[Install]
+WantedBy=timers.target

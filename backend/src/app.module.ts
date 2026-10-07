@@ -19,7 +19,6 @@ import { MembershipsModule } from './memberships/memberships.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { PilotModule } from './pilot/pilot.module';
 import { PrismaModule } from './prisma/prisma.module';
-import { PrivacyRetentionModule } from './privacy/privacy-retention.module';
 import { StoreModule } from './store/store.module';
 import { TenantContextGuard } from './tenant/guards/tenant-context.guard';
 import { TenantContextModule } from './tenant/tenant-context.module';
@@ -36,7 +35,6 @@ import { WebhooksModule } from './webhooks/webhooks.module';
     EntitlementsModule,
     AuthModule,
     PrismaModule,
-    PrivacyRetentionModule,
     HealthModule,
     TenantContextModule,
     StoreModule,

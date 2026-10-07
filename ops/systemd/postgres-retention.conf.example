@@ -1,0 +1,5 @@
+# Install as /etc/wctm/postgres-retention.conf (0640, root:wctm).
+# The password is not stored here. Choose the exact production Compose project.
+WCTM_COMPOSE_PROJECT=SET_EXACT_COMPOSE_PROJECT
+WCTM_RETENTION_DATABASE=SET_EXACT_DATABASE_NAME
+WCTM_RETENTION_PGPASS_FILE=/etc/wctm/postgres-retention.pgpass
