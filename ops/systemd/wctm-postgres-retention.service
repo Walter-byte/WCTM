@@ -1,0 +1,22 @@
+[Unit]
+Description=Expire approved WCTM pilot PostgreSQL data
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+User=wctm
+Group=wctm
+WorkingDirectory=/srv/wctm
+EnvironmentFile=/etc/wctm/postgres-retention.conf
+ExecStart=/srv/wctm/scripts/ops/postgres-retention.sh
+UMask=0077
+TimeoutStartSec=30min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+InaccessiblePaths=-/srv/wctm/.env
+
+[Install]
+WantedBy=multi-user.target

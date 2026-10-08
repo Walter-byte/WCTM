@@ -24,6 +24,11 @@ lifecycle, retention and backup encryption controls are under local validation.
 Store privacy exports now have scoped protected files, completion cleanup and
 an hourly 24-hour retention bound awaiting operator-host validation.
 Remaining operational and account-deletion gates block real-merchant onboarding.
+Live PPR-2 validation exposed a PostgreSQL retention-role boundary: the normal
+`wctm_runtime` account correctly lacks DELETE and search-reference UPDATE.
+The repository correction moves destructive retention to a separate protected
+daily oneshot/`wctm_retention` identity; live role and scheduler proof are still
+pending. Audit rows remain immutable to the normal runtime account.
 Engineering remains frozen except for pilot-blocking defects.
 Unrestricted public launch is not approved.
 
