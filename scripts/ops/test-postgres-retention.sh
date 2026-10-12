@@ -107,6 +107,21 @@ if docker exec -i "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d rete
 fi
 docker exec "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d retention_test \
   -c 'REVOKE UPDATE ON public.audit_logs FROM wctm_runtime'
+
+# A column-only UPDATE grant must also violate audit immutability.
+docker exec "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d retention_test \
+  -c 'GRANT UPDATE (created_at) ON public.audit_logs TO wctm_runtime'
+audit_column_privileges=$(docker exec "$container" psql -XAt -v ON_ERROR_STOP=1 -U postgres -d retention_test -c "
+SELECT has_table_privilege('wctm_runtime','public.audit_logs','UPDATE'),
+  has_any_column_privilege('wctm_runtime','public.audit_logs','UPDATE');")
+[[ $audit_column_privileges = 'f|t' ]]
+if docker exec -i "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d retention_test \
+  -f - <scripts/ops/verify-retention-role.sql >"$workspace/unapproved-runtime-grant.log" 2>&1; then
+  echo >&2 'test failed: verifier accepted runtime column UPDATE on audit logs'
+  exit 1
+fi
+docker exec "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d retention_test \
+  -c 'REVOKE UPDATE (created_at) ON public.audit_logs FROM wctm_runtime'
 docker exec -i "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d retention_test \
   -f - <scripts/ops/verify-retention-role.sql >"$workspace/role-after-revokes.log"
 grep -q 'retention role: PASS' "$workspace/role-after-revokes.log"
