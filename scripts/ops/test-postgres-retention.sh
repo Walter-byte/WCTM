@@ -40,9 +40,11 @@ CREATE TABLE public.webhook_events (id text PRIMARY KEY, status text NOT NULL, c
 CREATE TABLE public.audit_logs (id text PRIMARY KEY, created_at timestamptz NOT NULL);
 CREATE TABLE public._prisma_migrations (id text PRIMARY KEY);
 CREATE TABLE public.unrelated (id text PRIMARY KEY);
+CREATE TABLE public.store_notification_recipients (id text PRIMARY KEY);
 GRANT USAGE ON SCHEMA public TO wctm_runtime;
 GRANT SELECT, INSERT, UPDATE ON public.telegram_link_tokens, public.stores, public.telegram_callback_references, public.webhook_events TO wctm_runtime;
 GRANT SELECT, INSERT ON public.telegram_search_references, public.audit_logs TO wctm_runtime;
+GRANT SELECT, INSERT, DELETE ON public.store_notification_recipients TO wctm_runtime;
 INSERT INTO public.telegram_link_tokens VALUES ('old', now()-interval '2 days'), ('fresh', now()-interval '12 hours');
 INSERT INTO public.stores VALUES ('old', 'hash', now()-interval '2 days'), ('fresh', 'hash', now()-interval '12 hours');
 INSERT INTO public.telegram_callback_references VALUES ('old', now()-interval '2 days', 'cipher', 'hash'), ('fresh', now()-interval '12 hours', 'cipher', 'hash');
@@ -75,13 +77,54 @@ SELECT has_table_privilege('wctm_runtime','public.telegram_link_tokens','DELETE'
   has_table_privilege('wctm_runtime','public.audit_logs','UPDATE'),
   has_table_privilege('wctm_runtime','public.audit_logs','DELETE'),
   has_table_privilege('wctm_runtime','public.telegram_search_references','UPDATE'),
+  has_table_privilege('wctm_runtime','public.store_notification_recipients','DELETE'),
   has_table_privilege('wctm_retention','public.unrelated','DELETE'),
   has_table_privilege('wctm_retention','public._prisma_migrations','UPDATE'),
   has_schema_privilege('wctm_retention','public','CREATE'),
   has_database_privilege('wctm_retention','retention_test','TEMP'),
   (SELECT count(*) FROM pg_class WHERE relowner='wctm_retention'::regrole),
   (SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolbypassrls OR rolinherit FROM pg_roles WHERE rolname='wctm_retention');")
-[[ $roles = 'f|f|f|f|f|f|f|f|0|f' ]]
+[[ $roles = 'f|f|f|f|t|f|f|f|f|0|f' ]]
+
+# Recipient mappings need runtime DELETE, but each retention-table DELETE must fail verification.
+for table in telegram_link_tokens stores telegram_callback_references telegram_search_references webhook_events audit_logs; do
+  docker exec "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d retention_test \
+    -c "GRANT DELETE ON public.$table TO wctm_runtime"
+  if docker exec -i "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d retention_test \
+    -f - <scripts/ops/verify-retention-role.sql >"$workspace/unapproved-runtime-grant.log" 2>&1; then
+    echo >&2 'test failed: verifier accepted runtime DELETE on a retention table'
+    exit 1
+  fi
+  docker exec "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d retention_test \
+    -c "REVOKE DELETE ON public.$table FROM wctm_runtime"
+done
+docker exec "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d retention_test \
+  -c 'GRANT UPDATE ON public.audit_logs TO wctm_runtime'
+if docker exec -i "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d retention_test \
+  -f - <scripts/ops/verify-retention-role.sql >"$workspace/unapproved-runtime-grant.log" 2>&1; then
+  echo >&2 'test failed: verifier accepted runtime UPDATE on audit logs'
+  exit 1
+fi
+docker exec "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d retention_test \
+  -c 'REVOKE UPDATE ON public.audit_logs FROM wctm_runtime'
+
+# A column-only UPDATE grant must also violate audit immutability.
+docker exec "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d retention_test \
+  -c 'GRANT UPDATE (created_at) ON public.audit_logs TO wctm_runtime'
+audit_column_privileges=$(docker exec "$container" psql -XAt -v ON_ERROR_STOP=1 -U postgres -d retention_test -c "
+SELECT has_table_privilege('wctm_runtime','public.audit_logs','UPDATE'),
+  has_any_column_privilege('wctm_runtime','public.audit_logs','UPDATE');")
+[[ $audit_column_privileges = 'f|t' ]]
+if docker exec -i "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d retention_test \
+  -f - <scripts/ops/verify-retention-role.sql >"$workspace/unapproved-runtime-grant.log" 2>&1; then
+  echo >&2 'test failed: verifier accepted runtime column UPDATE on audit logs'
+  exit 1
+fi
+docker exec "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d retention_test \
+  -c 'REVOKE UPDATE (created_at) ON public.audit_logs FROM wctm_runtime'
+docker exec -i "$container" psql -X -q -v ON_ERROR_STOP=1 -U postgres -d retention_test \
+  -f - <scripts/ops/verify-retention-role.sql >"$workspace/role-after-revokes.log"
+grep -q 'retention role: PASS' "$workspace/role-after-revokes.log"
 
 unset_path=$WCTM_RETENTION_PGPASS_FILE
 unset WCTM_RETENTION_PGPASS_FILE

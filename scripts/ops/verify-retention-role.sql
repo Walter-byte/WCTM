@@ -45,13 +45,16 @@ BEGIN
       (pg_catalog.has_table_privilege('wctm_retention', c.oid, 'INSERT') OR
        (pg_catalog.has_table_privilege('wctm_retention', c.oid, 'DELETE') AND
         c.relname NOT IN ('telegram_link_tokens', 'audit_logs')) OR
-       pg_catalog.has_table_privilege('wctm_runtime', c.oid, 'DELETE'))
+       (c.relname IN (
+         'telegram_link_tokens', 'stores', 'telegram_callback_references',
+         'telegram_search_references', 'webhook_events', 'audit_logs'
+       ) AND pg_catalog.has_table_privilege('wctm_runtime', c.oid, 'DELETE')))
   ) OR NOT pg_catalog.has_table_privilege('wctm_retention', 'public.telegram_link_tokens', 'DELETE') OR
        NOT pg_catalog.has_table_privilege('wctm_retention', 'public.audit_logs', 'DELETE') OR
        pg_catalog.has_table_privilege('wctm_retention', 'public._prisma_migrations', 'SELECT') OR
        pg_catalog.has_table_privilege('wctm_retention', 'public._prisma_migrations', 'UPDATE') OR
        pg_catalog.has_table_privilege('wctm_retention', 'public._prisma_migrations', 'DELETE') OR
-       pg_catalog.has_table_privilege('wctm_runtime', 'public.audit_logs', 'UPDATE') THEN
+       pg_catalog.has_any_column_privilege('wctm_runtime', 'public.audit_logs', 'UPDATE') THEN
     RAISE EXCEPTION 'retention table allowlist or runtime immutability failed';
   END IF;
   IF EXISTS (
