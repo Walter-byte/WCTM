@@ -4,6 +4,7 @@ import { removeOwnedWooWebhooks } from './woo-webhook-cleanup';
 
 const input = {
   baseUrl: 'https://shop.example.test/',
+  connectorOrigin: 'https://wctm.walterbyte.com',
   endpointKey: 'whk_target',
   consumerKey: 'fixture-key',
   consumerSecret: 'fixture-secret',
@@ -53,6 +54,43 @@ describe('WooCommerce connector webhook cleanup', () => {
     );
     expect(String(request.mock.calls[1]?.[0])).not.toContain('11');
     expect(String(request.mock.calls[1]?.[0])).not.toContain('12');
+  });
+
+  it('requires manual reconciliation for a matching route at another origin', async () => {
+    const request = jest.fn<typeof fetch>(
+      async () =>
+        ({
+          ok: true,
+          json: async () => [
+            {
+              id: 13,
+              topic: 'order.created',
+              name: 'WCTM Connector: order.created',
+              delivery_url:
+                'https://unrelated.example.test/api/webhooks/woocommerce/whk_target',
+            },
+          ],
+        }) as Response
+    );
+    await expect(removeOwnedWooWebhooks(input, request)).resolves.toEqual({
+      complete: false,
+      removed: 0,
+    });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed without an exact HTTPS connector origin', async () => {
+    const request = jest.fn<typeof fetch>();
+    await expect(
+      removeOwnedWooWebhooks(
+        {
+          ...input,
+          connectorOrigin: 'https://wctm.walterbyte.com/other',
+        },
+        request
+      )
+    ).resolves.toEqual({ complete: false, removed: 0 });
+    expect(request).not.toHaveBeenCalled();
   });
 
   it('reports manual cleanup when WooCommerce is unavailable', async () => {

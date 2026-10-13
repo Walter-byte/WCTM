@@ -324,6 +324,44 @@ if ($GLOBALS['wctm_options'] !== array() || $GLOBALS['wctm_webhooks'] !== $unrel
     throw new RuntimeException('Uninstall did not remove only local connector material');
 }
 
+// Simulate lost installation salts: stored ciphertext no longer authenticates.
+$nonce = str_repeat('n', 12);
+$tag = '';
+$ciphertext = openssl_encrypt('fixture-only-secret', 'aes-256-gcm',
+    str_repeat('X', 32), OPENSSL_RAW_DATA, $nonce, $tag, 'WCTM:webhook_secret', 16);
+$GLOBALS['wctm_options'] = array(
+    'wc_telegram_connector_store_id' => 'sto_fixture',
+    'wc_telegram_connector_webhook_endpoint_key' => 'whk_fixture',
+    'wc_telegram_connector_webhook_secret' =>
+        'wctm1:' . base64_encode($nonce . $tag . $ciphertext),
+);
+$exact_url = $GLOBALS['wctm_runtime_base_url'] . '/api/webhooks/woocommerce/whk_fixture';
+$GLOBALS['wctm_webhooks'] = array(
+    51 => array('name' => 'WCTM Connector: order.created', 'topic' => 'order.created',
+        'status' => 'active', 'delivery_url' => $exact_url, 'secret' => 'old-secret', 'user_id' => 7),
+    52 => array('name' => 'WCTM Connector: order.created', 'topic' => 'order.created',
+        'status' => 'active',
+        'delivery_url' => 'https://other.example.test/api/webhooks/woocommerce/whk_fixture',
+        'secret' => 'old-secret', 'user_id' => 7),
+    53 => array('name' => 'Another integration', 'topic' => 'order.created',
+        'status' => 'active', 'delivery_url' => $exact_url, 'secret' => 'other-secret', 'user_id' => 7),
+);
+if (wc_telegram_connector_read_secret('webhook_secret') !== '' ||
+    wc_telegram_connector_has_material()) {
+    throw new RuntimeException('Lost salts did not fail closed');
+}
+$before_lost_salt_retry = $GLOBALS['wctm_webhooks'];
+if (wc_telegram_connector_install_and_confirm_webhooks() ||
+    $GLOBALS['wctm_webhooks'] !== $before_lost_salt_retry) {
+    throw new RuntimeException('Lost salts allowed webhook retry or mutation');
+}
+wc_telegram_connector_uninstall();
+if ($GLOBALS['wctm_options'] !== array() ||
+    array_keys($GLOBALS['wctm_webhooks']) !== array(52, 53) ||
+    $GLOBALS['wctm_health_calls'] !== $before_privacy_calls) {
+    throw new RuntimeException('Salt-loss cleanup changed an unrelated webhook or made a request');
+}
+
 $GLOBALS['wctm_options']['wc_telegram_connector_plugin_credential'] = 'fixture-only';
 $GLOBALS['wctm_load_failure'] = true;
 wc_telegram_connector_uninstall();

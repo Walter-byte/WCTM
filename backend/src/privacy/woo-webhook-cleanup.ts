@@ -11,6 +11,7 @@ const TOPICS = new Set([
 
 export interface RemoteWebhookCleanupInput {
   baseUrl: string;
+  connectorOrigin: string;
   endpointKey: string | null;
   consumerKey: string;
   consumerSecret: string;
@@ -22,6 +23,22 @@ export async function removeOwnedWooWebhooks(
   request: typeof fetch = fetch
 ): Promise<{ complete: boolean; removed: number }> {
   if (!input.endpointKey) return { complete: true, removed: 0 };
+  let expectedOrigin: string;
+  try {
+    const origin = new URL(input.connectorOrigin);
+    if (
+      origin.protocol !== 'https:' ||
+      origin.username ||
+      origin.password ||
+      origin.pathname !== '/' ||
+      origin.search ||
+      origin.hash
+    )
+      return { complete: false, removed: 0 };
+    expectedOrigin = origin.origin;
+  } catch {
+    return { complete: false, removed: 0 };
+  }
   const authorization = `Basic ${Buffer.from(`${input.consumerKey}:${input.consumerSecret}`).toString('base64')}`;
   const base = input.baseUrl.endsWith('/')
     ? input.baseUrl
@@ -53,13 +70,24 @@ export async function removeOwnedWooWebhooks(
           Number(hook['id']) <= 0
         )
           continue;
-        let path: string;
+        let delivery: URL;
         try {
-          path = new URL(hook['delivery_url']).pathname;
+          delivery = new URL(hook['delivery_url']);
         } catch {
           continue;
         }
-        if (path !== `/api/webhooks/woocommerce/${input.endpointKey}`) continue;
+        if (
+          delivery.pathname !== `/api/webhooks/woocommerce/${input.endpointKey}`
+        )
+          continue;
+        if (
+          delivery.origin !== expectedOrigin ||
+          delivery.search ||
+          delivery.hash ||
+          delivery.username ||
+          delivery.password
+        )
+          return { complete: false, removed };
         const deleteUrl = new URL(
           `wp-json/wc/v3/webhooks/${hook['id']}?force=true`,
           base
