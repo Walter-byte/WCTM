@@ -322,10 +322,12 @@ canonical `main`. The code-backed inventory, merchant notice, WordPress privacy
 integration and GPL-2.0-or-later plugin license are in `docs/privacy/`.
 
 **PPR-2 — Pilot Data Protection Controls:** active implementation task. The
-branch adds minimized webhook/order persistence, a trusted Store-scoped
-disconnect/export/erasure workflow, explicit logical retention, WordPress-owned
-credential encryption and encrypted off-site backups. The exact limits and
-remaining pilot gates are in `docs/privacy/PPR2_DATA_PROTECTION.md`. This work
+repository includes minimized webhook/order persistence, trusted Store and
+account lifecycle workflows, explicit retention, WordPress-owned credential
+encryption and encrypted off-site backups. Production backup, retention and
+timer checks passed; account, representative-site connector, salt-loss recovery
+and automatic AOF checks remain. The exact limits and validation matrix are in
+`docs/privacy/PPR2_DATA_PROTECTION.md`. This work
 does not authorize a real-merchant pilot or resume Phase 7.
 
 ---

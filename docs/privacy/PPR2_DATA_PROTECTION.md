@@ -1,8 +1,10 @@
 # PPR-2 pilot data protection controls
 
-Status: implementation branch, **not production validated**. PPR-1 is complete on
-`main`. This document describes the repository behavior and the remaining gates
-for a controlled real-merchant pilot. Phase 7 remains paused.
+Status: PPR-2 **Active**; real-merchant onboarding **Blocked**. PPR-1 is complete.
+The production operations listed in the validation matrix below passed on
+`waltpack`. New account-lifecycle and connector changes in this branch have
+repository validation only; they require separate live acceptance before a
+controlled real-merchant pilot. Phase 7 remains paused.
 
 ## Data minimization
 
@@ -29,8 +31,8 @@ original data until expiry and require erasure-ledger replay after restore.
 
 ## Verified operator lifecycle
 
-`scripts/ops/pilot-privacy.sh` is an operator-only, non-HTTP entry point. It
-requires an exact Tenant ID, Store ID and HTTPS base URL, a protected database
+`scripts/ops/pilot-privacy.sh` is an operator-only, non-HTTP entry point. Store
+operations require an exact Tenant ID, Store ID and HTTPS base URL. It requires a protected database
 owner credential file, the application encryption key already in protected
 Compose configuration, and a 0700 external privacy directory with a 0600
 erasure ledger. The credential file contains exactly one `DATABASE_URL=` entry,
@@ -79,7 +81,10 @@ and secret, replaces the encrypted Woo REST key/secret with unusable random
 values, marks the Store disconnected/deleted, revokes its active Telegram chat
 context, and fails queued/processing Store webhook events. The operator command
 then tries to remove only exact WCTM-owned WooCommerce webhook records using the
-pre-revocation credentials held in memory. If Woo removal fails, the report says
+pre-revocation credentials held in memory and the operator-verified HTTPS
+`--connector-origin`. Matching name, topic and route at a different origin
+requires manual reconciliation; an absent/invalid origin never authorizes
+remote deletion. If Woo removal fails, the report says
 `manual-required`; the local route and credentials remain revoked. The operator
 must reconcile the Woo side before closing the request. Plugin deactivation,
 uninstall, normal Store soft delete and Telegram unlink are **not** this workflow.
@@ -92,34 +97,80 @@ order customer/line/payment/shipping snapshots and totals, inventory labels/SKU,
 encrypted callback/search text and action results. Store name/base URL become a
 tombstone. Referential IDs, delivery state and narrow audit events remain for
 integrity/security evidence. The operator must inspect the export and confirm
-scope/authority before `--execute`. This is **Store-scoped** erasure; it does not
-delete shared Tenant/User/Telegram identities or Telegram messages. Whole-account
-requests require a separately reviewed procedure.
+scope/authority before `--execute`. This Store operation does not delete
+Tenant/User/Telegram identities or Telegram messages.
+
+### Tenant, User and Telegram identity requests
+
+The operator can inspect/export/erase an exact Tenant using its ID and the
+SHA-256 fingerprint of its current name, or one User membership using the exact
+Tenant ID, User ID and SHA-256 fingerprint of the current email. These hashes
+are identity checks, not replacements for verifying request authority. Protected
+0600 exports include scoped identity, membership and audit data; a Tenant
+request lists linked Stores but does not silently export their orders. Use
+separate Store exports for those records. Exports use the same protected
+directory, explicit delivery retention and 24-hour maximum as Store exports.
+
+For Tenant erasure, first disconnect and erase **every** linked Store, and
+archive each Store ledger entry. The Tenant workflow verifies that all linked
+Stores have the erased tombstone and ledger entry, then archives its own
+minimal name-fingerprint ledger entry before mutation. It revokes active
+Telegram access, soft-deletes memberships, suspends/tombstones the Tenant and
+preserves foreign keys. A User request similarly archives a scoped
+email-fingerprint entry before erasing that membership and revoking its
+Tenant access. A User with any other Tenant membership retains the global
+User email and Telegram identity for those other Tenants. When no other
+membership exists, the workflow replaces the email and Telegram user/chat IDs
+with tombstones, clears the password, link tokens and selected reference
+contents, and preserves only referential IDs, delivery state and security
+audit records until their own retention expires. Telegram's delivered messages
+remain under Telegram's separate controls. This is not complete removal of
+all account traces.
+
+For an authorized account request, record the exact IDs and fingerprints in
+protected operator records. With backend and bot stopped, use the same external
+credential/directory arguments and protected `WCTM_OFFSITE_DESTINATION` setting
+as the Store workflow:
+
+```sh
+scripts/ops/pilot-privacy.sh --credential-file /etc/wctm/privacy-owner.env --privacy-directory /var/lib/wctm/privacy -- tenant-inspect --tenant-id TENANT_ID --name-sha256 TENANT_NAME_SHA256
+scripts/ops/pilot-privacy.sh --credential-file /etc/wctm/privacy-owner.env --privacy-directory /var/lib/wctm/privacy -- tenant-export --tenant-id TENANT_ID --name-sha256 TENANT_NAME_SHA256 --retain-for-delivery
+scripts/ops/pilot-privacy.sh --credential-file /etc/wctm/privacy-owner.env --privacy-directory /var/lib/wctm/privacy -- tenant-erase --tenant-id TENANT_ID --name-sha256 TENANT_NAME_SHA256 --execute
+```
+
+Use `identity-inspect`, `identity-export` and `identity-erase` with
+`--tenant-id`, `--user-id` and `--email-sha256` for one membership. The wrapper
+prepares the ledger entry, verifies its encrypted off-site archive, executes
+erasure and purges scoped local exports. Check the Store ledger entries and
+their remote archive first. If archival fails, erasure must not run. A
+separately protected delivered export copy follows the agreed delivery policy;
+the local operator artifact expires within 24 hours.
 
 Before a restored old backup becomes authoritative, recover the latest external
 erasure ledger, verify/decrypt it, keep backend and bot stopped, and execute
-`replay`. Replay checks each Tenant/Store and base-URL hash, disconnects and
-erases matching restored records, skips already erased stores, and fails closed
-on mismatches. Only after replay and normal role/config/readiness checks may
+`replay`. The ledger is chronological: Store entries precede dependent User
+and Tenant entries. Replay checks each exact identity fingerprint, disconnects
+and erases matching restored records, skips already erased records, and fails
+closed on mismatches. Only after replay and normal role/config/readiness checks may
 application service resume. Keep the ledger and its encryption key for as long
 as any recoverable backup could predate an erasure. Historic backups expire by
 retention; they are not rewritten in place.
 
 ## Explicit pilot retention decisions
 
-| Data                                                        | Repository rule                                             | Boundary                                                                                                                                            |
-| ----------------------------------------------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| BullMQ completed jobs                                       | 24 hours; terminal cleanup hourly, up to 1000 per sweep     | Active/waiting/delayed work is never selected. Heavy backlog may take additional sweeps.                                                            |
-| BullMQ failed jobs                                          | 7 days; same terminal sweep                                 | Diagnostic result/IDs persist until then.                                                                                                           |
-| Redis rate-limit and dedupe state                           | Existing 60-second rate windows; job keys as above          | Redis AOF is persistent and old bytes may remain until compaction; physical data expiry needs live proof.                                           |
-| Link/registration tokens and encrypted callback/search text | Clear 1 day after their expiry; daily PostgreSQL oneshot    | Existing active TTLs remain unchanged; backend runtime cannot DELETE.                                                                               |
-| Completed webhook payload                                   | Clear 30 days after completion; daily PostgreSQL oneshot    | Event metadata/dedupe stays for operational integrity.                                                                                              |
-| Failed webhook payload                                      | Clear 90 days after failure; daily PostgreSQL oneshot       | Pending/active events are untouched.                                                                                                                |
-| Security audit rows                                         | 365 days; daily PostgreSQL oneshot                          | Backend audit writes remain append-only; only the separate retention identity may expire old rows. Minimal erasure ledger stays separate.           |
-| Protected Store privacy exports                             | Remove after erasure or confirmed delivery; 24-hour maximum | Exact scoped names only; hourly sweep begins at 23 hours, with a sweep on every operator entry. Timer installation/live proof remains a pilot gate. |
-| Local PostgreSQL backups                                    | Existing 14 validated sets                                  | Newer 14 sets always protected; this is count-based, not a calendar age.                                                                            |
-| New encrypted OneDrive sets                                 | 30 days, always keep newest 2 complete sets                 | Legacy plaintext and incomplete sets are never auto-deleted.                                                                                        |
-| Application and scheduler logs                              | No repository-enforced calendar limit yet                   | Host Docker/journald policy and live proof are a pilot gate.                                                                                        |
+| Data                                                        | Repository rule                                             | Boundary                                                                                                                                              |
+| ----------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| BullMQ completed jobs                                       | 24 hours; terminal cleanup hourly, up to 1000 per sweep     | Active/waiting/delayed work is never selected. Heavy backlog may take additional sweeps.                                                              |
+| BullMQ failed jobs                                          | 7 days; same terminal sweep                                 | Diagnostic result/IDs persist until then.                                                                                                             |
+| Redis rate-limit and dedupe state                           | Existing 60-second rate windows; job keys as above          | Redis AOF is persistent. Automatic rewrite is configured at 100% growth and 64 MiB minimum; logical expiry does not immediately remove old AOF bytes. |
+| Link/registration tokens and encrypted callback/search text | Clear 1 day after their expiry; daily PostgreSQL oneshot    | Existing active TTLs remain unchanged; backend runtime cannot DELETE.                                                                                 |
+| Completed webhook payload                                   | Clear 30 days after completion; daily PostgreSQL oneshot    | Event metadata/dedupe stays for operational integrity.                                                                                                |
+| Failed webhook payload                                      | Clear 90 days after failure; daily PostgreSQL oneshot       | Pending/active events are untouched.                                                                                                                  |
+| Security audit rows                                         | 365 days; daily PostgreSQL oneshot                          | Backend audit writes remain append-only; only the separate retention identity may expire old rows. Minimal erasure ledger stays separate.             |
+| Protected Store/Tenant/User privacy exports                 | Remove after erasure or confirmed delivery; 24-hour maximum | Exact scoped names only; hourly sweep begins at 23 hours, with a sweep on every operator entry.                                                       |
+| Local PostgreSQL backups                                    | Existing 14 validated sets                                  | Newer 14 sets always protected; this is count-based, not a calendar age.                                                                              |
+| New encrypted OneDrive sets                                 | 30 days, always keep newest 2 complete sets                 | Legacy plaintext and incomplete sets are never auto-deleted.                                                                                          |
+| Application and scheduler logs                              | Bounded host Docker/journald policy                         | Production rotation and bounded retention were validated on `waltpack`; host configuration remains an operations control.                             |
 
 ### Production-discovered PostgreSQL privilege correction
 
@@ -191,9 +242,8 @@ sudo systemctl list-timers wctm-postgres-retention.timer --no-pager
 Run the grants/verification as the owner after role recreation on restored
 clusters, but retain the protected runtime role and separate migration identity.
 Do not enable the timer until the role verification and first oneshot PASS. The
-script emits only a start/PASS or non-secret failure message. Live execution,
-role proof, and absence of backend permission errors remain PPR-2 production
-validation gates; real-merchant onboarding stays blocked.
+script emits only a start/PASS or non-secret failure message. The dedicated
+role, retention sweep and timer passed production validation on `waltpack`.
 
 ## WordPress and backup confidentiality
 
@@ -202,8 +252,14 @@ use AES-256-GCM with separate associated-data labels. The key derives by HKDF
 from WordPress `AUTH_KEY` and `SECURE_AUTH_KEY`, which should live outside the
 WordPress database. Exact legacy plaintext token shapes migrate on first read.
 Missing salts or authentication failure yields no credential and no plaintext
-fallback. Reconnect/rotation must reprovision secrets with the service operator
-if host salts are lost. WordPress administrators, host files and backups remain
+fallback. Retry fails closed in that state. Restore the original salts from a
+protected host backup where possible. A fresh M7 token alone cannot recover
+unreadable existing webhook material because M7 intentionally does not return
+the stored signing secret; a separately reviewed operator rotation/reconnect
+procedure is needed if the original salts are unavailable. Plugin uninstall can remove exact WCTM-owned
+WooCommerce hooks despite lost salts by matching its full delivery URL, topic
+and name while preserving unrelated hooks. The local fixture covers this;
+representative-site confirmation remains pending. WordPress administrators, host files and backups remain
 within the merchant's trust boundary. WooCommerce itself persists its webhook
 signing secret in its own database; this plugin does not alter Woo internals.
 
@@ -220,9 +276,9 @@ It inherits the immutable reviewed Node 24.20.0 / Alpine 3.24 base and the
 SHA-256-verified OpenSSL 3.5.9-r0 package installation, then removes global npm,
 Corepack, Yarn and APK tooling. The runner resolves the reviewed local tag to an immutable
 image ID and uses it with `--pull=never`, no network, a read-only root and only
-explicit input/key/output mounts. Docker access, that locally built ops image
-and the readable key file require live validation; no host Node installation is
-needed. The decrypted dump is only created in
+explicit input/key/output mounts. The encrypted scheduled backup and isolated
+decrypt/restore path passed production validation on `waltpack`; no host Node
+installation is needed. The decrypted dump is only created in
 an operator-controlled 0700 directory, then used with the existing isolated
 restore procedure. Encryption does not replace checksum or restore tests.
 
@@ -232,29 +288,39 @@ verified with the replacement key. Rotation is a reviewed maintenance action:
 create a new private key, retain the old key in separate protected recovery
 storage, update the key path, make a new encrypted backup, decrypt/restore it in
 isolation, and verify ledger recovery before retiring the old key. Losing the
-key loses the off-site recovery path. Existing plaintext OneDrive sets are
-**not** silently deleted or converted; inventory them and obtain a reviewed
-retention/deletion decision. Treat them as sensitive until removed.
+key loses the off-site recovery path. Legacy plaintext OneDrive sets were
+disposed of in a separately validated production operation. Repository code
+does not automatically remove legacy sets.
 
-## Remaining gates before real merchants
+## PPR-2 validation matrix
 
-1. Review and execute the lifecycle, scrub and encrypted backup/restore paths
-   against isolated production-like data, including cross-tenant checks and
-   erasure replay, then validate the scheduled encrypted path on `waltpack` in
-   a separately authorized production operation.
-2. Inventory and decide disposal of pre-PPR-2 plaintext OneDrive sets. No
-   automatic legacy deletion is authorized by this branch.
-3. Set and verify host Docker/journald log rotation/retention and Redis AOF
-   compaction/physical expiry. The repository controls logical TTLs, not those
-   host storage lifetimes.
-4. Define a reviewed whole-Tenant/User/Telegram-account export and deletion
-   process, including shared identities and security audit exceptions, before
-   promising complete account erasure.
-5. Verify WordPress salt-loss reconnect/rotation and Woo-owned signing-secret
-   cleanup on a representative pilot merchant site.
-6. Install and verify the protected privacy-export retention timer on the
-   operator host before processing real merchant exports. Review its service
-   status and confirm the privacy directory ownership and mode.
+Repository PASS means automated checks against synthetic data and checked-in
+configuration. Production PASS means the authorized operator's observed result
+on `waltpack`; this branch has not accessed that host.
 
-Until these gates are closed and accepted, PPR-2 remains active and real-merchant
-pilot onboarding remains blocked. No public-launch readiness is claimed.
+| Control                                                    | Repository                                          | Production                          | Remaining boundary                                                                                                                                   |
+| ---------------------------------------------------------- | --------------------------------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Encrypted off-site backup, integrity and isolated recovery | PASS                                                | PASS                                | Keep recovery key separate from OneDrive.                                                                                                            |
+| Legacy plaintext off-site set disposal                     | Procedure documented                                | PASS                                | No automatic legacy deletion.                                                                                                                        |
+| Docker/journald bounded logs                               | Configuration documented                            | PASS                                | Host policy remains an operations control.                                                                                                           |
+| PostgreSQL retention via `wctm_retention`                  | PASS                                                | PASS                                | Runtime role remains restricted.                                                                                                                     |
+| BullMQ completed/failed cleanup                            | PASS                                                | PASS                                | 24-hour/7-day policy; active jobs excluded.                                                                                                          |
+| Redis logical expiry and AOF compaction                    | PASS                                                | PASS for manual compaction          | Automatic rewrite settings require post-deployment `CONFIG GET` proof; rewrite thresholds do not themselves guarantee a calendar bound on old bytes. |
+| Backup, privacy-export and PostgreSQL-retention timers     | PASS                                                | PASS                                | All three timers installed and operating.                                                                                                            |
+| Store lifecycle, ledger replay and scoped privacy exports  | PASS                                                | Pending account workflow acceptance | Execute against isolated production-like data under approved maintenance procedure.                                                                  |
+| Tenant/User/Telegram account lifecycle                     | PASS on isolated synthetic PostgreSQL               | Pending                             | Verify request authority, shared identity behavior, archived ledger and replay on isolated production-like data.                                     |
+| WordPress salt-loss/reconnect and exact webhook cleanup    | Salt-loss failure and cleanup PASS in local fixture | Pending                             | Representative non-merchant site proof and a reviewed recovery procedure when original salts are unavailable remain pilot gates.                     |
+
+Redis `appendonly yes` is explicit in Compose, and automatic AOF rewrite is
+configured at 100% growth after a 64 MiB minimum. Logical TTL/delete removes
+keys from Redis's active dataset; AOF may still contain prior write bytes until
+rewrite. Manual production compaction reduced the AOF from approximately
+66.9 MB to 4.67 MB. After deployment, verify `CONFIG GET appendonly
+auto-aof-rewrite-percentage auto-aof-rewrite-min-size` and inspect subsequent
+rewrite operation; avoid treating compaction as proof of erasure from older
+backups or storage snapshots.
+
+PPR-2 stays **Active** and real-merchant onboarding stays **Blocked** until
+the pending account, WordPress recovery/representative-site and automatic AOF
+checks are accepted.
+No public-launch readiness is claimed.
