@@ -7,6 +7,12 @@ import { basename, dirname, isAbsolute, resolve } from 'node:path';
 import { EncryptionService } from '../common/encryption/encryption.service';
 import type { ApplicationConfigService } from '../config/application-config.service';
 import { PilotDataService, type PilotTarget } from './pilot-data.service';
+import {
+  PilotAccountService,
+  privacyFingerprint,
+  type IdentityPrivacyTarget,
+  type TenantPrivacyTarget,
+} from './pilot-account.service';
 import { removeOwnedWooWebhooks } from './woo-webhook-cleanup';
 
 type Mode =
@@ -16,14 +22,25 @@ type Mode =
   | 'prepare-erasure'
   | 'erase'
   | 'scrub'
+  | 'tenant-inspect'
+  | 'tenant-export'
+  | 'tenant-prepare-erasure'
+  | 'tenant-erase'
+  | 'identity-inspect'
+  | 'identity-export'
+  | 'identity-prepare-erasure'
+  | 'identity-erase'
   | 'replay';
 
 interface Options {
   mode: Mode;
   target?: PilotTarget;
+  tenantTarget?: TenantPrivacyTarget;
+  identityTarget?: IdentityPrivacyTarget;
   execute: boolean;
   output?: string;
   ledger?: string;
+  connectorOrigin?: string;
 }
 
 function argument(name: string, args: string[]): string | undefined {
@@ -41,6 +58,14 @@ function parse(args: string[]): Options {
       'prepare-erasure',
       'erase',
       'scrub',
+      'tenant-inspect',
+      'tenant-export',
+      'tenant-prepare-erasure',
+      'tenant-erase',
+      'identity-inspect',
+      'identity-export',
+      'identity-prepare-erasure',
+      'identity-erase',
       'replay',
     ].includes(mode)
   ) {
@@ -52,7 +77,14 @@ function parse(args: string[]): Options {
   const baseUrl = argument('--base-url', args);
   const output = argument('--output', args);
   const ledger = argument('--ledger', args);
+  const connectorOrigin = argument('--connector-origin', args);
+  const accountMode =
+    mode.startsWith('tenant-') || mode.startsWith('identity-');
+  const tenantNameHash = argument('--name-sha256', args);
+  const emailHash = argument('--email-sha256', args);
+  const userId = argument('--user-id', args);
   if (
+    !accountMode &&
     mode !== 'replay' &&
     (!tenantId?.startsWith('ten_') ||
       !storeId?.startsWith('sto_') ||
@@ -60,17 +92,49 @@ function parse(args: string[]): Options {
   ) {
     throw new Error('exact Tenant, Store and HTTPS base URL are required');
   }
-  if (mode === 'export' && (!output || !isAbsolute(output))) {
+  if (
+    mode.startsWith('tenant-') &&
+    (!tenantId?.startsWith('ten_') ||
+      !/^[0-9a-f]{64}$/.test(tenantNameHash ?? ''))
+  ) {
+    throw new Error('exact Tenant ID and name SHA-256 are required');
+  }
+  if (
+    mode.startsWith('identity-') &&
+    (!tenantId?.startsWith('ten_') ||
+      !userId?.startsWith('usr_') ||
+      !/^[0-9a-f]{64}$/.test(emailHash ?? ''))
+  ) {
+    throw new Error('exact Tenant, User and email SHA-256 are required');
+  }
+  if (
+    ['export', 'tenant-export', 'identity-export'].includes(mode) &&
+    (!output || !isAbsolute(output))
+  ) {
     throw new Error('export requires an absolute protected output path');
   }
-  if (mode === 'export' && (!ledger || !isAbsolute(ledger))) {
+  if (
+    ['export', 'tenant-export', 'identity-export'].includes(mode) &&
+    (!ledger || !isAbsolute(ledger))
+  ) {
     throw new Error('export requires the protected privacy directory');
   }
-  if (mode === 'export' && !args.includes('--retain-for-delivery')) {
+  if (
+    ['export', 'tenant-export', 'identity-export'].includes(mode) &&
+    !args.includes('--retain-for-delivery')
+  ) {
     throw new Error('export requires explicit delivery retention');
   }
   if (
-    ['prepare-erasure', 'erase', 'replay'].includes(mode) &&
+    [
+      'prepare-erasure',
+      'erase',
+      'tenant-prepare-erasure',
+      'tenant-erase',
+      'identity-prepare-erasure',
+      'identity-erase',
+      'replay',
+    ].includes(mode) &&
     (!ledger || !isAbsolute(ledger))
   ) {
     throw new Error('erasure requires an absolute external ledger path');
@@ -78,13 +142,26 @@ function parse(args: string[]): Options {
   return {
     mode,
     execute,
-    ...(mode === 'replay'
-      ? {}
-      : {
+    ...(!accountMode && mode !== 'replay'
+      ? {
           target: { tenantId: tenantId!, storeId: storeId!, baseUrl: baseUrl! },
-        }),
+        }
+      : {}),
+    ...(mode.startsWith('tenant-')
+      ? { tenantTarget: { tenantId: tenantId!, nameSha256: tenantNameHash! } }
+      : {}),
+    ...(mode.startsWith('identity-')
+      ? {
+          identityTarget: {
+            tenantId: tenantId!,
+            userId: userId!,
+            emailSha256: emailHash!,
+          },
+        }
+      : {}),
     ...(output ? { output } : {}),
     ...(ledger ? { ledger } : {}),
+    ...(connectorOrigin ? { connectorOrigin } : {}),
   };
 }
 
@@ -95,7 +172,7 @@ function fingerprint(value: string): string {
 export async function verifyExportOutput(
   output: string,
   ledger: string,
-  target: PilotTarget
+  target: { tenantId: string; storeId: string }
 ): Promise<void> {
   const scope = createHash('sha256')
     .update(`${target.tenantId}\0${target.storeId}`)
@@ -148,6 +225,84 @@ export async function appendLedger(
   }
 }
 
+export async function appendAccountLedger(
+  path: string,
+  target: TenantPrivacyTarget | IdentityPrivacyTarget
+): Promise<void> {
+  await verifyLedger(path);
+  const entry =
+    'userId' in target
+      ? {
+          kind: 'identity',
+          tenantId: target.tenantId,
+          userId: target.userId,
+          emailSha256: target.emailSha256,
+        }
+      : {
+          kind: 'tenant',
+          tenantId: target.tenantId,
+          nameSha256: target.nameSha256,
+        };
+  const handle = await open(path, 'a');
+  try {
+    await handle.writeFile(
+      `${JSON.stringify({
+        ...entry,
+        requestedAt: new Date().toISOString(),
+      })}\n`
+    );
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+}
+
+export async function accountLedgerContains(
+  path: string,
+  target: TenantPrivacyTarget | IdentityPrivacyTarget
+): Promise<boolean> {
+  await verifyLedger(path);
+  return (await readFile(path, 'utf8')).split('\n').some((line) => {
+    if (!line) return false;
+    const entry = JSON.parse(line) as Record<string, unknown>;
+    return 'userId' in target
+      ? entry['kind'] === 'identity' &&
+          entry['tenantId'] === target.tenantId &&
+          entry['userId'] === target.userId &&
+          entry['emailSha256'] === target.emailSha256
+      : entry['kind'] === 'tenant' &&
+          entry['tenantId'] === target.tenantId &&
+          entry['nameSha256'] === target.nameSha256;
+  });
+}
+
+export async function requireStoreLedgerEntries(
+  path: string,
+  tenantId: string,
+  storeIds: string[]
+): Promise<void> {
+  await verifyLedger(path);
+  const entries = (await readFile(path, 'utf8'))
+    .split('\n')
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  for (const storeId of storeIds) {
+    if (
+      !entries.some(
+        (entry) =>
+          entry['kind'] === undefined &&
+          entry['tenantId'] === tenantId &&
+          entry['storeId'] === storeId &&
+          typeof entry['baseUrlSha256'] === 'string' &&
+          /^[0-9a-f]{64}$/.test(entry['baseUrlSha256'])
+      )
+    )
+      throw new Error(
+        'linked Store is missing its protected erasure ledger entry'
+      );
+  }
+}
+
 async function ledgerContains(
   path: string,
   target: PilotTarget
@@ -168,13 +323,68 @@ export async function replayLedger(
   path: string,
   service: PilotDataService,
   database: PrismaClient,
-  execute: boolean
+  execute: boolean,
+  accounts?: PilotAccountService
 ) {
   await verifyLedger(path);
   const lines = (await readFile(path, 'utf8')).split('\n').filter(Boolean);
   let pending = 0;
   for (const line of lines) {
     const entry = JSON.parse(line) as Record<string, unknown>;
+    if (entry['kind'] === 'tenant') {
+      if (
+        !accounts ||
+        typeof entry['tenantId'] !== 'string' ||
+        typeof entry['nameSha256'] !== 'string' ||
+        !/^[0-9a-f]{64}$/.test(entry['nameSha256'])
+      )
+        throw new Error('erasure ledger contains an invalid Tenant entry');
+      const tenant = await database.tenant.findFirst({
+        where: { id: entry['tenantId'] },
+        select: { name: true, deletedAt: true },
+      });
+      if (!tenant || tenant.deletedAt) continue;
+      if (privacyFingerprint(tenant.name) !== entry['nameSha256'])
+        throw new Error(
+          'erasure ledger Tenant identity does not match restored data'
+        );
+      pending++;
+      if (execute)
+        await accounts.eraseTenant({
+          tenantId: entry['tenantId'],
+          nameSha256: entry['nameSha256'],
+        });
+      continue;
+    }
+    if (entry['kind'] === 'identity') {
+      if (
+        !accounts ||
+        typeof entry['tenantId'] !== 'string' ||
+        typeof entry['userId'] !== 'string' ||
+        typeof entry['emailSha256'] !== 'string' ||
+        !/^[0-9a-f]{64}$/.test(entry['emailSha256'])
+      )
+        throw new Error('erasure ledger contains an invalid User entry');
+      const membership = await database.membership.findFirst({
+        where: { tenantId: entry['tenantId'], userId: entry['userId'] },
+        select: { deletedAt: true, user: { select: { email: true } } },
+      });
+      if (!membership || membership.deletedAt) continue;
+      if (privacyFingerprint(membership.user.email) !== entry['emailSha256'])
+        throw new Error(
+          'erasure ledger User identity does not match restored data'
+        );
+      pending++;
+      if (execute)
+        await accounts.eraseIdentity({
+          tenantId: entry['tenantId'],
+          userId: entry['userId'],
+          emailSha256: entry['emailSha256'],
+        });
+      continue;
+    }
+    if (entry['kind'] !== undefined)
+      throw new Error('erasure ledger contains an unknown entry type');
     if (
       typeof entry['tenantId'] !== 'string' ||
       typeof entry['storeId'] !== 'string' ||
@@ -239,11 +449,75 @@ async function main(): Promise<void> {
     encryption: { key, previousKey: undefined },
   } as ApplicationConfigService);
   const service = new PilotDataService(database, encryption);
+  const accounts = new PilotAccountService(database);
   try {
     if (options.mode === 'replay') {
       process.stdout.write(
-        `${JSON.stringify(await replayLedger(options.ledger!, service, database, options.execute))}\n`
+        `${safeJson(await replayLedger(options.ledger!, service, database, options.execute, accounts))}\n`
       );
+      return;
+    }
+    if (options.tenantTarget || options.identityTarget) {
+      const tenant = options.tenantTarget;
+      const identity = options.identityTarget;
+      const report = tenant
+        ? await accounts.inspectTenant(tenant)
+        : await accounts.inspectIdentity(identity!);
+      if (options.mode.endsWith('-inspect')) {
+        process.stdout.write(`${safeJson(report)}\n`);
+      } else if (options.mode.endsWith('-export')) {
+        await verifyExportOutput(options.output!, options.ledger!, {
+          tenantId: (tenant ?? identity)!.tenantId,
+          storeId: tenant ? 'acc_tenant' : identity!.userId,
+        });
+        const exported = tenant
+          ? await accounts.exportTenant(tenant)
+          : await accounts.exportIdentity(identity!);
+        await writeFile(options.output!, `${safeJson(exported)}\n`, {
+          flag: 'wx',
+          mode: 0o600,
+        });
+        process.stdout.write('privacy export: PASS protected-file-created\n');
+      } else if (options.mode.endsWith('-prepare-erasure')) {
+        if (tenant) {
+          const tenantReport = await accounts.inspectTenant(tenant);
+          if (tenantReport.stores.some((store) => !store.erased))
+            throw new Error('erase each linked Store before Tenant erasure');
+          await requireStoreLedgerEntries(
+            options.ledger!,
+            tenant.tenantId,
+            tenantReport.stores.map((store) => store.id)
+          );
+        }
+        if (options.execute)
+          await appendAccountLedger(options.ledger!, tenant ?? identity!);
+        process.stdout.write(
+          `${safeJson({ prepared: options.execute, report })}\n`
+        );
+      } else if (options.mode.endsWith('-erase')) {
+        if (options.execute) {
+          if (tenant) {
+            const tenantReport = await accounts.inspectTenant(tenant);
+            await requireStoreLedgerEntries(
+              options.ledger!,
+              tenant.tenantId,
+              tenantReport.stores.map((store) => store.id)
+            );
+          }
+          if (
+            !(await accountLedgerContains(options.ledger!, tenant ?? identity!))
+          )
+            throw new Error(
+              'erasure ledger does not contain the verified account identity'
+            );
+          const result = tenant
+            ? await accounts.eraseTenant(tenant)
+            : await accounts.eraseIdentity(identity!);
+          process.stdout.write(`${safeJson({ erased: true, result })}\n`);
+        } else {
+          process.stdout.write(`${safeJson({ erased: false, report })}\n`);
+        }
+      }
       return;
     }
     const target = options.target!;
@@ -270,14 +544,19 @@ async function main(): Promise<void> {
           throw new Error('privacy target changed before disconnect');
         let remoteInput;
         try {
-          remoteInput = {
-            baseUrl: target.baseUrl,
-            endpointKey: credentials.webhookEndpointKey,
-            consumerKey: encryption.decrypt(credentials.consumerKeyEncrypted),
-            consumerSecret: encryption.decrypt(
-              credentials.consumerSecretEncrypted
-            ),
-          };
+          remoteInput = options.connectorOrigin
+            ? {
+                baseUrl: target.baseUrl,
+                connectorOrigin: options.connectorOrigin,
+                endpointKey: credentials.webhookEndpointKey,
+                consumerKey: encryption.decrypt(
+                  credentials.consumerKeyEncrypted
+                ),
+                consumerSecret: encryption.decrypt(
+                  credentials.consumerSecretEncrypted
+                ),
+              }
+            : undefined;
         } catch {
           remoteInput = undefined;
         }
@@ -327,6 +606,12 @@ async function main(): Promise<void> {
   } finally {
     await database.$disconnect();
   }
+}
+
+function safeJson(value: unknown): string {
+  return JSON.stringify(value, (_key, candidate: unknown) =>
+    typeof candidate === 'bigint' ? candidate.toString() : candidate
+  );
 }
 
 if (require.main === module) {
