@@ -52,7 +52,7 @@ ledger_mode=$(stat -c '%a' "$ledger" 2>/dev/null || stat -f '%Lp' "$ledger")
 mode=$1
 shift
 case "$mode" in
-  inspect|disconnect|export|erase|scrub|replay) ;;
+  inspect|disconnect|export|erase|scrub|replay|tenant-inspect|tenant-export|tenant-erase|identity-inspect|identity-export|identity-erase) ;;
   *) echo >&2 'privacy operation refused: invalid mode'; exit 64 ;;
 esac
 
@@ -62,6 +62,7 @@ scripts/ops/privacy-export-artifacts.sh sweep "$privacy_directory"
 target_ids() {
   tenant_id=''
   store_id=''
+  user_id=''
   while (($#)); do
     case "$1" in
       --tenant-id)
@@ -70,13 +71,21 @@ target_ids() {
       --store-id)
         [[ -z "$store_id" && $# -ge 2 ]] || return 1
         store_id=$2; shift 2 ;;
+      --user-id)
+        [[ -z "$user_id" && $# -ge 2 ]] || return 1
+        user_id=$2; shift 2 ;;
       *) shift ;;
     esac
   done
-  [[ -n "$tenant_id" && -n "$store_id" ]]
+  [[ -n "$tenant_id" ]] || return 1
+  case "$mode" in
+    tenant-*) store_id=acc_tenant ;;
+    identity-*) [[ -n "$user_id" ]] || return 1; store_id=$user_id ;;
+    *) [[ -n "$store_id" ]] || return 1 ;;
+  esac
 }
 
-if [[ "$mode" = export ]]; then
+if [[ "$mode" = export || "$mode" = tenant-export || "$mode" = identity-export ]]; then
   [[ " $* " = *' --retain-for-delivery '* && " $* " != *' --output '* ]] || {
     echo >&2 'privacy export refused: explicit delivery retention is required; output path is managed'
     exit 64
@@ -88,7 +97,7 @@ fi
 
 if [[ " $* " = *' --execute '* ]]; then
   case "$mode" in
-    disconnect|scrub|erase|replay)
+    disconnect|scrub|erase|tenant-erase|identity-erase|replay)
       running=$(docker compose ps --status running -q backend telegram-bot) || {
         echo >&2 'privacy operation refused: application quiescence could not be verified'
         exit 1
@@ -116,19 +125,22 @@ run_privacy() {
     dist/privacy/pilot-data.cli.js "$1" "${@:2}" --ledger "$ledger"
 }
 
-if [[ "$mode" = erase && " $* " = *' --execute '* ]]; then
+if [[ ( "$mode" = erase || "$mode" = tenant-erase || "$mode" = identity-erase ) &&
+      " $* " = *' --execute '* ]]; then
   [[ -n "${WCTM_OFFSITE_DESTINATION:-}" ]] || {
     echo >&2 'privacy erasure refused: verified off-site ledger destination is required'
     exit 66
   }
-  run_privacy prepare-erasure "$@"
+  prepare_mode=prepare-erasure
+  [[ "$mode" = erase ]] || prepare_mode=${mode%-erase}-prepare-erasure
+  run_privacy "$prepare_mode" "$@"
   scripts/ops/archive-erasure-ledger.sh "$ledger" "${WCTM_OFFSITE_DESTINATION%/}/privacy-erasure-ledger"
-  run_privacy erase "$@"
+  run_privacy "$mode" "$@"
   target_ids "$@"
   scripts/ops/privacy-export-artifacts.sh purge "$privacy_directory" "$tenant_id" "$store_id"
 else
   run_privacy "$mode" "$@"
-  if [[ "$mode" = export ]]; then
+  if [[ "$mode" = export || "$mode" = tenant-export || "$mode" = identity-export ]]; then
     printf 'privacy export retained for delivery: %s\n' "$output"
   fi
 fi

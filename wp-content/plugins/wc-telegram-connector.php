@@ -71,21 +71,20 @@ add_action('admin_init', 'wc_telegram_connector_privacy_policy_content');
 
 function wc_telegram_connector_uninstall(): void
 {
-    $endpoint_key = wc_telegram_connector_read_option('webhook_endpoint_key');
+    $delivery_url = wc_telegram_connector_delivery_url();
     $secret = wc_telegram_connector_read_secret('webhook_secret');
-    // Match the saved route and secret; never remove another integration's hook.
-    if (is_string($endpoint_key) && $endpoint_key !== '' &&
-        is_string($secret) && $secret !== '') {
+    // Exact URL, topic and name identify this connector even if installation salts were lost.
+    // When the secret is readable, require it to match as an additional check.
+    if ($delivery_url !== '') {
         try {
             foreach (wc_telegram_connector_load_webhooks() as $webhook) {
                 $data = $webhook->get_data();
                 $topic = is_array($data) ? ($data['topic'] ?? null) : null;
-                $route = is_array($data) && is_string($data['delivery_url'] ?? null)
-                    ? wp_parse_url($data['delivery_url'], PHP_URL_PATH) : null;
                 if (is_string($topic) && in_array($topic, wc_telegram_connector_required_topics(), true) &&
                     ($data['name'] ?? null) === wc_telegram_connector_webhook_name($topic) &&
-                    $route === '/api/webhooks/woocommerce/' . $endpoint_key &&
-                    is_string($data['secret'] ?? null) && hash_equals($secret, $data['secret'])) {
+                    ($data['delivery_url'] ?? null) === $delivery_url &&
+                    ($secret === '' ||
+                        (is_string($data['secret'] ?? null) && hash_equals($secret, $data['secret'])))) {
                     $webhook->delete(true);
                 }
             }
@@ -280,7 +279,7 @@ function wc_telegram_connector_render_admin_page(): void
                 <?php wp_nonce_field('wc_telegram_connector_retry_webhooks'); ?>
                 <?php submit_button(__('Retry webhook setup', 'wc-telegram-connector'), 'secondary', 'submit', false); ?>
             </form>
-            <p><?php echo esc_html__('If the saved connector credential is rejected, issue a new M7 token in onboarding and reconnect. Existing webhook material is retained during credential rotation.', 'wc-telegram-connector'); ?></p>
+            <p><?php echo esc_html__('If the saved connector credential is rejected, issue a new M7 token in onboarding and reconnect. Existing webhook material is retained during credential rotation. If WordPress installation salts changed, restore the original salts from a protected backup and contact the WCTM operator before reconnecting; a new M7 token alone cannot recover unreadable webhook material.', 'wc-telegram-connector'); ?></p>
         <?php else : ?>
             <h2><?php echo esc_html__('Connect to WCTM', 'wc-telegram-connector'); ?></h2>
             <p><?php echo esc_html__('Paste one M7 registration token. Never enter your WCTM password or WooCommerce REST credentials here.', 'wc-telegram-connector'); ?></p>

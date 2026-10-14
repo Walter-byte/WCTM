@@ -173,6 +173,10 @@ test('connector keeps secrets out of navigation URLs and provides new-token reco
     /add_query_arg\([^\n]*(?:token|credential|secret)/i
   );
   assert.match(plugin, /issue a new M7 token/i);
+  assert.match(
+    plugin,
+    /a new M7 token alone cannot recover unreadable webhook material/i
+  );
   assert.match(plugin, /Reconnect with new token/);
   assert.match(plugin, /redirection' => 0/);
 });

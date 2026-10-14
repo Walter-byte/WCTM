@@ -6,11 +6,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
+  accountLedgerContains,
+  appendAccountLedger,
   appendLedger,
   replayLedger,
+  requireStoreLedgerEntries,
   verifyExportOutput,
 } from './pilot-data.cli';
 import type { PilotDataService } from './pilot-data.service';
+import {
+  PilotAccountService,
+  privacyFingerprint,
+} from './pilot-account.service';
 
 const target = {
   tenantId: 'ten_a',
@@ -90,6 +97,250 @@ describe('external erasure ledger replay', () => {
       'does not match'
     );
     expect(service.disconnect).not.toHaveBeenCalled();
+  });
+
+  it('replays exact User and Tenant entries after restore without storing names or email', async () => {
+    const ledger = await fixture();
+    const user = {
+      tenantId: 'ten_a',
+      userId: 'usr_a',
+      emailSha256: privacyFingerprint('owner@example.test'),
+    };
+    const tenant = {
+      tenantId: 'ten_a',
+      nameSha256: privacyFingerprint('Pilot shop'),
+    };
+    await appendAccountLedger(ledger, user);
+    await appendAccountLedger(ledger, tenant);
+    expect(await accountLedgerContains(ledger, user)).toBe(true);
+    expect(await accountLedgerContains(ledger, tenant)).toBe(true);
+    const content = await readFile(ledger, 'utf8');
+    expect(content).not.toContain('owner@example.test');
+    expect(content).not.toContain('Pilot shop');
+    const database = {
+      membership: {
+        findFirst: jest.fn(async () => ({
+          deletedAt: null,
+          user: { email: 'owner@example.test' },
+        })),
+      },
+      tenant: {
+        findFirst: jest.fn(async () => ({
+          name: 'Pilot shop',
+          deletedAt: null,
+        })),
+      },
+    } as unknown as PrismaClient;
+    const accounts = {
+      identityErasureComplete: jest.fn(async () => false),
+      tenantErasureComplete: jest.fn(async () => false),
+      eraseIdentity: jest.fn(async () => ({ userId: 'usr_a', shared: false })),
+      eraseTenant: jest.fn(async () => ({ users: 1, sharedUsersRetained: 0 })),
+    } as unknown as PilotAccountService;
+    const stores = {} as PilotDataService;
+    await expect(
+      replayLedger(ledger, stores, database, false, accounts)
+    ).resolves.toMatchObject({ pending: 2, executed: false });
+    expect(accounts.eraseIdentity).not.toHaveBeenCalled();
+    await expect(
+      replayLedger(ledger, stores, database, true, accounts)
+    ).resolves.toMatchObject({ pending: 2, executed: true });
+    expect(accounts.eraseIdentity).toHaveBeenCalledWith(user);
+    expect(accounts.eraseTenant).toHaveBeenCalledWith(tenant);
+  });
+
+  it('replays soft-deleted originals and skips only verified privacy completion', async () => {
+    const ledger = await fixture();
+    const user = {
+      tenantId: 'ten_a',
+      userId: 'usr_a',
+      emailSha256: privacyFingerprint('owner@example.test'),
+    };
+    const tenant = {
+      tenantId: 'ten_a',
+      nameSha256: privacyFingerprint('Pilot shop'),
+    };
+    await appendAccountLedger(ledger, user);
+    await appendAccountLedger(ledger, tenant);
+    const database = {
+      membership: {
+        findFirst: jest.fn(async () => ({
+          deletedAt: new Date(),
+          user: { email: 'owner@example.test' },
+        })),
+      },
+      tenant: {
+        findFirst: jest.fn(async () => ({
+          deletedAt: new Date(),
+          name: 'Pilot shop',
+        })),
+      },
+    } as unknown as PrismaClient;
+    const accounts = {
+      identityErasureComplete: jest.fn(async () => false),
+      tenantErasureComplete: jest.fn(async () => false),
+      eraseIdentity: jest.fn(async () => undefined),
+      eraseTenant: jest.fn(async () => undefined),
+    };
+    await expect(
+      replayLedger(
+        ledger,
+        {} as PilotDataService,
+        database,
+        true,
+        accounts as unknown as PilotAccountService
+      )
+    ).resolves.toMatchObject({ pending: 2 });
+    expect(accounts.eraseIdentity).toHaveBeenCalledWith(user);
+    expect(accounts.eraseTenant).toHaveBeenCalledWith(tenant);
+    accounts.identityErasureComplete.mockResolvedValue(true);
+    accounts.tenantErasureComplete.mockResolvedValue(true);
+    await expect(
+      replayLedger(
+        ledger,
+        {} as PilotDataService,
+        database,
+        true,
+        accounts as unknown as PilotAccountService
+      )
+    ).resolves.toMatchObject({ pending: 0 });
+    expect(accounts.eraseIdentity).toHaveBeenCalledTimes(1);
+    expect(accounts.eraseTenant).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed on anonymized state without completion proof', async () => {
+    const ledger = await fixture();
+    await appendAccountLedger(ledger, {
+      tenantId: 'ten_a',
+      userId: 'usr_a',
+      emailSha256: privacyFingerprint('owner@example.test'),
+    });
+    const database = {
+      membership: {
+        findFirst: jest.fn(async () => ({
+          deletedAt: new Date(),
+          user: { email: 'erased-usr_a@invalid.invalid' },
+        })),
+      },
+    } as unknown as PrismaClient;
+    const accounts = {
+      identityErasureComplete: jest.fn(async () => false),
+      eraseIdentity: jest.fn(),
+    } as unknown as PilotAccountService;
+    await expect(
+      replayLedger(ledger, {} as PilotDataService, database, true, accounts)
+    ).rejects.toThrow('does not match');
+    expect(accounts.eraseIdentity).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on a surviving User when the backup predates Membership', async () => {
+    const ledger = await fixture();
+    await appendAccountLedger(ledger, {
+      tenantId: 'ten_a',
+      userId: 'usr_a',
+      emailSha256: privacyFingerprint('owner@example.test'),
+    });
+    const database = {
+      membership: { findFirst: jest.fn(async () => null) },
+      user: { findUnique: jest.fn(async () => ({ id: 'usr_a' })) },
+    };
+    const accounts = {
+      eraseIdentity: jest.fn(),
+      identityErasureComplete: jest.fn(),
+    } as unknown as PilotAccountService;
+    await expect(
+      replayLedger(
+        ledger,
+        {} as PilotDataService,
+        database as unknown as PrismaClient,
+        true,
+        accounts
+      )
+    ).rejects.toThrow('without restored Membership');
+    expect(database.user.findUnique).toHaveBeenCalledWith({
+      where: { id: 'usr_a' },
+      select: { id: true },
+    });
+    expect(accounts.eraseIdentity).not.toHaveBeenCalled();
+    expect(accounts.identityErasureComplete).not.toHaveBeenCalled();
+  });
+
+  it('safely skips an absent Membership only when the exact User is also absent', async () => {
+    const ledger = await fixture();
+    await appendAccountLedger(ledger, {
+      tenantId: 'ten_a',
+      userId: 'usr_a',
+      emailSha256: privacyFingerprint('owner@example.test'),
+    });
+    const database = {
+      membership: { findFirst: jest.fn(async () => null) },
+      user: { findUnique: jest.fn(async () => null) },
+    } as unknown as PrismaClient;
+    const accounts = {
+      eraseIdentity: jest.fn(),
+    } as unknown as PilotAccountService;
+    await expect(
+      replayLedger(ledger, {} as PilotDataService, database, true, accounts)
+    ).resolves.toMatchObject({ pending: 0 });
+    expect(accounts.eraseIdentity).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a Tenant-only ledger cannot identify pre-Tenant restored accounts', async () => {
+    const ledger = await fixture();
+    await appendAccountLedger(ledger, {
+      tenantId: 'ten_a',
+      nameSha256: privacyFingerprint('Pilot shop'),
+    });
+    const database = {
+      tenant: { findFirst: jest.fn(async () => null) },
+    } as unknown as PrismaClient;
+    const accounts = {
+      eraseTenant: jest.fn(),
+    } as unknown as PilotAccountService;
+    await expect(
+      replayLedger(ledger, {} as PilotDataService, database, true, accounts)
+    ).rejects.toThrow('completion cannot be verified');
+    expect(accounts.eraseTenant).not.toHaveBeenCalled();
+  });
+
+  it('requires a matching Store ledger before whole-Tenant erasure', async () => {
+    const ledger = await fixture();
+    await expect(
+      requireStoreLedgerEntries(ledger, 'ten_a', ['sto_a'])
+    ).rejects.toThrow('linked Store');
+    await appendLedger(ledger, target);
+    await expect(
+      requireStoreLedgerEntries(ledger, 'ten_a', ['sto_a'])
+    ).resolves.toBeUndefined();
+    await expect(
+      requireStoreLedgerEntries(ledger, 'ten_b', ['sto_a'])
+    ).rejects.toThrow('linked Store');
+  });
+
+  it('rejects a restored User identity mismatch before execution', async () => {
+    const ledger = await fixture();
+    await appendAccountLedger(ledger, {
+      tenantId: 'ten_a',
+      userId: 'usr_a',
+      emailSha256: privacyFingerprint('owner@example.test'),
+    });
+    const database = {
+      membership: {
+        findFirst: jest.fn(async () => ({
+          deletedAt: null,
+          user: { email: 'different@example.test' },
+        })),
+      },
+    } as unknown as PrismaClient;
+    const accounts = {
+      identityErasureComplete: jest.fn(async () => false),
+      tenantErasureComplete: jest.fn(async () => false),
+      eraseIdentity: jest.fn(),
+    } as unknown as PilotAccountService;
+    await expect(
+      replayLedger(ledger, {} as PilotDataService, database, true, accounts)
+    ).rejects.toThrow('does not match');
+    expect(accounts.eraseIdentity).not.toHaveBeenCalled();
   });
 });
 

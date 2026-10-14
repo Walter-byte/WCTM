@@ -18,17 +18,19 @@ and production-validated. The corrected scheduled backup passed live systemd
 execution on `waltpack`, and the daily timer is enabled. D-033 is Accepted:
 Phase 7 is intentionally paused and incomplete before P7.4; P7.4–P7.8 and
 Phase 6 remain deferred/unstarted. Private Pilot Readiness is the current active
-initiative. PPR-1 is complete on canonical `main`; PPR-2 is the active
-implementation task for pilot data protection. New minimization, operator
-lifecycle, retention and backup encryption controls are under local validation.
-Store privacy exports now have scoped protected files, completion cleanup and
-an hourly 24-hour retention bound awaiting operator-host validation.
-Remaining operational and account-deletion gates block real-merchant onboarding.
-Live PPR-2 validation exposed a PostgreSQL retention-role boundary: the normal
-`wctm_runtime` account correctly lacks DELETE and search-reference UPDATE.
-The repository correction moves destructive retention to a separate protected
-daily oneshot/`wctm_retention` identity; live role and scheduler proof are still
-pending. Audit rows remain immutable to the normal runtime account.
+initiative. PPR-1 is complete; PPR-2 remains **Active**. Production validation
+on `waltpack` passed encrypted off-site backup and isolated recovery, legacy
+plaintext off-site disposal, bounded Docker/journald logs, dedicated
+`wctm_retention` PostgreSQL cleanup, BullMQ 24-hour/7-day cleanup, manual
+Redis AOF compaction, and all three operational systemd timers. This branch
+adds repository-tested Tenant/User/Telegram identity lifecycle controls,
+WordPress salt-loss/webhook cleanup coverage, and explicit automatic Redis
+AOF rewrite settings. Account workflow acceptance on isolated production-like
+data, representative-site connector validation and post-deployment automatic
+AOF setting/proof remain. WordPress salt loss also needs a reviewed recovery
+path if original host salts cannot be restored; a fresh M7 token alone cannot
+recover unreadable existing webhook material. Real-merchant onboarding is
+**Blocked**.
 Engineering remains frozen except for pilot-blocking defects.
 Unrestricted public launch is not approved.
 
@@ -41,9 +43,9 @@ revision `034b2f565fd6b2fc50d6942ff1a40ca16598703c`. P7.3 backup,
 OneDrive off-site SHA-256, isolated restore, and corrected live scheduled
 service all passed. `wctm-backup.service` completed as `wctm` with
 `SERVICE_RC=0`; the daily timer is enabled and active. PPR-1 is merged in
-canonical `main` `f5903fd99c999912a1bbbe69f28ecb0c42693581`. PPR-2 is
-implementing the approved protection controls; the exact controls and
-remaining pilot gates are in `docs/privacy/PPR2_DATA_PROTECTION.md`. The
+canonical `main`. PPR-2 is implementing the approved protection controls from
+the post-PR #50 main baseline; repository and production results and remaining
+pilot gates are in `docs/privacy/PPR2_DATA_PROTECTION.md`. The
 earlier migration from `hetz` succeeded; its WCTM deployment was removed and
 is not a rollback host.
 
@@ -57,8 +59,8 @@ Project Version
 
 Repository
 
-Current implementation branch: `feat/ppr2-pilot-data-protection` from
-canonical `main` `f5903fd99c999912a1bbbe69f28ecb0c42693581`.
+Current implementation branch: `feat/ppr2-final-privacy-readiness` from
+canonical `main` `6d1f3a8ea1b7bbc6660303761b918e36f3fd4746` (PR #50 merged).
 
 M22 implementation commit:
 `35f9e72335c8ed0c6a039497d92bed763dc68fb5 feat(entitlements): add MVP tenant

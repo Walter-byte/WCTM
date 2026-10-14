@@ -21,7 +21,14 @@ services:
   redis:
     image: redis:7.4.11-alpine3.21@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
     restart: unless-stopped
-    command: ['redis-server', '--appendonly', 'yes']
+    command:
+      - redis-server
+      - --appendonly
+      - 'yes'
+      - --auto-aof-rewrite-percentage
+      - '100'
+      - --auto-aof-rewrite-min-size
+      - 64mb
     volumes:
       - redis_data:/data
     healthcheck:

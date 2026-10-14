@@ -1304,10 +1304,19 @@ onboarding/product-surface polish, focused security/quality QA, and controlled
 private merchant pilots. Engineering is frozen except for pilot-blocking
 defects. PPR-1 is complete and merged to canonical `main`; `docs/privacy/`
 contains its inventory, disclosure, WordPress privacy integration and GPL
-plugin licensing under D-034. PPR-2 is the active data-protection implementation
-task from `f5903fd99c999912a1bbbe69f28ecb0c42693581`. See
-`docs/privacy/PPR2_DATA_PROTECTION.md` for exact Store-scoped controls,
-retention values, backup key/recovery boundaries and remaining pilot gates.
+plugin licensing under D-034. PPR-2 remains Active after the post-PR #50
+canonical baseline `6d1f3a8ea1b7bbc6660303761b918e36f3fd4746`.
+Production passed encrypted off-site backup/isolated restore, legacy plaintext
+disposal, bounded logs, dedicated PostgreSQL retention, BullMQ cleanup, manual
+Redis AOF compaction and all three timers. This branch adds repository-tested
+Tenant/User/Telegram identity lifecycle, connector salt-loss cleanup checks and
+automatic AOF rewrite settings. See `docs/privacy/PPR2_DATA_PROTECTION.md` for
+the validation matrix and remaining live-only account, representative-site and
+AOF checks; `docs/privacy/WORDPRESS_CONNECTOR_VALIDATION.md` has the isolated
+site procedure. Lost WordPress salts have fail-closed behavior, but recovery
+without restoring original salts needs a reviewed operator path because M7
+does not return the existing webhook secret. Real-merchant onboarding remains
+Blocked.
 No real-merchant pilot or broad public launch is authorized by this work.
 
 ### Last completed product milestone: M22

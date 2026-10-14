@@ -67,6 +67,8 @@ try {
     await writeFile(path, 'must survive', { mode: 0o600 });
   }
   const stale = await create(tenantA, storeA, 25);
+  const staleTenant = await create(tenantA, 'acc_tenant', 25);
+  const staleIdentity = await create(tenantA, 'usr_fixture_a', 25);
   const fresh = await create(tenantA, storeA);
   const expectedScope = createHash('sha256')
     .update(`${tenantA}\0${storeA}`)
@@ -76,8 +78,10 @@ try {
   const oldMtime = await create(tenantA, storeB);
   const yesterday = new Date(Date.now() - 25 * 3600000);
   await utimes(oldMtime, yesterday, yesterday);
-  assert.match(run('sweep', directory), /removed=3$/);
+  assert.match(run('sweep', directory), /removed=5$/);
   assert.equal(await exists(stale), false);
+  assert.equal(await exists(staleTenant), false);
+  assert.equal(await exists(staleIdentity), false);
   assert.equal(await exists(otherScope), false);
   assert.equal(await exists(oldMtime), false);
   assert.equal(await exists(fresh), true);
@@ -86,12 +90,19 @@ try {
   const untouchedTenant = await create(tenantB, storeB);
   const sameStoreOtherTenant = await create(tenantB, storeA);
   const sameTenantOtherStore = await create(tenantA, storeB);
+  const tenantExport = await create(tenantA, 'acc_tenant');
+  const identityExport = await create(tenantA, 'usr_fixture_a');
   assert.match(run('purge', directory, tenantA, storeA), /removed=2$/);
   assert.equal(await exists(fresh), false);
   assert.equal(await exists(delivered), false);
   assert.equal(await exists(untouchedTenant), true);
   assert.equal(await exists(sameStoreOtherTenant), true);
   assert.equal(await exists(sameTenantOtherStore), true);
+  assert.equal(await exists(tenantExport), true);
+  assert.equal(await exists(identityExport), true);
+  assert.match(run('purge', directory, tenantA, 'usr_fixture_a'), /removed=1$/);
+  assert.equal(await exists(identityExport), false);
+  assert.equal(await exists(tenantExport), true);
   for (const path of [ledger, key, unrelated, lookalike, backup, outsideFile]) {
     assert.equal(await exists(path), true);
   }

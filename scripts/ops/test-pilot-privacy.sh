@@ -73,6 +73,7 @@ grep -q 'erasure archive: PASS' "$workspace/erase.log"
 [[ ! -e "$export_path" ]]
 ! grep -q 'fixture-only' "$workspace"/*.log
 
+calls_before_missing=$(wc -l <"$workspace/docker.log" | tr -d ' ')
 unset WCTM_OFFSITE_DESTINATION
 if scripts/ops/pilot-privacy.sh --credential-file "$workspace/database.conf" \
   --privacy-directory "$workspace/privacy" -- erase \
@@ -81,9 +82,43 @@ if scripts/ops/pilot-privacy.sh --credential-file "$workspace/database.conf" \
   echo >&2 'test failed: erasure proceeded without off-site ledger destination'
   exit 1
 fi
-[[ $(wc -l <"$workspace/docker.log" | tr -d ' ') = 7 ]]
+if [[ $(wc -l <"$workspace/docker.log" | tr -d ' ') != $((calls_before_missing + 1)) ]]; then
+  echo >&2 'test failed: missing off-site destination started a privacy container'
+  exit 1
+fi
 
 export WCTM_OFFSITE_DESTINATION="testremote:$workspace/remote"
+scripts/ops/pilot-privacy.sh --credential-file "$workspace/database.conf" \
+  --privacy-directory "$workspace/privacy" -- tenant-export \
+  --tenant-id ten_fixture --name-sha256 "$(printf '%064d' 0)" \
+  --retain-for-delivery >"$workspace/tenant-export.log"
+tenant_export=$(sed -n 's/^privacy export retained for delivery: //p' "$workspace/tenant-export.log")
+[[ -f "$tenant_export" ]]
+scripts/ops/pilot-privacy.sh --credential-file "$workspace/database.conf" \
+  --privacy-directory "$workspace/privacy" -- identity-export \
+  --tenant-id ten_fixture --user-id usr_fixture --email-sha256 "$(printf '%064d' 0)" \
+  --retain-for-delivery >"$workspace/identity-export.log"
+identity_export=$(sed -n 's/^privacy export retained for delivery: //p' "$workspace/identity-export.log")
+[[ -f "$identity_export" ]]
+scripts/ops/pilot-privacy.sh --credential-file "$workspace/database.conf" \
+  --privacy-directory "$workspace/privacy" -- tenant-erase \
+  --tenant-id ten_fixture --name-sha256 "$(printf '%064d' 0)" --execute \
+  >"$workspace/tenant-erase.log"
+grep -q 'pilot-data.cli.js tenant-prepare-erasure' "$workspace/docker.log" || {
+  cat "$workspace/docker.log" >&2
+  exit 1
+}
+grep -q 'pilot-data.cli.js tenant-erase' "$workspace/docker.log"
+[[ ! -e "$tenant_export" && -e "$identity_export" ]]
+scripts/ops/pilot-privacy.sh --credential-file "$workspace/database.conf" \
+  --privacy-directory "$workspace/privacy" -- identity-erase \
+  --tenant-id ten_fixture --user-id usr_fixture --email-sha256 "$(printf '%064d' 0)" --execute \
+  >"$workspace/identity-erase.log"
+grep -q 'pilot-data.cli.js identity-prepare-erasure' "$workspace/docker.log"
+grep -q 'pilot-data.cli.js identity-erase' "$workspace/docker.log"
+[[ ! -e "$identity_export" ]]
+! grep -q 'fixture-only' "$workspace"/*.log
+
 if TEST_APP_RUNNING=true scripts/ops/pilot-privacy.sh \
   --credential-file "$workspace/database.conf" \
   --privacy-directory "$workspace/privacy" -- disconnect \

@@ -11,6 +11,7 @@ const TOPICS = new Set([
 
 export interface RemoteWebhookCleanupInput {
   baseUrl: string;
+  connectorOrigin: string;
   endpointKey: string | null;
   consumerKey: string;
   consumerSecret: string;
@@ -22,11 +23,29 @@ export async function removeOwnedWooWebhooks(
   request: typeof fetch = fetch
 ): Promise<{ complete: boolean; removed: number }> {
   if (!input.endpointKey) return { complete: true, removed: 0 };
+  let expectedOrigin: string;
+  try {
+    const origin = new URL(input.connectorOrigin);
+    if (
+      origin.protocol !== 'https:' ||
+      origin.username ||
+      origin.password ||
+      origin.pathname !== '/' ||
+      origin.search ||
+      origin.hash
+    )
+      return { complete: false, removed: 0 };
+    expectedOrigin = origin.origin;
+  } catch {
+    return { complete: false, removed: 0 };
+  }
   const authorization = `Basic ${Buffer.from(`${input.consumerKey}:${input.consumerSecret}`).toString('base64')}`;
   const base = input.baseUrl.endsWith('/')
     ? input.baseUrl
     : `${input.baseUrl}/`;
   let removed = 0;
+  const ownedIds = new Set<number>();
+  let enumerated = false;
   try {
     for (let page = 1; page <= 10; page++) {
       const listUrl = new URL(
@@ -53,30 +72,49 @@ export async function removeOwnedWooWebhooks(
           Number(hook['id']) <= 0
         )
           continue;
-        let path: string;
+        let delivery: URL;
         try {
-          path = new URL(hook['delivery_url']).pathname;
+          delivery = new URL(hook['delivery_url']);
         } catch {
           continue;
         }
-        if (path !== `/api/webhooks/woocommerce/${input.endpointKey}`) continue;
-        const deleteUrl = new URL(
-          `wp-json/wc/v3/webhooks/${hook['id']}?force=true`,
-          base
-        );
-        const deleted = await request(deleteUrl, {
-          method: 'DELETE',
-          headers: { Authorization: authorization },
-          redirect: 'error',
-          signal: AbortSignal.timeout(5_000),
-        });
-        if (!deleted.ok) return { complete: false, removed };
-        removed++;
+        if (
+          delivery.pathname !== `/api/webhooks/woocommerce/${input.endpointKey}`
+        )
+          continue;
+        if (
+          delivery.origin !== expectedOrigin ||
+          delivery.search ||
+          delivery.hash ||
+          delivery.username ||
+          delivery.password
+        )
+          return { complete: false, removed };
+        ownedIds.add(Number(hook['id']));
       }
-      if (hooks.length < 100) return { complete: true, removed };
+      if (hooks.length < 100) {
+        enumerated = true;
+        break;
+      }
+    }
+    if (!enumerated) return { complete: false, removed };
+    // Deleting during offset pagination shifts later pages and can skip hooks.
+    for (const id of ownedIds) {
+      const deleteUrl = new URL(
+        `wp-json/wc/v3/webhooks/${id}?force=true`,
+        base
+      );
+      const deleted = await request(deleteUrl, {
+        method: 'DELETE',
+        headers: { Authorization: authorization },
+        redirect: 'error',
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!deleted.ok) return { complete: false, removed };
+      removed++;
     }
   } catch {
     return { complete: false, removed };
   }
-  return { complete: false, removed };
+  return { complete: true, removed };
 }

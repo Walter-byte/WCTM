@@ -26,7 +26,8 @@ ledger_mode=$(stat -c '%a' "$ledger" 2>/dev/null || stat -f '%Lp' "$ledger") || 
 [[ $ledger_mode = 600 ]] || fail
 
 scope_hash() {
-  [[ $1 =~ ^ten_[A-Za-z0-9_-]+$ && $2 =~ ^sto_[A-Za-z0-9_-]+$ ]] || fail
+  [[ $1 =~ ^ten_[A-Za-z0-9_-]+$ &&
+    ( $2 =~ ^sto_[A-Za-z0-9_-]+$ || $2 = acc_tenant || $2 =~ ^usr_[A-Za-z0-9_-]+$ ) ]] || fail
   if command -v sha256sum >/dev/null 2>&1; then
     printf '%s\0%s' "$1" "$2" | sha256sum | awk '{print $1}'
   else
