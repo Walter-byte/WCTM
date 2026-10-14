@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const { execFileSync } = require('node:child_process');
 const { mkdtemp, writeFile, rm } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const { join } = require('node:path');
@@ -26,6 +27,10 @@ if (
   !/^wctm_ppr2_account_test_[a-z0-9_]+$/.test(new URL(url).pathname.slice(1))
 )
   throw new Error('dedicated PPR-2 account test database is required');
+const container = process.env.PPR2_ACCOUNT_TEST_CONTAINER;
+if (!container || !/^wctm-account-test-[0-9]+$/.test(container))
+  throw new Error('dedicated disposable account test container is required');
+const database = new URL(url).pathname.slice(1);
 const db = new PrismaClient({
   adapter: new PrismaPg({ connectionString: url }),
 });
@@ -37,7 +42,7 @@ async function main() {
     await writeFile(ledger, '', { mode: 0o600 });
     await db.tenant.createMany({
       data: [
-        { id: 'ten_account_a', name: 'Account A' },
+        { id: 'ten_account_a', name: 'Account A', deletedAt: new Date() },
         { id: 'ten_account_b', name: 'Account B' },
       ],
     });
@@ -47,6 +52,18 @@ async function main() {
           id: 'usr_exclusive',
           email: 'exclusive@example.test',
           displayName: 'Exclusive',
+          passwordHash: 'fixture-hash',
+        },
+        {
+          id: 'usr_removed',
+          email: 'removed@example.test',
+          displayName: 'Removed',
+          passwordHash: 'fixture-hash',
+        },
+        {
+          id: 'usr_direct',
+          email: 'direct@example.test',
+          displayName: 'Direct',
           passwordHash: 'fixture-hash',
         },
         {
@@ -63,9 +80,32 @@ async function main() {
           id: 'mem_exclusive',
           tenantId: 'ten_account_a',
           userId: 'usr_exclusive',
+          deletedAt: new Date(),
         },
-        { id: 'mem_shared_a', tenantId: 'ten_account_a', userId: 'usr_shared' },
-        { id: 'mem_shared_b', tenantId: 'ten_account_b', userId: 'usr_shared' },
+        {
+          id: 'mem_removed',
+          tenantId: 'ten_account_a',
+          userId: 'usr_removed',
+          deletedAt: new Date(),
+        },
+        {
+          id: 'mem_direct',
+          tenantId: 'ten_account_b',
+          userId: 'usr_direct',
+          deletedAt: new Date(),
+        },
+        {
+          id: 'mem_shared_a',
+          tenantId: 'ten_account_a',
+          userId: 'usr_shared',
+          deletedAt: new Date(),
+        },
+        {
+          id: 'mem_shared_b',
+          tenantId: 'ten_account_b',
+          userId: 'usr_shared',
+          deletedAt: new Date(),
+        },
       ],
     });
     await db.store.create({
@@ -155,7 +195,7 @@ async function main() {
     );
     assert.deepEqual(
       tenantExport.memberships.map((membership) => membership.user.id).sort(),
-      ['usr_exclusive', 'usr_shared']
+      ['usr_exclusive', 'usr_removed', 'usr_shared']
     );
     assert.deepEqual(
       tenantExport.audit.map((entry) => entry.id),
@@ -171,6 +211,57 @@ async function main() {
     });
     await appendAccountLedger(ledger, userTarget);
     await appendAccountLedger(ledger, tenantTarget);
+    // The protected ledger survives a genuine restore of the earlier removed-
+    // membership backup. Reactivation and approved erasure occur after backup.
+    const backup = execFileSync('docker', [
+      'exec',
+      container,
+      'pg_dump',
+      '-U',
+      'postgres',
+      '-Fc',
+      database,
+    ]);
+    await db.membership.update({
+      where: { id: 'mem_exclusive' },
+      data: { deletedAt: null },
+    });
+    await accounts.eraseIdentity(userTarget);
+    assert.equal(
+      (await db.user.findUniqueOrThrow({ where: { id: 'usr_exclusive' } }))
+        .email,
+      'erased-usr_exclusive@invalid.invalid'
+    );
+    await db.$disconnect();
+    execFileSync(
+      'docker',
+      [
+        'exec',
+        '-i',
+        container,
+        'pg_restore',
+        '-U',
+        'postgres',
+        '--clean',
+        '--if-exists',
+        '-d',
+        database,
+      ],
+      { input: backup }
+    );
+    await db.$connect();
+    assert.ok(
+      (
+        await db.membership.findUniqueOrThrow({
+          where: { id: 'mem_exclusive' },
+        })
+      ).deletedAt
+    );
+    assert.equal(
+      (await db.user.findUniqueOrThrow({ where: { id: 'usr_exclusive' } }))
+        .email,
+      'exclusive@example.test'
+    );
     const stores = new PilotDataService(db, { encrypt: () => 'unused' });
     assert.equal(
       (await replayLedger(ledger, stores, db, false, accounts)).pending,
@@ -194,6 +285,12 @@ async function main() {
     assert.equal(exclusive.email, 'erased-usr_exclusive@invalid.invalid');
     assert.equal(exclusive.passwordHash, null);
     assert.equal(shared.email, 'shared@example.test');
+    const removed = await db.user.findUniqueOrThrow({
+      where: { id: 'usr_removed' },
+    });
+    assert.equal(removed.email, 'erased-usr_removed@invalid.invalid');
+    assert.equal(removed.displayName, null);
+    assert.equal(removed.passwordHash, null);
     const exclusiveTelegram = await db.telegramAccount.findUniqueOrThrow({
       where: { userId: 'usr_exclusive' },
     });
@@ -225,13 +322,142 @@ async function main() {
     const sharedMembership = await db.membership.findUniqueOrThrow({
       where: { id: 'mem_shared_b' },
     });
-    assert.equal(sharedMembership.deletedAt, null);
+    assert.ok(sharedMembership.deletedAt);
+    const directTarget = {
+      tenantId: 'ten_account_b',
+      userId: 'usr_direct',
+      emailSha256: privacyFingerprint('direct@example.test'),
+    };
+    await accounts.eraseIdentity(directTarget);
+    assert.equal(
+      (await db.user.findUniqueOrThrow({ where: { id: 'usr_direct' } })).email,
+      'erased-usr_direct@invalid.invalid'
+    );
     assert.equal(
       await db.auditLog.count({ where: { tenantId: 'ten_account_a' } }),
-      4
+      5
+    );
+    // An audit marker cannot certify a mixed restore that still retains scoped PII.
+    await db.telegramSearchReference.create({
+      data: {
+        id: 'ref_retained_pii',
+        tenantId: 'ten_account_a',
+        storeId: 'sto_account_a',
+        membershipId: 'mem_exclusive',
+        telegramAccountId: 'tga_exclusive',
+        telegramChatId: 10001n,
+        purpose: 'PAGE',
+        queryEncrypted: 'fixture-retained-query',
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    assert.equal(await accounts.identityErasureComplete(userTarget), false);
+    await assert.rejects(
+      replayLedger(ledger, stores, db, true, accounts),
+      /does not match/
+    );
+    await db.telegramSearchReference.delete({
+      where: { id: 'ref_retained_pii' },
+    });
+    assert.equal(await accounts.identityErasureComplete(userTarget), true);
+    const preMembershipLedger = join(directory, 'pre-membership-ledger.jsonl');
+    await writeFile(preMembershipLedger, '', { mode: 0o600 });
+    const preMembershipTarget = {
+      tenantId: 'ten_account_b',
+      userId: 'usr_pre_membership',
+      emailSha256: privacyFingerprint('pre-membership@example.test'),
+    };
+    await db.user.create({
+      data: {
+        id: preMembershipTarget.userId,
+        email: 'pre-membership@example.test',
+        displayName: 'Before joining',
+        passwordHash: 'fixture-hash',
+      },
+    });
+    const preMembershipBackup = execFileSync('docker', [
+      'exec',
+      container,
+      'pg_dump',
+      '-U',
+      'postgres',
+      '-Fc',
+      database,
+    ]);
+    await db.membership.create({
+      data: {
+        id: 'mem_pre_membership',
+        tenantId: preMembershipTarget.tenantId,
+        userId: preMembershipTarget.userId,
+      },
+    });
+    await appendAccountLedger(preMembershipLedger, preMembershipTarget);
+    await accounts.eraseIdentity(preMembershipTarget);
+    await db.$disconnect();
+    execFileSync(
+      'docker',
+      [
+        'exec',
+        '-i',
+        container,
+        'pg_restore',
+        '-U',
+        'postgres',
+        '--clean',
+        '--if-exists',
+        '-d',
+        database,
+      ],
+      { input: preMembershipBackup }
+    );
+    await db.$connect();
+    assert.equal(
+      await db.membership.findFirst({
+        where: {
+          tenantId: preMembershipTarget.tenantId,
+          userId: preMembershipTarget.userId,
+        },
+      }),
+      null
+    );
+    await assert.rejects(
+      replayLedger(preMembershipLedger, stores, db, true, accounts),
+      /without restored Membership/
+    );
+    assert.equal(
+      (
+        await db.user.findUniqueOrThrow({
+          where: { id: preMembershipTarget.userId },
+        })
+      ).email,
+      'pre-membership@example.test'
+    );
+    await db.user.delete({ where: { id: preMembershipTarget.userId } });
+    assert.equal(
+      (await replayLedger(preMembershipLedger, stores, db, true, accounts))
+        .pending,
+      0
+    );
+    const missingTenantLedger = join(directory, 'missing-tenant-ledger.jsonl');
+    await writeFile(missingTenantLedger, '', { mode: 0o600 });
+    await appendAccountLedger(missingTenantLedger, {
+      tenantId: 'ten_not_yet_created',
+      nameSha256: privacyFingerprint('Before tenant creation'),
+    });
+    await assert.rejects(
+      replayLedger(missingTenantLedger, stores, db, true, accounts),
+      /Tenant completion cannot be verified/
+    );
+    // Missing/expired proof cannot turn anonymized data into an automatic skip.
+    await db.auditLog.deleteMany({
+      where: { tenantId: 'ten_account_a', action: { startsWith: 'privacy.' } },
+    });
+    await assert.rejects(
+      replayLedger(ledger, stores, db, true, accounts),
+      /does not match/
     );
     console.log(
-      'pilot account integration: PASS scoped-export linked-store ledger replay shared-identity FK audit idempotency'
+      'pilot account integration: PASS scoped-export linked-store ledger replay soft-deleted-target removed-member-cascade backup-restore-replay shared-removed-membership FK audit idempotency retained-scoped-pii-fail-closed audit-expiry-fail-closed pre-membership-restore-fail-closed absent-user-safe-skip absent-tenant-fail-closed'
     );
   } finally {
     await db.$disconnect();

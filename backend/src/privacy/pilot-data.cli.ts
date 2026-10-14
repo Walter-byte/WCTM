@@ -343,7 +343,17 @@ export async function replayLedger(
         where: { id: entry['tenantId'] },
         select: { name: true, deletedAt: true },
       });
-      if (!tenant || tenant.deletedAt) continue;
+      if (!tenant)
+        throw new Error(
+          'erasure ledger Tenant completion cannot be verified in restored data'
+        );
+      if (
+        await accounts.tenantErasureComplete({
+          tenantId: entry['tenantId'],
+          nameSha256: entry['nameSha256'],
+        })
+      )
+        continue;
       if (privacyFingerprint(tenant.name) !== entry['nameSha256'])
         throw new Error(
           'erasure ledger Tenant identity does not match restored data'
@@ -369,7 +379,24 @@ export async function replayLedger(
         where: { tenantId: entry['tenantId'], userId: entry['userId'] },
         select: { deletedAt: true, user: { select: { email: true } } },
       });
-      if (!membership || membership.deletedAt) continue;
+      if (!membership) {
+        const user = await database.user.findUnique({
+          where: { id: entry['userId'] },
+          select: { id: true },
+        });
+        if (!user) continue;
+        throw new Error(
+          'erasure ledger User completion cannot be verified without restored Membership'
+        );
+      }
+      if (
+        await accounts.identityErasureComplete({
+          tenantId: entry['tenantId'],
+          userId: entry['userId'],
+          emailSha256: entry['emailSha256'],
+        })
+      )
+        continue;
       if (privacyFingerprint(membership.user.email) !== entry['emailSha256'])
         throw new Error(
           'erasure ledger User identity does not match restored data'

@@ -44,6 +44,8 @@ export async function removeOwnedWooWebhooks(
     ? input.baseUrl
     : `${input.baseUrl}/`;
   let removed = 0;
+  const ownedIds = new Set<number>();
+  let enumerated = false;
   try {
     for (let page = 1; page <= 10; page++) {
       const listUrl = new URL(
@@ -88,23 +90,31 @@ export async function removeOwnedWooWebhooks(
           delivery.password
         )
           return { complete: false, removed };
-        const deleteUrl = new URL(
-          `wp-json/wc/v3/webhooks/${hook['id']}?force=true`,
-          base
-        );
-        const deleted = await request(deleteUrl, {
-          method: 'DELETE',
-          headers: { Authorization: authorization },
-          redirect: 'error',
-          signal: AbortSignal.timeout(5_000),
-        });
-        if (!deleted.ok) return { complete: false, removed };
-        removed++;
+        ownedIds.add(Number(hook['id']));
       }
-      if (hooks.length < 100) return { complete: true, removed };
+      if (hooks.length < 100) {
+        enumerated = true;
+        break;
+      }
+    }
+    if (!enumerated) return { complete: false, removed };
+    // Deleting during offset pagination shifts later pages and can skip hooks.
+    for (const id of ownedIds) {
+      const deleteUrl = new URL(
+        `wp-json/wc/v3/webhooks/${id}?force=true`,
+        base
+      );
+      const deleted = await request(deleteUrl, {
+        method: 'DELETE',
+        headers: { Authorization: authorization },
+        redirect: 'error',
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!deleted.ok) return { complete: false, removed };
+      removed++;
     }
   } catch {
     return { complete: false, removed };
   }
-  return { complete: false, removed };
+  return { complete: true, removed };
 }

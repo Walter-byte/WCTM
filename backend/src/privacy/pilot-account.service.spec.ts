@@ -24,7 +24,7 @@ function fixture(shared = false) {
     tenant: {
       findUniqueOrThrow: jest.fn(async () => ({
         name: 'Pilot shop',
-        deletedAt: null,
+        deletedAt: null as Date | null,
       })),
       updateMany: update,
     },
@@ -42,6 +42,7 @@ function fixture(shared = false) {
       findMany: jest.fn(async () => [{ userId: 'usr_a' }]),
       findFirst: jest.fn(async () => ({
         id: 'mem_a',
+        deletedAt: null as Date | null,
         user: { email: 'owner@example.test' },
       })),
       count: jest.fn(async () => (shared ? 1 : 0)),
@@ -70,7 +71,7 @@ function fixture(shared = false) {
     telegramOrderStatusWrite: { updateMany: update },
     telegramOrderNotificationDelivery: { updateMany: update },
     telegramInventoryNotificationDelivery: { updateMany: update },
-    auditLog: { create },
+    auditLog: { create, findFirst: jest.fn(async () => null) },
   };
   const database = {
     tenant: {
@@ -78,7 +79,7 @@ function fixture(shared = false) {
         {
           id: 'ten_a',
           name: 'Pilot shop',
-          deletedAt: null,
+          deletedAt: null as Date | null,
         },
       ]),
       findUniqueOrThrow: jest.fn(async () => ({
@@ -90,7 +91,7 @@ function fixture(shared = false) {
       findMany: jest.fn(async () => [
         {
           id: 'mem_a',
-          deletedAt: null,
+          deletedAt: null as Date | null,
           tenant: { deletedAt: null },
           user: { email: 'owner@example.test' },
         },
@@ -248,6 +249,70 @@ describe('operator Tenant/User identity lifecycle', () => {
           tenantId: 'ten_a',
           action: 'privacy.tenant_erased',
         }),
+      })
+    );
+  });
+
+  it('erases an exact soft-deleted membership without reactivating it', async () => {
+    const test = fixture();
+    test.database.membership.findMany.mockResolvedValueOnce([
+      {
+        id: 'mem_a',
+        deletedAt: now,
+        tenant: { deletedAt: now },
+        user: { email: 'owner@example.test' },
+      },
+    ] as never);
+    test.tx.membership.findFirst.mockResolvedValueOnce({
+      id: 'mem_a',
+      deletedAt: now,
+      user: { email: 'owner@example.test' },
+    });
+    await expect(test.service.eraseIdentity(identityTarget)).resolves.toEqual({
+      userId: 'usr_a',
+      shared: false,
+    });
+    expect(test.tx.membership.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          id: 'mem_a',
+          tenantId: 'ten_a',
+          userId: 'usr_a',
+          deletedAt: now,
+        },
+        data: { deletedAt: expect.any(Date) },
+      })
+    );
+    expect(test.tx.user.updateMany).toHaveBeenCalled();
+  });
+
+  it('cascades through removed members of an exact soft-deleted Tenant', async () => {
+    const test = fixture();
+    test.database.tenant.findMany.mockResolvedValueOnce([
+      { id: 'ten_a', name: 'Pilot shop', deletedAt: now },
+    ]);
+    test.tx.tenant.findUniqueOrThrow.mockResolvedValueOnce({
+      name: 'Pilot shop',
+      deletedAt: now,
+    });
+    // Completion inspection and erasure both see the removed membership.
+    test.tx.membership.findFirst.mockResolvedValue({
+      id: 'mem_a',
+      deletedAt: now,
+      user: { email: 'owner@example.test' },
+    });
+    await expect(test.service.eraseTenant(tenantTarget)).resolves.toEqual({
+      users: 1,
+      sharedUsersRetained: 0,
+    });
+    expect(test.tx.membership.findMany).toHaveBeenCalledWith({
+      where: { tenantId: 'ten_a' },
+      select: { userId: true },
+    });
+    expect(test.tx.user.updateMany).toHaveBeenCalled();
+    expect(test.tx.tenant.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'ten_a', name: 'Pilot shop', deletedAt: now },
       })
     );
   });

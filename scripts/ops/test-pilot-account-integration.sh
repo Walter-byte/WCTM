@@ -34,7 +34,7 @@ if ! (cd backend && DATABASE_URL="$url" ../node_modules/.bin/prisma migrate depl
 fi
 [[ $(docker exec "$container" psql -XAt -U postgres -d "$database" \
   -c "select count(*) from public._prisma_migrations where finished_at is not null") = 16 ]]
-PPR2_ACCOUNT_TEST_DATABASE_URL="$url" node backend/test/integration/pilot-account.integration.cjs \
+PPR2_ACCOUNT_TEST_DATABASE_URL="$url" PPR2_ACCOUNT_TEST_CONTAINER="$container" node backend/test/integration/pilot-account.integration.cjs \
   >"$workspace/account.log" 2>&1 || {
   echo >&2 'pilot account integration: account checks failed'
   sed 's/fixture-account-test/[redacted]/g' "$workspace/account.log" >&2

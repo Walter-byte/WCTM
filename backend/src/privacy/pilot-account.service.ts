@@ -38,7 +38,6 @@ export class PilotAccountService {
     });
     if (
       tenants.length !== 1 ||
-      tenants[0]!.deletedAt ||
       privacyFingerprint(tenants[0]!.name) !== target.nameSha256
     ) {
       throw new Error(
@@ -54,15 +53,12 @@ export class PilotAccountService {
       select: {
         id: true,
         deletedAt: true,
-        tenant: { select: { deletedAt: true } },
         user: { select: { email: true } },
       },
       take: 2,
     });
     if (
       memberships.length !== 1 ||
-      memberships[0]!.deletedAt ||
-      memberships[0]!.tenant.deletedAt ||
       privacyFingerprint(memberships[0]!.user.email) !== target.emailSha256
     ) {
       throw new Error('privacy User identity is missing, erased or ambiguous');
@@ -93,7 +89,10 @@ export class PilotAccountService {
       users: await Promise.all(
         memberships.map(async (membership) => ({
           id: membership.userId,
-          membershipErased: membership.deletedAt !== null,
+          membershipErased: await this.identityErasureComplete({
+            tenantId: target.tenantId,
+            userId: membership.userId,
+          }),
           shared:
             (await this.otherMemberships(
               this.database,
@@ -259,10 +258,7 @@ export class PilotAccountService {
           where: { id: target.tenantId },
           select: { name: true, deletedAt: true },
         });
-        if (
-          tenant.deletedAt ||
-          privacyFingerprint(tenant.name) !== target.nameSha256
-        )
+        if (privacyFingerprint(tenant.name) !== target.nameSha256)
           throw new Error('privacy Tenant identity changed before erasure');
         const stores = await tx.store.findMany({
           where: { tenantId: target.tenantId },
@@ -274,12 +270,19 @@ export class PilotAccountService {
           );
         }
         const members = await tx.membership.findMany({
-          where: { tenantId: target.tenantId, deletedAt: null },
+          where: { tenantId: target.tenantId },
           select: { userId: true },
         });
         const now = new Date();
         const identities = [];
         for (const member of members) {
+          if (
+            await this.identityErasureComplete(
+              { tenantId: target.tenantId, userId: member.userId },
+              tx
+            )
+          )
+            continue;
           identities.push(
             await this.eraseIdentityInTransaction(
               tx,
@@ -294,7 +297,11 @@ export class PilotAccountService {
           data: { activeTenantId: null, activeStoreId: null, revokedAt: now },
         });
         const changed = await tx.tenant.updateMany({
-          where: { id: target.tenantId, name: tenant.name, deletedAt: null },
+          where: {
+            id: target.tenantId,
+            name: tenant.name,
+            deletedAt: tenant.deletedAt,
+          },
           data: {
             name: `Erased tenant ${target.tenantId}`,
             deletedAt: now,
@@ -311,7 +318,11 @@ export class PilotAccountService {
             action: 'privacy.tenant_erased',
             entityType: 'Tenant',
             entityId: target.tenantId,
-            metadata: { retained: 'security-audit-and-referential-ids' },
+            metadata: {
+              erasedAt: now.toISOString(),
+              nameSha256: target.nameSha256,
+              retained: 'security-audit-and-referential-ids',
+            },
           },
         });
         return {
@@ -321,6 +332,271 @@ export class PilotAccountService {
         };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable }
+    );
+  }
+
+  // Soft deletion revokes access; only a matching privacy transaction proves erasure.
+  // If retention has removed the audit proof, replay must verify the original
+  // fingerprint and erase again, or fail closed on an anonymized mismatch.
+  async identityErasureComplete(
+    target: { tenantId: string; userId: string; emailSha256?: string },
+    tx: Prisma.TransactionClient | PrismaClient = this.database
+  ): Promise<boolean> {
+    const membership = await tx.membership.findFirst({
+      where: { tenantId: target.tenantId, userId: target.userId },
+      select: {
+        id: true,
+        deletedAt: true,
+        user: {
+          select: {
+            email: true,
+            displayName: true,
+            passwordHash: true,
+            telegramAccount: {
+              select: {
+                id: true,
+                telegramUserId: true,
+                deletedAt: true,
+                lastRedeemUpdateId: true,
+                lastUnlinkUpdateId: true,
+                chatAuthorizations: {
+                  select: {
+                    telegramChatId: true,
+                    activeTenantId: true,
+                    activeStoreId: true,
+                    revokedAt: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!membership?.deletedAt) return false;
+    const shared =
+      (await this.otherMemberships(tx, target.tenantId, target.userId)) > 0;
+    const user = membership.user;
+    const account = user.telegramAccount;
+    if (shared) {
+      if (
+        target.emailSha256 &&
+        privacyFingerprint(user.email) !== target.emailSha256
+      )
+        return false;
+      if (
+        account?.chatAuthorizations.some(
+          (chat) => chat.activeTenantId === target.tenantId
+        )
+      )
+        return false;
+    } else {
+      if (
+        user.email !== `erased-${target.userId}@invalid.invalid` ||
+        user.displayName !== null ||
+        user.passwordHash !== null
+      )
+        return false;
+      if (
+        account &&
+        (!account.deletedAt ||
+          account.telegramUserId >= 0n ||
+          account.lastRedeemUpdateId !== null ||
+          account.lastUnlinkUpdateId !== null ||
+          account.chatAuthorizations.some(
+            (chat) =>
+              chat.telegramChatId >= 0n ||
+              chat.activeTenantId !== null ||
+              chat.activeStoreId !== null ||
+              !chat.revokedAt
+          ))
+      )
+        return false;
+      if (
+        await tx.telegramLinkToken.count({ where: { userId: target.userId } })
+      )
+        return false;
+    }
+    const audit = await tx.auditLog.findFirst({
+      where: {
+        tenantId: target.tenantId,
+        userId: target.userId,
+        action: 'privacy.identity_erased',
+        entityType: 'User',
+        entityId: target.userId,
+        AND: [
+          {
+            metadata: {
+              path: ['erasedAt'],
+              equals: membership.deletedAt.toISOString(),
+            },
+          },
+          { metadata: { path: ['sharedIdentityRetained'], equals: shared } },
+          ...(target.emailSha256
+            ? [
+                {
+                  metadata: {
+                    path: ['emailSha256'],
+                    equals: target.emailSha256,
+                  },
+                },
+              ]
+            : []),
+        ],
+      },
+      select: { id: true },
+    });
+    if (!audit) return false;
+    const remaining = [
+      await tx.storeNotificationRecipient.count({
+        where: { tenantId: target.tenantId, membershipId: membership.id },
+      }),
+      await tx.telegramSettingsReference.count({
+        where: {
+          tenantId: target.tenantId,
+          targetMembershipId: membership.id,
+          expiresAt: { gt: membership.deletedAt },
+        },
+      }),
+    ];
+    if (account) {
+      const scoped = {
+        tenantId: target.tenantId,
+        telegramAccountId: account.id,
+      };
+      const referencePii = [
+        { telegramChatId: { gte: 0n } },
+        { expiresAt: { gt: membership.deletedAt } },
+      ];
+      remaining.push(
+        ...(await Promise.all([
+          tx.telegramSettingsReference.count({
+            where: { ...scoped, OR: referencePii },
+          }),
+          tx.telegramCallbackReference.count({
+            where: {
+              ...scoped,
+              OR: [
+                ...referencePii,
+                { noteBodyEncrypted: { not: null } },
+                { noteContentFingerprint: { not: null } },
+              ],
+            },
+          }),
+          tx.telegramInventoryReference.count({
+            where: { ...scoped, OR: referencePii },
+          }),
+          tx.telegramSearchReference.count({
+            where: {
+              ...scoped,
+              OR: [...referencePii, { queryEncrypted: { not: null } }],
+            },
+          }),
+          tx.telegramOrderNoteAction.count({
+            where: {
+              ...scoped,
+              OR: [
+                { contentFingerprint: { not: '0'.repeat(64) } },
+                { result: { not: Prisma.AnyNull } },
+              ],
+            },
+          }),
+          tx.telegramOrderStatusWrite.count({
+            where: { ...scoped, result: { not: Prisma.AnyNull } },
+          }),
+          tx.telegramOrderNotificationDelivery.count({
+            where: {
+              ...scoped,
+              OR: [
+                { telegramMessageId: { not: null } },
+                {
+                  state: {
+                    in: [
+                      TelegramOrderNotificationState.PENDING,
+                      TelegramOrderNotificationState.IN_FLIGHT,
+                      TelegramOrderNotificationState.RETRYABLE_FAILURE,
+                    ],
+                  },
+                },
+              ],
+            },
+          }),
+          tx.telegramInventoryNotificationDelivery.count({
+            where: {
+              ...scoped,
+              OR: [
+                { telegramMessageId: { not: null } },
+                {
+                  state: {
+                    in: [
+                      TelegramInventoryNotificationState.PENDING,
+                      TelegramInventoryNotificationState.IN_FLIGHT,
+                      TelegramInventoryNotificationState.RETRYABLE_FAILURE,
+                    ],
+                  },
+                },
+              ],
+            },
+          }),
+        ]))
+      );
+    }
+    return remaining.every((count) => count === 0);
+  }
+
+  async tenantErasureComplete(target: TenantPrivacyTarget): Promise<boolean> {
+    const tenant = await this.database.tenant.findUnique({
+      where: { id: target.tenantId },
+      select: { name: true, deletedAt: true, entitlementStatus: true },
+    });
+    if (
+      !tenant?.deletedAt ||
+      tenant.name !== `Erased tenant ${target.tenantId}` ||
+      tenant.entitlementStatus !== TenantEntitlementStatus.SUSPENDED
+    )
+      return false;
+    const audit = await this.database.auditLog.findFirst({
+      where: {
+        tenantId: target.tenantId,
+        userId: null,
+        action: 'privacy.tenant_erased',
+        entityType: 'Tenant',
+        entityId: target.tenantId,
+        AND: [
+          {
+            metadata: {
+              path: ['erasedAt'],
+              equals: tenant.deletedAt.toISOString(),
+            },
+          },
+          { metadata: { path: ['nameSha256'], equals: target.nameSha256 } },
+        ],
+      },
+      select: { id: true },
+    });
+    if (!audit) return false;
+    const stores = await this.database.store.findMany({
+      where: { tenantId: target.tenantId },
+      select: { id: true, baseUrl: true, status: true, deletedAt: true },
+    });
+    if (stores.some((store) => !isErasedStore(store))) return false;
+    const members = await this.database.membership.findMany({
+      where: { tenantId: target.tenantId },
+      select: { userId: true },
+    });
+    for (const member of members) {
+      if (
+        !(await this.identityErasureComplete({
+          tenantId: target.tenantId,
+          userId: member.userId,
+        }))
+      )
+        return false;
+    }
+    return (
+      (await this.database.telegramChatAuthorization.count({
+        where: { activeTenantId: target.tenantId },
+      })) === 0
     );
   }
 
@@ -345,8 +621,8 @@ export class PilotAccountService {
     emailSha256?: string
   ) {
     const membership = await tx.membership.findFirst({
-      where: { tenantId, userId, deletedAt: null },
-      select: { id: true, user: { select: { email: true } } },
+      where: { tenantId, userId },
+      select: { id: true, deletedAt: true, user: { select: { email: true } } },
     });
     if (
       !membership ||
@@ -449,7 +725,12 @@ export class PilotAccountService {
       });
     }
     const changed = await tx.membership.updateMany({
-      where: { id: membership.id, tenantId, userId, deletedAt: null },
+      where: {
+        id: membership.id,
+        tenantId,
+        userId,
+        deletedAt: membership.deletedAt,
+      },
       data: { deletedAt: now },
     });
     if (changed.count !== 1)
@@ -504,6 +785,8 @@ export class PilotAccountService {
         entityType: 'User',
         entityId: userId,
         metadata: {
+          erasedAt: now.toISOString(),
+          emailSha256: privacyFingerprint(membership.user.email),
           sharedIdentityRetained: shared,
           retained: 'security-audit-and-referential-ids',
         },
