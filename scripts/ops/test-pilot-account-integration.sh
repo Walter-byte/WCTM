@@ -2,6 +2,11 @@
 set -euo pipefail
 umask 077
 
+[[ $(node --version) = v24.20.0 ]] || {
+  echo >&2 'pilot account integration: exact Node v24.20.0 is required'
+  exit 69
+}
+
 image='postgres:16.15-alpine3.24@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685'
 container="wctm-account-test-$$"
 database="wctm_ppr2_account_test_$$"
